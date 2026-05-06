@@ -448,7 +448,9 @@ export default function App() {
                         }}
                       >
                         <span style={styles.shipName}>{ship}</span>
-                        <strong>{formatQty(venueItem.ships[ship])}</strong>
+                        <strong style={styles.shipQty}>
+  {formatQty(venueItem.ships[ship])}
+</strong>
                       </div>
                     );
                   })}
