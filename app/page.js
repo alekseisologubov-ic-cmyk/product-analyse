@@ -6,7 +6,10 @@ import * as XLSX from "xlsx";
 const SHIPS = ["BRL", "RL", "V1", "VL"];
 
 const cleanText = (value) =>
-  String(value || "").toUpperCase().replace(/\s+/g, " ").trim();
+  String(value || "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
 
 export default function App() {
   const [consumptionRows, setConsumptionRows] = useState([]);
@@ -39,7 +42,7 @@ export default function App() {
         ...new Set(
           rows
             .slice(1)
-            .map((r) => String(r[6] || "").trim())
+            .map((r) => String(r[6] || "").trim()) // G = product
             .filter(Boolean)
         ),
       ].sort();
@@ -60,14 +63,13 @@ export default function App() {
   const getConsumptionBreakdown = (product) => {
     let currentVenue = "";
     const result = {};
-
     const shipColumns = { BRL: 8, RL: 11, V1: 14, VL: 17 };
 
     consumptionData.forEach((row) => {
       if (row[2]) currentVenue = String(row[2]).trim();
 
       const venue = currentVenue || "Unknown";
-      const productName = String(row[6] || "").trim();
+      const productName = String(row[6] || "").trim(); // G = product
 
       if (productName !== product) return;
 
@@ -90,7 +92,14 @@ export default function App() {
     const cleanProduct = cleanText(product);
 
     recipeData.forEach((row) => {
-      const productName = cleanText(row[7]);
+      const productName = cleanText(row[7]); // H = product name
+      const recipeCode = String(row[15] || "").trim(); // P = recipe code
+      const recipeName = String(row[16] || "").trim(); // Q = recipe name
+      const venue = String(row[1] || "").trim(); // B = venue
+
+      // skip bad/wrong rows
+      if (!recipeCode && !recipeName) return;
+      if (recipeName && !isNaN(Number(recipeName))) return;
 
       if (
         productName !== cleanProduct &&
@@ -100,18 +109,12 @@ export default function App() {
         return;
       }
 
-      const venue = String(row[1] || "").trim();
-      const recipeCode = String(row[15] || "").trim();
-      const recipeName = String(row[16] || "").trim();
-
-      if (!recipeCode && !recipeName) return;
-
-      const key = `${recipeCode} - ${recipeName}`;
+      const key = `${recipeCode || "N/A"} - ${recipeName || "Unnamed Recipe"}`;
 
       if (!recipes[key]) {
         recipes[key] = {
-          recipeCode,
-          recipeName,
+          recipeCode: recipeCode || "N/A",
+          recipeName: recipeName || "Unnamed Recipe",
           venues: new Set(),
         };
       }
@@ -257,8 +260,8 @@ export default function App() {
           <div style={styles.recipeList}>
             {recipesForProduct.map((recipe, i) => (
               <div key={i} style={styles.recipeCard}>
-                <div style={styles.recipeName}>{recipe.recipeName || "Unnamed Recipe"}</div>
-                <div style={styles.recipeMeta}>Code: {recipe.recipeCode || "N/A"}</div>
+                <div style={styles.recipeName}>{recipe.recipeName}</div>
+                <div style={styles.recipeMeta}>Code: {recipe.recipeCode}</div>
                 <div style={styles.recipeMeta}>
                   Venues: {recipe.venues.length ? recipe.venues.join(", ") : "N/A"}
                 </div>
@@ -289,32 +292,12 @@ const styles = {
     display: "grid",
     gap: 14,
   },
-  logo: {
-    height: 70,
-    objectFit: "contain",
-    marginBottom: 8,
-  },
-  headerLogo: {
-    height: 54,
-    objectFit: "contain",
-  },
-  title: {
-    margin: 0,
-    fontSize: 28,
-  },
-  subtitle: {
-    margin: 0,
-    color: "#666",
-  },
-  label: {
-    fontWeight: "bold",
-    marginTop: 8,
-  },
-  select: {
-    padding: 10,
-    borderRadius: 8,
-    border: "1px solid #ccc",
-  },
+  logo: { height: 70, objectFit: "contain", marginBottom: 8 },
+  headerLogo: { height: 54, objectFit: "contain" },
+  title: { margin: 0, fontSize: 28 },
+  subtitle: { margin: 0, color: "#666" },
+  label: { fontWeight: "bold", marginTop: 8 },
+  select: { padding: 10, borderRadius: 8, border: "1px solid #ccc" },
   primaryButton: {
     marginTop: 10,
     padding: 12,
@@ -335,14 +318,8 @@ const styles = {
     boxShadow: "0 4px 18px rgba(0,0,0,0.06)",
     marginBottom: 20,
   },
-  headerTitle: {
-    margin: 0,
-    fontSize: 26,
-  },
-  headerSubtitle: {
-    margin: 0,
-    color: "#666",
-  },
+  headerTitle: { margin: 0, fontSize: 26 },
+  headerSubtitle: { margin: 0, color: "#666" },
   shipBadge: {
     marginLeft: "auto",
     padding: "10px 14px",
@@ -363,13 +340,8 @@ const styles = {
     padding: 20,
     boxShadow: "0 4px 18px rgba(0,0,0,0.06)",
   },
-  cardTitle: {
-    marginTop: 0,
-  },
-  fileInput: {
-    display: "block",
-    margin: "8px 0 16px",
-  },
+  cardTitle: { marginTop: 0 },
+  fileInput: { display: "block", margin: "8px 0 16px" },
   infoBox: {
     marginTop: 12,
     padding: 12,
@@ -401,17 +373,9 @@ const styles = {
     background: "#fff",
     cursor: "pointer",
   },
-  productItemActive: {
-    background: "#eee",
-    fontWeight: "bold",
-  },
-  productTitle: {
-    marginTop: 0,
-    fontSize: 24,
-  },
-  sectionTitle: {
-    marginTop: 22,
-  },
+  productItemActive: { background: "#eee", fontWeight: "bold" },
+  productTitle: { marginTop: 0, fontSize: 24 },
+  sectionTitle: { marginTop: 22 },
   venueGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
@@ -423,14 +387,8 @@ const styles = {
     padding: 14,
     background: "#fafafa",
   },
-  venueTitle: {
-    marginTop: 0,
-  },
-  shipGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(4, 1fr)",
-    gap: 8,
-  },
+  venueTitle: { marginTop: 0 },
+  shipGrid: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 },
   shipBox: {
     padding: 10,
     borderRadius: 10,
@@ -440,33 +398,16 @@ const styles = {
     gap: 4,
     textAlign: "center",
   },
-  shipBoxActive: {
-    background: "#111",
-    color: "#fff",
-  },
-  shipName: {
-    fontSize: 12,
-    opacity: 0.8,
-  },
-  emptyText: {
-    color: "#777",
-  },
-  recipeList: {
-    display: "grid",
-    gap: 10,
-  },
+  shipBoxActive: { background: "#111", color: "#fff" },
+  shipName: { fontSize: 12, opacity: 0.8 },
+  emptyText: { color: "#777" },
+  recipeList: { display: "grid", gap: 10 },
   recipeCard: {
     border: "1px solid #ddd",
     borderRadius: 12,
     padding: 12,
     background: "#fafafa",
   },
-  recipeName: {
-    fontWeight: "bold",
-  },
-  recipeMeta: {
-    color: "#555",
-    fontSize: 14,
-    marginTop: 4,
-  },
+  recipeName: { fontWeight: "bold" },
+  recipeMeta: { color: "#555", fontSize: 14, marginTop: 4 },
 };
