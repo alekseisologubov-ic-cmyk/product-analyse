@@ -412,7 +412,9 @@ export default function App() {
                         }}
                       >
                         <span style={styles.shipName}>{ship}</span>
-                        <strong>{venueItem.ships[ship] || 0}</strong>
+                        <strong>
+  {Number(venueItem.ships[ship] || 0).toFixed(2)}
+</strong>
                       </div>
                     );
                   })}
