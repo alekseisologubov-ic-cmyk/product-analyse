@@ -11,6 +11,11 @@ const cleanText = (value) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const STORAGE_KEYS = {
+  consumption: "vv_consumption_rows",
+  recipe: "vv_recipe_rows",
+};
+
 export default function App() {
   const [consumptionRows, setConsumptionRows] = useState([]);
   const [recipeRows, setRecipeRows] = useState([]);
@@ -20,6 +25,66 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [userShip, setUserShip] = useState("");
   const [loggedIn, setLoggedIn] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const buildProductList = (rows) => {
+    return [
+      ...new Set(
+        rows
+          .slice(1)
+          .map((r) => String(r[6] || "").trim())
+          .filter(Boolean)
+      ),
+    ].sort();
+  };
+
+  const saveRows = (key, rows) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(rows));
+      setMessage("Files saved in this browser.");
+    } catch (err) {
+      setMessage("Could not save files. File may be too large for browser storage.");
+    }
+  };
+
+  const loadSavedFiles = () => {
+    try {
+      const savedConsumption = localStorage.getItem(STORAGE_KEYS.consumption);
+      const savedRecipe = localStorage.getItem(STORAGE_KEYS.recipe);
+
+      if (!savedConsumption && !savedRecipe) {
+        setMessage("No saved files found.");
+        return;
+      }
+
+      if (savedConsumption) {
+        const rows = JSON.parse(savedConsumption);
+        setConsumptionRows(rows);
+        setProducts(buildProductList(rows));
+      }
+
+      if (savedRecipe) {
+        setRecipeRows(JSON.parse(savedRecipe));
+      }
+
+      setSelectedProduct("");
+      setSelectedRecipe(null);
+      setMessage("Saved files loaded.");
+    } catch (err) {
+      setMessage("Could not load saved files.");
+    }
+  };
+
+  const clearSavedFiles = () => {
+    localStorage.removeItem(STORAGE_KEYS.consumption);
+    localStorage.removeItem(STORAGE_KEYS.recipe);
+    setConsumptionRows([]);
+    setRecipeRows([]);
+    setProducts([]);
+    setSelectedProduct("");
+    setSelectedRecipe(null);
+    setMessage("Saved files cleared.");
+  };
 
   const readExcel = (file, callback) => {
     const reader = new FileReader();
@@ -38,26 +103,21 @@ export default function App() {
 
     readExcel(file, (rows) => {
       setConsumptionRows(rows);
-
-      const productList = [
-        ...new Set(
-          rows
-            .slice(1)
-            .map((r) => String(r[6] || "").trim())
-            .filter(Boolean)
-        ),
-      ].sort();
-
-      setProducts(productList);
+      setProducts(buildProductList(rows));
       setSelectedProduct("");
       setSelectedRecipe(null);
+      saveRows(STORAGE_KEYS.consumption, rows);
     });
   };
 
   const uploadRecipeFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    readExcel(file, setRecipeRows);
+
+    readExcel(file, (rows) => {
+      setRecipeRows(rows);
+      saveRows(STORAGE_KEYS.recipe, rows);
+    });
   };
 
   const consumptionData = useMemo(
@@ -98,7 +158,7 @@ export default function App() {
     const selectedCleanProduct = cleanText(product);
 
     recipeData.forEach((row) => {
-      const assignedProduct = cleanText(row[12]); // M = Assigned full product name
+      const assignedProduct = cleanText(row[12]); // M
       const recipeCode = String(row[15] || "").trim(); // P
       const recipeName = String(row[16] || "").trim(); // Q
       const venue = String(row[1] || "").trim(); // B
@@ -137,18 +197,12 @@ export default function App() {
       const recipeCode = String(row[15] || "").trim();
       const recipeName = String(row[16] || "").trim();
 
-      if (
-        recipeCode !== recipe.recipeCode ||
-        recipeName !== recipe.recipeName
-      ) {
-        return;
-      }
+      if (recipeCode !== recipe.recipeCode || recipeName !== recipe.recipeName) return;
 
       const product = String(row[12] || row[7] || "").trim();
       if (!product) return;
 
-      if (!items[product]) items[product] = 0;
-      items[product] += 1;
+      items[product] = true;
     });
 
     return Object.keys(items).sort();
@@ -159,6 +213,7 @@ export default function App() {
       <main style={styles.page}>
         <section style={styles.loginCard}>
           <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.logo} />
+
           <h1 style={styles.title}>Product Consumption Dashboard</h1>
           <p style={styles.subtitle}>Ship, venue & recipe usage analysis</p>
 
@@ -185,17 +240,9 @@ export default function App() {
     );
   }
 
-  const breakdown = selectedProduct
-    ? getConsumptionBreakdown(selectedProduct)
-    : {};
-
-  const recipesForProduct = selectedProduct
-    ? getRecipesUsingProduct(selectedProduct)
-    : [];
-
-  const productsInRecipe = selectedRecipe
-    ? getProductsInRecipe(selectedRecipe)
-    : [];
+  const breakdown = selectedProduct ? getConsumptionBreakdown(selectedProduct) : {};
+  const recipesForProduct = selectedProduct ? getRecipesUsingProduct(selectedProduct) : [];
+  const productsInRecipe = selectedRecipe ? getProductsInRecipe(selectedRecipe) : [];
 
   const filteredProducts = products.filter((p) =>
     p.toLowerCase().includes(search.toLowerCase())
@@ -227,6 +274,17 @@ export default function App() {
             onChange={uploadRecipeFile}
             style={styles.fileInput}
           />
+
+          <div style={styles.buttonRow}>
+            <button style={styles.secondaryButton} onClick={loadSavedFiles}>
+              Load Saved Files
+            </button>
+            <button style={styles.clearButton} onClick={clearSavedFiles}>
+              Clear Saved
+            </button>
+          </div>
+
+          {message && <p style={styles.message}>{message}</p>}
 
           <div style={styles.infoBox}>
             <div>📦 Products loaded: <strong>{products.length}</strong></div>
@@ -296,7 +354,7 @@ export default function App() {
           <h3 style={styles.sectionTitle}>👨‍🍳 Recipes using this product</h3>
 
           {recipeRows.length === 0 && (
-            <p style={styles.emptyText}>Upload the recipe file to see recipe details.</p>
+            <p style={styles.emptyText}>Upload or load the recipe file to see recipe details.</p>
           )}
 
           {recipeRows.length > 0 && recipesForProduct.length === 0 && (
@@ -364,11 +422,7 @@ const styles = {
     display: "grid",
     gap: 14,
   },
-  logo: {
-    height: 70,
-    objectFit: "contain",
-    marginBottom: 8,
-  },
+  logo: { height: 70, objectFit: "contain", marginBottom: 8 },
   header: {
     display: "flex",
     alignItems: "center",
@@ -379,27 +433,11 @@ const styles = {
     boxShadow: "0 4px 18px rgba(0,0,0,0.06)",
     marginBottom: 20,
   },
-  headerLogo: {
-    height: 54,
-    objectFit: "contain",
-  },
-  title: {
-    margin: 0,
-    fontSize: 28,
-  },
-  subtitle: {
-    margin: 0,
-    color: "#666",
-  },
-  label: {
-    fontWeight: "bold",
-    marginTop: 8,
-  },
-  select: {
-    padding: 10,
-    borderRadius: 8,
-    border: "1px solid #ccc",
-  },
+  headerLogo: { height: 54, objectFit: "contain" },
+  title: { margin: 0, fontSize: 28 },
+  subtitle: { margin: 0, color: "#666" },
+  label: { fontWeight: "bold", marginTop: 8 },
+  select: { padding: 10, borderRadius: 8, border: "1px solid #ccc" },
   primaryButton: {
     marginTop: 10,
     padding: 12,
@@ -429,13 +467,24 @@ const styles = {
     padding: 20,
     boxShadow: "0 4px 18px rgba(0,0,0,0.06)",
   },
-  cardTitle: {
-    marginTop: 0,
+  cardTitle: { marginTop: 0 },
+  fileInput: { display: "block", margin: "8px 0 16px" },
+  buttonRow: { display: "flex", gap: 10, marginTop: 10 },
+  secondaryButton: {
+    padding: 10,
+    borderRadius: 8,
+    border: "1px solid #111",
+    background: "#fff",
+    cursor: "pointer",
   },
-  fileInput: {
-    display: "block",
-    margin: "8px 0 16px",
+  clearButton: {
+    padding: 10,
+    borderRadius: 8,
+    border: "1px solid #ccc",
+    background: "#eee",
+    cursor: "pointer",
   },
+  message: { color: "#555", fontSize: 14 },
   infoBox: {
     marginTop: 12,
     padding: 12,
@@ -467,17 +516,9 @@ const styles = {
     background: "#fff",
     cursor: "pointer",
   },
-  productItemActive: {
-    background: "#eee",
-    fontWeight: "bold",
-  },
-  productTitle: {
-    marginTop: 0,
-    fontSize: 24,
-  },
-  sectionTitle: {
-    marginTop: 22,
-  },
+  productItemActive: { background: "#eee", fontWeight: "bold" },
+  productTitle: { marginTop: 0, fontSize: 24 },
+  sectionTitle: { marginTop: 22 },
   venueGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
@@ -489,14 +530,8 @@ const styles = {
     padding: 14,
     background: "#fafafa",
   },
-  venueTitle: {
-    marginTop: 0,
-  },
-  shipGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(4, 1fr)",
-    gap: 8,
-  },
+  venueTitle: { marginTop: 0 },
+  shipGrid: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 },
   shipBox: {
     padding: 10,
     borderRadius: 10,
@@ -506,21 +541,10 @@ const styles = {
     gap: 4,
     textAlign: "center",
   },
-  shipBoxActive: {
-    background: "#111",
-    color: "#fff",
-  },
-  shipName: {
-    fontSize: 12,
-    opacity: 0.8,
-  },
-  emptyText: {
-    color: "#777",
-  },
-  recipeList: {
-    display: "grid",
-    gap: 10,
-  },
+  shipBoxActive: { background: "#111", color: "#fff" },
+  shipName: { fontSize: 12, opacity: 0.8 },
+  emptyText: { color: "#777" },
+  recipeList: { display: "grid", gap: 10 },
   recipeCard: {
     width: "100%",
     textAlign: "left",
@@ -530,18 +554,9 @@ const styles = {
     background: "#fafafa",
     cursor: "pointer",
   },
-  recipeCardActive: {
-    background: "#eee",
-    borderColor: "#111",
-  },
-  recipeName: {
-    fontWeight: "bold",
-  },
-  recipeMeta: {
-    color: "#555",
-    fontSize: 14,
-    marginTop: 4,
-  },
+  recipeCardActive: { background: "#eee", borderColor: "#111" },
+  recipeName: { fontWeight: "bold" },
+  recipeMeta: { color: "#555", fontSize: 14, marginTop: 4 },
   ingredientsCard: {
     marginTop: 18,
     border: "1px solid #ddd",
