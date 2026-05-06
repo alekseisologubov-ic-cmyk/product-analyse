@@ -177,10 +177,10 @@ export default function App() {
     const selectedCleanProduct = cleanText(product);
 
     recipeData.forEach((row) => {
-      const assignedProduct = cleanText(row[12]); // M = Assigned full product name
-      const recipeCode = String(row[15] || "").trim(); // P
-      const recipeName = String(row[16] || "").trim(); // Q
-      const venue = String(row[1] || "").trim(); // B
+      const assignedProduct = cleanText(row[12]);
+      const recipeCode = String(row[15] || "").trim();
+      const recipeName = String(row[16] || "").trim();
+      const venue = String(row[1] || "").trim();
 
       if (!assignedProduct) return;
       if (!recipeCode && !recipeName) return;
@@ -227,23 +227,52 @@ export default function App() {
     return Object.keys(items).sort();
   };
 
+  const getSubRecipeIngredients = (subRecipeName) => {
+    const items = {};
+    const cleanSubRecipe = cleanText(subRecipeName);
+
+    recipeData.forEach((row) => {
+      const recipeName = cleanText(row[16]);
+      const ingredient = String(row[12] || row[7] || "").trim();
+
+      if (!ingredient) return;
+      if (recipeName !== cleanSubRecipe) return;
+      if (cleanText(ingredient) === cleanSubRecipe) return;
+
+      items[ingredient] = true;
+    });
+
+    return Object.keys(items).sort();
+  };
+
   const detectAllergens = (productsInRecipe) => {
     const found = {};
 
     productsInRecipe.forEach((product) => {
       const lowerProduct = product.toLowerCase();
+      const subIngredients = getSubRecipeIngredients(product);
 
       ALLERGEN_RULES.forEach((rule) => {
-        const matchedKeyword = rule.keywords.find((keyword) =>
+        const matchedMain = rule.keywords.find((keyword) =>
           lowerProduct.includes(keyword)
         );
 
-        if (matchedKeyword) {
-          if (!found[rule.allergen]) {
-            found[rule.allergen] = new Set();
-          }
+        if (matchedMain) {
+          if (!found[rule.allergen]) found[rule.allergen] = new Set();
           found[rule.allergen].add(product);
         }
+
+        subIngredients.forEach((subItem) => {
+          const lowerSubItem = subItem.toLowerCase();
+          const matchedSub = rule.keywords.find((keyword) =>
+            lowerSubItem.includes(keyword)
+          );
+
+          if (matchedSub) {
+            if (!found[rule.allergen]) found[rule.allergen] = new Set();
+            found[rule.allergen].add(`${product} → ${subItem}`);
+          }
+        });
       });
     });
 
@@ -437,9 +466,23 @@ export default function App() {
                 <p style={styles.emptyText}>No products found for this recipe.</p>
               ) : (
                 <ul>
-                  {productsInRecipe.map((product, i) => (
-                    <li key={i}>{product}</li>
-                  ))}
+                  {productsInRecipe.map((product, i) => {
+                    const subIngredients = getSubRecipeIngredients(product);
+
+                    return (
+                      <li key={i} style={{ marginBottom: 10 }}>
+                        <strong>{product}</strong>
+
+                        {subIngredients.length > 0 && (
+                          <ul style={styles.subRecipeList}>
+                            {subIngredients.map((subItem, j) => (
+                              <li key={j}>{subItem}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
 
@@ -631,6 +674,16 @@ const styles = {
     borderRadius: 14,
     padding: 14,
     background: "#fafafa",
+  },
+  subRecipeList: {
+    marginTop: 6,
+    marginBottom: 8,
+    paddingLeft: 24,
+    color: "#333",
+    background: "#f2f2f2",
+    borderRadius: 8,
+    paddingTop: 8,
+    paddingBottom: 8,
   },
   warningText: {
     color: "#8a5a00",
