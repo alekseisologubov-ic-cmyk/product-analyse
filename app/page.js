@@ -33,6 +33,8 @@ const normalizeVenue = (value) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const formatQty = (value) => Number(value || 0).toFixed(2);
+
 export default function App() {
   const [consumptionRows, setConsumptionRows] = useState([]);
   const [recipeRows, setRecipeRows] = useState([]);
@@ -178,7 +180,6 @@ export default function App() {
         ships,
         required: Boolean(requiredVenue),
         missingShips: SHIPS.filter((ship) => Boolean(requiredVenue) && (ships[ship] || 0) === 0),
-        requiredRecipes: requiredVenue ? [...requiredVenue.recipes] : [],
       };
     });
   };
@@ -316,6 +317,20 @@ export default function App() {
   const allergenWarnings = selectedRecipe ? detectAllergens(productsInRecipe) : [];
   const filteredProducts = products.filter((p) => p.toLowerCase().includes(search.toLowerCase()));
 
+  const totalConsumption = (() => {
+    const totals = { BRL: 0, RL: 0, SC: 0, VL: 0 };
+
+    combinedBreakdown.forEach((venue) => {
+      SHIPS.forEach((ship) => {
+        totals[ship] += Number(venue.ships[ship] || 0);
+      });
+    });
+
+    const allShips = SHIPS.reduce((sum, ship) => sum + totals[ship], 0);
+
+    return { totals, allShips };
+  })();
+
   return (
     <main style={styles.page}>
       <header style={styles.header}>
@@ -378,6 +393,23 @@ export default function App() {
         <section style={styles.card}>
           <h2 style={styles.productTitle}>📦 {selectedProduct}</h2>
 
+          <h3 style={styles.sectionTitle}>📊 Total Consumption</h3>
+
+          <div style={styles.totalBox}>
+            <div style={styles.totalMain}>
+              Total All Ships: {formatQty(totalConsumption.allShips)}
+            </div>
+
+            <div style={styles.totalShipGrid}>
+              {SHIPS.map((ship) => (
+                <div key={ship} style={styles.totalShipBox}>
+                  <span>{ship}</span>
+                  <strong>{formatQty(totalConsumption.totals[ship])}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <h3 style={styles.sectionTitle}>🏢 Consumption by Venue and Ship</h3>
 
           <div style={styles.venueGrid}>
@@ -412,9 +444,7 @@ export default function App() {
                         }}
                       >
                         <span style={styles.shipName}>{ship}</span>
-                        <strong>
-  {Number(venueItem.ships[ship] || 0).toFixed(2)}
-</strong>
+                        <strong>{formatQty(venueItem.ships[ship])}</strong>
                       </div>
                     );
                   })}
@@ -618,6 +648,32 @@ const styles = {
   productItemActive: { background: "#eee", fontWeight: "bold" },
   productTitle: { marginTop: 0, fontSize: 24 },
   sectionTitle: { marginTop: 22 },
+  totalBox: {
+    background: "#111",
+    color: "#fff",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 18,
+  },
+  totalMain: {
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  totalShipGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, 1fr)",
+    gap: 10,
+    marginTop: 12,
+  },
+  totalShipBox: {
+    background: "#fff",
+    color: "#111",
+    borderRadius: 10,
+    padding: 10,
+    textAlign: "center",
+    display: "grid",
+    gap: 4,
+  },
   venueGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
