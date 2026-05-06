@@ -736,7 +736,6 @@ shipQty: {
   overflow: "hidden",
   textOverflow: "ellipsis",
 },
-  },
   emptyText: { color: "#777" },
   recipeList: { display: "grid", gap: 10 },
   recipeCard: {
