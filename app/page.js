@@ -32,9 +32,12 @@ export default function App() {
 
       const uniqueProducts = [
         ...new Set(
-          rows.slice(1).map((r) => String(r[6] || "").trim()).filter(Boolean)
+          rows
+            .slice(1)
+            .map((r) => String(r[7] || "").trim()) // H = Product
+            .filter(Boolean)
         ),
-      ];
+      ].sort();
 
       setProducts(uniqueProducts);
     };
@@ -49,27 +52,43 @@ export default function App() {
     const result = {};
 
     const shipColumns = {
-      BRL: 8,
-      RL: 11,
-      V1: 14,
-      VL: 17,
+      BRL: 8,  // I
+      RL: 11,  // L
+      V1: 14,  // O
+      VL: 17,  // R
     };
 
     dataRows.forEach((row) => {
-      if (row[2]) currentVenue = row[2];
+      if (row[1]) currentVenue = String(row[1]).trim(); // B = Venue
 
-      const venue = currentVenue;
-      const productName = String(row[6] || "").trim();
+      const venue = currentVenue || "Unknown";
+      const productName = String(row[7] || "").trim(); // H = Product
       if (productName !== product) return;
 
-      if (!result[venue]) result[venue] = {};
+      const recipeCode = String(row[15] || "").trim(); // P
+      const recipeName = String(row[16] || "").trim(); // Q
+
+      if (!result[venue]) {
+        result[venue] = {
+          ships: {},
+          recipes: {},
+        };
+      }
 
       SHIPS.forEach((ship) => {
         const qty = Number(row[shipColumns[ship]]) || 0;
         if (qty === 0) return;
 
-        if (!result[venue][ship]) result[venue][ship] = 0;
-        result[venue][ship] += qty;
+        if (!result[venue].ships[ship]) result[venue].ships[ship] = 0;
+        result[venue].ships[ship] += qty;
+
+        const recipeKey = `${recipeCode} - ${recipeName}`;
+        if (recipeName || recipeCode) {
+          if (!result[venue].recipes[recipeKey]) {
+            result[venue].recipes[recipeKey] = 0;
+          }
+          result[venue].recipes[recipeKey] += qty;
+        }
       });
     });
 
@@ -86,7 +105,9 @@ export default function App() {
             <option key={s}>{s}</option>
           ))}
         </select>
+
         <br /><br />
+
         <button onClick={handleLogin}>Enter</button>
       </div>
     );
@@ -95,38 +116,65 @@ export default function App() {
   return (
     <div style={{ padding: 20 }}>
       <h2>Your Ship: {userShip}</h2>
+
       <input type="file" onChange={handleFileUpload} />
+
       <br /><br />
 
       <input
         placeholder="Search product..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
+        style={{ width: 300, padding: 8 }}
       />
 
-      <div style={{ maxHeight: 200, overflowY: "scroll", border: "1px solid #ccc" }}>
+      <div style={{ maxHeight: 250, overflowY: "scroll", border: "1px solid #ccc", marginTop: 10 }}>
         {products
           .filter((p) => p.toLowerCase().includes(search.toLowerCase()))
           .map((p, i) => (
-            <div key={i} onClick={() => setSelectedProduct(p)} style={{ cursor: "pointer" }}>
+            <div
+              key={i}
+              onClick={() => setSelectedProduct(p)}
+              style={{
+                cursor: "pointer",
+                padding: 6,
+                background: selectedProduct === p ? "#ddd" : "white",
+              }}
+            >
               {p}
             </div>
           ))}
       </div>
 
       {selectedProduct && (
-        <div>
+        <div style={{ marginTop: 20 }}>
           <h3>{selectedProduct}</h3>
-          {Object.entries(getBreakdown(selectedProduct)).map(([venue, ships], i) => (
-            <div key={i}>
-              <strong>{venue}</strong>
-              <div style={{ display: "flex", gap: 10 }}>
+
+          {Object.entries(getBreakdown(selectedProduct)).map(([venue, data], i) => (
+            <div key={i} style={{ borderBottom: "1px solid #ddd", padding: 12 }}>
+              <h4>{venue}</h4>
+
+              <div style={{ display: "flex", gap: 16, marginBottom: 10 }}>
                 {SHIPS.map((ship) => (
-                  <div key={ship} style={{ fontWeight: ship === userShip ? "bold" : "normal" }}>
-                    {ship}: {ships[ship] || 0}
+                  <div
+                    key={ship}
+                    style={{
+                      fontWeight: ship === userShip ? "bold" : "normal",
+                    }}
+                  >
+                    {ship}: {data.ships[ship] || 0}
                   </div>
                 ))}
               </div>
+
+              <strong>Recipes using this product:</strong>
+              <ul>
+                {Object.entries(data.recipes).map(([recipe, qty], j) => (
+                  <li key={j}>
+                    {recipe} — Qty: {qty}
+                  </li>
+                ))}
+              </ul>
             </div>
           ))}
         </div>
