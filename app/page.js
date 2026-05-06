@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 
-const SHIPS = ["BRL", "RL", "V1", "VL"];
+const SHIPS = ["BRL", "RL", "SC", "VL"];
 
 const cleanText = (value) =>
   String(value || "")
@@ -42,8 +42,8 @@ export default function App() {
     try {
       localStorage.setItem(key, JSON.stringify(rows));
       setMessage("Files saved in this browser.");
-    } catch (err) {
-      setMessage("Could not save files. File may be too large for browser storage.");
+    } catch {
+      setMessage("Could not save files. File may be too large.");
     }
   };
 
@@ -70,7 +70,7 @@ export default function App() {
       setSelectedProduct("");
       setSelectedRecipe(null);
       setMessage("Saved files loaded.");
-    } catch (err) {
+    } catch {
       setMessage("Could not load saved files.");
     }
   };
@@ -130,7 +130,13 @@ export default function App() {
   const getConsumptionBreakdown = (product) => {
     let currentVenue = "";
     const result = {};
-    const shipColumns = { BRL: 8, RL: 11, V1: 14, VL: 17 };
+
+    const shipColumns = {
+      BRL: 8,
+      RL: 11,
+      SC: 14, // Column O, previously V1
+      VL: 17,
+    };
 
     consumptionData.forEach((row) => {
       if (row[2]) currentVenue = String(row[2]).trim();
@@ -158,10 +164,10 @@ export default function App() {
     const selectedCleanProduct = cleanText(product);
 
     recipeData.forEach((row) => {
-      const assignedProduct = cleanText(row[12]); // M
-      const recipeCode = String(row[15] || "").trim(); // P
-      const recipeName = String(row[16] || "").trim(); // Q
-      const venue = String(row[1] || "").trim(); // B
+      const assignedProduct = cleanText(row[12]);
+      const recipeCode = String(row[15] || "").trim();
+      const recipeName = String(row[16] || "").trim();
+      const venue = String(row[1] || "").trim();
 
       if (!assignedProduct) return;
       if (!recipeCode && !recipeName) return;
