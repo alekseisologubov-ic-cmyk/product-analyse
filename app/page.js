@@ -8,7 +8,11 @@ const SHIPS = ["BRL", "RL", "SC", "VL"];
 const ALLERGEN_RULES = [
   { allergen: "Tree Nuts", keywords: ["almond", "walnut", "pecan", "cashew", "hazelnut", "pistachio", "macadamia"] },
   { allergen: "Peanuts", keywords: ["peanut"] },
-  { allergen: "Seeds", keywords: ["seed", "seeds", "sunflower seed", "pumpkin seed", "chia", "flax", "hemp seed"] },
+  {
+  allergen: "Seeds",
+  keywords: ["seed", "seeds", "sunflower seed", "pumpkin seed", "chia", "flax", "hemp seed"],
+  exclude: ["seedless", "seedless cucumber"]
+},
   { allergen: "Soy", keywords: ["soy", "tofu", "edamame", "miso", "tamari"] },
   { allergen: "Gluten", keywords: ["wheat", "flour", "gluten", "bread", "pasta", "semolina", "barley", "rye", "panko"] },
   { allergen: "Milk / Dairy", keywords: ["milk", "cream", "butter", "cheese", "yogurt", "parmesan", "mozzarella", "ricotta", "cream cheese"] },
