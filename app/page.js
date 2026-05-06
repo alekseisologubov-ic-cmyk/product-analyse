@@ -51,54 +51,6 @@ export default function App() {
     ].sort();
   };
 
-  const saveRows = (key, rows) => {
-    try {
-      localStorage.setItem(key, JSON.stringify(rows));
-      setMessage("Files saved in this browser.");
-    } catch {
-      setMessage("Could not save files. File may be too large.");
-    }
-  };
-
-  const loadSavedFiles = () => {
-    try {
-      const savedConsumption = localStorage.getItem(STORAGE_KEYS.consumption);
-      const savedRecipe = localStorage.getItem(STORAGE_KEYS.recipe);
-
-      if (!savedConsumption && !savedRecipe) {
-        setMessage("No saved files found.");
-        return;
-      }
-
-      if (savedConsumption) {
-        const rows = JSON.parse(savedConsumption);
-        setConsumptionRows(rows);
-        setProducts(buildProductList(rows));
-      }
-
-      if (savedRecipe) {
-        setRecipeRows(JSON.parse(savedRecipe));
-      }
-
-      setSelectedProduct("");
-      setSelectedRecipe(null);
-      setMessage("Saved files loaded.");
-    } catch {
-      setMessage("Could not load saved files.");
-    }
-  };
-
-  const clearSavedFiles = () => {
-    localStorage.removeItem(STORAGE_KEYS.consumption);
-    localStorage.removeItem(STORAGE_KEYS.recipe);
-    setConsumptionRows([]);
-    setRecipeRows([]);
-    setProducts([]);
-    setSelectedProduct("");
-    setSelectedRecipe(null);
-    setMessage("Saved files cleared.");
-  };
-
   const readExcel = (file, callback) => {
     const reader = new FileReader();
     reader.onload = (evt) => {
@@ -119,7 +71,7 @@ export default function App() {
       setProducts(buildProductList(rows));
       setSelectedProduct("");
       setSelectedRecipe(null);
-      saveRows(STORAGE_KEYS.consumption, rows);
+      setMessage("Consumption file loaded.");
     });
   };
 
@@ -129,7 +81,8 @@ export default function App() {
 
     readExcel(file, (rows) => {
       setRecipeRows(rows);
-      saveRows(STORAGE_KEYS.recipe, rows);
+      setSelectedRecipe(null);
+      setMessage("Recipe file loaded.");
     });
   };
 
@@ -172,20 +125,40 @@ export default function App() {
     return result;
   };
 
+  const productMatches = (selectedProduct, row) => {
+    const selected = cleanText(selectedProduct);
+
+    const assignedProduct = cleanText(row[12]); // M = Assigned full product
+    const productName = cleanText(row[7]);      // H = Name / product
+
+    if (!selected) return false;
+
+    if (assignedProduct === selected) return true;
+    if (productName === selected) return true;
+
+    if (assignedProduct.length > 12) {
+      if (selected.includes(assignedProduct) || assignedProduct.includes(selected)) return true;
+    }
+
+    if (productName.length > 12) {
+      if (selected.includes(productName) || productName.includes(selected)) return true;
+    }
+
+    return false;
+  };
+
   const getRecipesUsingProduct = (product) => {
     const recipes = {};
-    const selectedCleanProduct = cleanText(product);
 
     recipeData.forEach((row) => {
-      const assignedProduct = cleanText(row[12]);
-      const recipeCode = String(row[15] || "").trim();
-      const recipeName = String(row[16] || "").trim();
-      const venue = String(row[1] || "").trim();
+      const recipeCode = String(row[15] || "").trim(); // P
+      const recipeName = String(row[16] || "").trim(); // Q
+      const venue = String(row[1] || "").trim();       // B
 
-      if (!assignedProduct) return;
       if (!recipeCode && !recipeName) return;
       if (recipeName && !isNaN(Number(recipeName))) return;
-      if (assignedProduct !== selectedCleanProduct) return;
+
+      if (!productMatches(product, row)) return;
 
       const key = `${recipeCode || "N/A"} - ${recipeName || "Unnamed Recipe"}`;
 
@@ -350,15 +323,6 @@ export default function App() {
             style={styles.fileInput}
           />
 
-          <div style={styles.buttonRow}>
-            <button style={styles.secondaryButton} onClick={loadSavedFiles}>
-              Load Saved Files
-            </button>
-            <button style={styles.clearButton} onClick={clearSavedFiles}>
-              Clear Saved
-            </button>
-          </div>
-
           {message && <p style={styles.message}>{message}</p>}
 
           <div style={styles.infoBox}>
@@ -429,7 +393,7 @@ export default function App() {
           <h3 style={styles.sectionTitle}>👨‍🍳 Recipes using this product</h3>
 
           {recipeRows.length === 0 && (
-            <p style={styles.emptyText}>Upload or load the recipe file to see recipe details.</p>
+            <p style={styles.emptyText}>Upload the recipe file to see recipe details.</p>
           )}
 
           {recipeRows.length > 0 && recipesForProduct.length === 0 && (
@@ -580,21 +544,6 @@ const styles = {
   },
   cardTitle: { marginTop: 0 },
   fileInput: { display: "block", margin: "8px 0 16px" },
-  buttonRow: { display: "flex", gap: 10, marginTop: 10 },
-  secondaryButton: {
-    padding: 10,
-    borderRadius: 8,
-    border: "1px solid #111",
-    background: "#fff",
-    cursor: "pointer",
-  },
-  clearButton: {
-    padding: 10,
-    borderRadius: 8,
-    border: "1px solid #ccc",
-    background: "#eee",
-    cursor: "pointer",
-  },
   message: { color: "#555", fontSize: 14 },
   infoBox: {
     marginTop: 12,
