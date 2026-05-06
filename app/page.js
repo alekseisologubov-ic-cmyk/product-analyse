@@ -24,10 +24,12 @@ const cleanText = (value) =>
     .replace(/\s+/g, " ")
     .trim();
 
-const STORAGE_KEYS = {
-  consumption: "vv_consumption_rows",
-  recipe: "vv_recipe_rows",
-};
+const normalizeVenue = (value) =>
+  cleanText(value)
+    .replace(/\s*-\s*VV$/g, "")
+    .replace(/\s*VV$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
 export default function App() {
   const [consumptionRows, setConsumptionRows] = useState([]);
@@ -82,7 +84,7 @@ export default function App() {
     readExcel(file, (rows) => {
       setRecipeRows(rows);
       setSelectedRecipe(null);
-      setMessage("Recipe file loaded.");
+      setMessage("Recipe/location file loaded.");
     });
   };
 
@@ -93,43 +95,17 @@ export default function App() {
 
   const recipeData = useMemo(() => recipeRows.slice(1), [recipeRows]);
 
-  const getConsumptionBreakdown = (product) => {
-    let currentVenue = "";
-    const result = {};
-
-    const shipColumns = {
-      BRL: 8,
-      RL: 11,
-      SC: 14,
-      VL: 17,
-    };
-
-    consumptionData.forEach((row) => {
-      if (row[2]) currentVenue = String(row[2]).trim();
-
-      const venue = currentVenue || "Unknown";
-      const productName = String(row[6] || "").trim();
-
-      if (productName !== product) return;
-      if (!result[venue]) result[venue] = {};
-
-      SHIPS.forEach((ship) => {
-        const qty = Number(row[shipColumns[ship]]) || 0;
-        if (qty === 0) return;
-
-        if (!result[venue][ship]) result[venue][ship] = 0;
-        result[venue][ship] += qty;
-      });
-    });
-
-    return result;
+  const shipColumns = {
+    BRL: 8,
+    RL: 11,
+    SC: 14,
+    VL: 17,
   };
 
   const productMatches = (selectedProduct, row) => {
     const selected = cleanText(selectedProduct);
-
     const assignedProduct = cleanText(row[12]); // M = Assigned full product
-    const productName = cleanText(row[7]);      // H = Name / product
+    const productName = cleanText(row[7]); // H = product/name
 
     if (!selected) return false;
 
@@ -147,17 +123,104 @@ export default function App() {
     return false;
   };
 
+  const getRequiredVenuesForProduct = (product) => {
+    const required = {};
+
+    recipeData.forEach((row) => {
+      if (!productMatches(product, row)) return;
+
+      const venueRaw = String(row[1] || "").trim(); // B = venue/location
+      const venueKey = normalizeVenue(venueRaw);
+
+      if (!venueKey) return;
+
+      if (!required[venueKey]) {
+        required[venueKey] = {
+          displayName: venueRaw || venueKey,
+          recipes: new Set(),
+        };
+      }
+
+      const recipeCode = String(row[15] || "").trim();
+      const recipeName = String(row[16] || "").trim();
+
+      if (recipeCode || recipeName) {
+        required[venueKey].recipes.add(`${recipeCode || "N/A"} - ${recipeName || "Unnamed Recipe"}`);
+      }
+    });
+
+    return required;
+  };
+
+  const getConsumptionBreakdown = (product) => {
+    let currentVenue = "";
+    const result = {};
+
+    consumptionData.forEach((row) => {
+      if (row[2]) currentVenue = String(row[2]).trim();
+
+      const venue = currentVenue || "Unknown";
+      const venueKey = normalizeVenue(venue);
+      const productName = String(row[6] || "").trim();
+
+      if (productName !== product) return;
+
+      if (!result[venueKey]) {
+        result[venueKey] = {
+          displayName: venue,
+          ships: {},
+        };
+      }
+
+      SHIPS.forEach((ship) => {
+        const qty = Number(row[shipColumns[ship]]) || 0;
+
+        if (!result[venueKey].ships[ship]) result[venueKey].ships[ship] = 0;
+        result[venueKey].ships[ship] += qty;
+      });
+    });
+
+    return result;
+  };
+
+  const getCombinedVenueBreakdown = (product) => {
+    const actual = getConsumptionBreakdown(product);
+    const required = getRequiredVenuesForProduct(product);
+
+    const allVenueKeys = Array.from(
+      new Set([...Object.keys(actual), ...Object.keys(required)])
+    ).sort();
+
+    return allVenueKeys.map((venueKey) => {
+      const actualVenue = actual[venueKey];
+      const requiredVenue = required[venueKey];
+
+      const ships = {};
+      SHIPS.forEach((ship) => {
+        ships[ship] = actualVenue?.ships?.[ship] || 0;
+      });
+
+      return {
+        venueKey,
+        displayName: actualVenue?.displayName || requiredVenue?.displayName || venueKey,
+        ships,
+        required: Boolean(requiredVenue),
+        missingShips: SHIPS.filter((ship) => Boolean(requiredVenue) && (ships[ship] || 0) === 0),
+        requiredRecipes: requiredVenue ? [...requiredVenue.recipes] : [],
+      };
+    });
+  };
+
   const getRecipesUsingProduct = (product) => {
     const recipes = {};
 
     recipeData.forEach((row) => {
-      const recipeCode = String(row[15] || "").trim(); // P
-      const recipeName = String(row[16] || "").trim(); // Q
-      const venue = String(row[1] || "").trim();       // B
+      const recipeCode = String(row[15] || "").trim();
+      const recipeName = String(row[16] || "").trim();
+      const venue = String(row[1] || "").trim();
 
       if (!recipeCode && !recipeName) return;
       if (recipeName && !isNaN(Number(recipeName))) return;
-
       if (!productMatches(product, row)) return;
 
       const key = `${recipeCode || "N/A"} - ${recipeName || "Unnamed Recipe"}`;
@@ -287,7 +350,7 @@ export default function App() {
     );
   }
 
-  const breakdown = selectedProduct ? getConsumptionBreakdown(selectedProduct) : {};
+  const combinedBreakdown = selectedProduct ? getCombinedVenueBreakdown(selectedProduct) : [];
   const recipesForProduct = selectedProduct ? getRecipesUsingProduct(selectedProduct) : [];
   const productsInRecipe = selectedRecipe ? getProductsInRecipe(selectedRecipe) : [];
   const allergenWarnings = selectedRecipe ? detectAllergens(productsInRecipe) : [];
@@ -315,7 +378,7 @@ export default function App() {
             style={styles.fileInput}
           />
 
-          <label style={styles.label}>Step 2: Recipe file</label>
+          <label style={styles.label}>Step 2: Recipe / location file</label>
           <input
             type="file"
             accept=".xlsx,.xls,.xlsm"
@@ -328,6 +391,9 @@ export default function App() {
           <div style={styles.infoBox}>
             <div>📦 Products loaded: <strong>{products.length}</strong></div>
             <div>📘 Recipe rows loaded: <strong>{Math.max(recipeRows.length - 1, 0)}</strong></div>
+            <div style={{ color: "#b00020" }}>
+              Red = recipe/location file expects usage, but consumption is 0 for that ship.
+            </div>
           </div>
         </div>
 
@@ -368,24 +434,48 @@ export default function App() {
           <h3 style={styles.sectionTitle}>🏢 Consumption by Venue and Ship</h3>
 
           <div style={styles.venueGrid}>
-            {Object.entries(breakdown).map(([venue, ships], i) => (
-              <div key={i} style={styles.venueCard}>
-                <h4 style={styles.venueTitle}>{venue}</h4>
+            {combinedBreakdown.map((venueItem, i) => (
+              <div
+                key={i}
+                style={{
+                  ...styles.venueCard,
+                  ...(venueItem.missingShips.length > 0 ? styles.venueCardWarning : {}),
+                }}
+              >
+                <h4 style={styles.venueTitle}>
+                  {venueItem.displayName}
+                  {venueItem.missingShips.length > 0 && (
+                    <span style={styles.missingBadge}>
+                      Missing: {venueItem.missingShips.join(", ")}
+                    </span>
+                  )}
+                </h4>
 
                 <div style={styles.shipGrid}>
-                  {SHIPS.map((ship) => (
-                    <div
-                      key={ship}
-                      style={{
-                        ...styles.shipBox,
-                        ...(ship === userShip ? styles.shipBoxActive : {}),
-                      }}
-                    >
-                      <span style={styles.shipName}>{ship}</span>
-                      <strong>{ships[ship] || 0}</strong>
-                    </div>
-                  ))}
+                  {SHIPS.map((ship) => {
+                    const isMissing = venueItem.required && (venueItem.ships[ship] || 0) === 0;
+
+                    return (
+                      <div
+                        key={ship}
+                        style={{
+                          ...styles.shipBox,
+                          ...(ship === userShip ? styles.shipBoxActive : {}),
+                          ...(isMissing ? styles.shipBoxMissing : {}),
+                        }}
+                      >
+                        <span style={styles.shipName}>{ship}</span>
+                        <strong>{venueItem.ships[ship] || 0}</strong>
+                      </div>
+                    );
+                  })}
                 </div>
+
+                {venueItem.missingShips.length > 0 && (
+                  <div style={styles.warningSmall}>
+                    Product appears in recipe/location file for this venue, but usage is 0 for highlighted ship(s).
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -393,7 +483,7 @@ export default function App() {
           <h3 style={styles.sectionTitle}>👨‍🍳 Recipes using this product</h3>
 
           {recipeRows.length === 0 && (
-            <p style={styles.emptyText}>Upload the recipe file to see recipe details.</p>
+            <p style={styles.emptyText}>Upload the recipe/location file to see recipe details.</p>
           )}
 
           {recipeRows.length > 0 && recipesForProduct.length === 0 && (
@@ -590,7 +680,24 @@ const styles = {
     padding: 14,
     background: "#fafafa",
   },
-  venueTitle: { marginTop: 0 },
+  venueCardWarning: {
+    border: "2px solid #b00020",
+    background: "#fff0f0",
+  },
+  venueTitle: {
+    marginTop: 0,
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 10,
+    alignItems: "center",
+  },
+  missingBadge: {
+    fontSize: 12,
+    color: "#fff",
+    background: "#b00020",
+    borderRadius: 999,
+    padding: "4px 8px",
+  },
   shipGrid: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 },
   shipBox: {
     padding: 10,
@@ -602,7 +709,18 @@ const styles = {
     textAlign: "center",
   },
   shipBoxActive: { background: "#111", color: "#fff" },
+  shipBoxMissing: {
+    background: "#b00020",
+    color: "#fff",
+    borderColor: "#b00020",
+  },
   shipName: { fontSize: 12, opacity: 0.8 },
+  warningSmall: {
+    marginTop: 10,
+    color: "#b00020",
+    fontSize: 13,
+    fontWeight: "bold",
+  },
   emptyText: { color: "#777" },
   recipeList: { display: "grid", gap: 10 },
   recipeCard: {
@@ -640,10 +758,7 @@ const styles = {
     padding: 10,
     borderRadius: 8,
   },
-  allergenList: {
-    display: "grid",
-    gap: 10,
-  },
+  allergenList: { display: "grid", gap: 10 },
   allergenCard: {
     border: "1px solid #e1c16e",
     background: "#fff9e8",
