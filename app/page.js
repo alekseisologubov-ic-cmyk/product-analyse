@@ -8,10 +8,11 @@ const SHIPS = ["BRL", "RL", "SC", "VL"];
 const ALLERGEN_RULES = [
   { allergen: "Tree Nuts", keywords: ["almond", "walnut", "pecan", "cashew", "hazelnut", "pistachio", "macadamia"] },
   { allergen: "Peanuts", keywords: ["peanut"] },
+  { allergen: "Seeds", keywords: ["seed", "seeds", "sunflower seed", "pumpkin seed", "chia", "flax", "hemp seed"] },
   { allergen: "Soy", keywords: ["soy", "tofu", "edamame", "miso", "tamari"] },
   { allergen: "Gluten", keywords: ["wheat", "flour", "gluten", "bread", "pasta", "semolina", "barley", "rye", "panko"] },
   { allergen: "Milk / Dairy", keywords: ["milk", "cream", "butter", "cheese", "yogurt", "parmesan", "mozzarella", "ricotta", "cream cheese"] },
-  { allergen: "Egg", keywords: ["egg", "mayonnaise", "aioli"] },
+  { allergen: "Egg", keywords: ["egg", "eggs", "mayonnaise", "aioli"], exclude: ["eggplant"] },
   { allergen: "Fish", keywords: ["salmon", "tuna", "cod", "anchovy", "fish", "sardine"] },
   { allergen: "Shellfish", keywords: ["shrimp", "crab", "lobster", "clam", "mussel", "oyster", "scallop"] },
   { allergen: "Sesame", keywords: ["sesame", "tahini"] },
@@ -281,36 +282,43 @@ export default function App() {
     return Object.keys(items).sort();
   };
 
-  const detectAllergens = (productsInRecipe) => {
-    const found = {};
+ const detectAllergens = (productsInRecipe) => {
+  const found = {};
 
-    productsInRecipe.forEach((product) => {
-      const lowerProduct = product.toLowerCase();
-      const subIngredients = getSubRecipeIngredients(product);
+  const checkProductAgainstRules = (product, displayName) => {
+    const lowerProduct = product.toLowerCase();
 
-      ALLERGEN_RULES.forEach((rule) => {
-        const matchedMain = rule.keywords.find((keyword) =>
-          lowerProduct.includes(keyword)
-        );
+    ALLERGEN_RULES.forEach((rule) => {
+      const isExcluded = rule.exclude?.some((word) =>
+        lowerProduct.includes(word)
+      );
 
-        if (matchedMain) {
-          if (!found[rule.allergen]) found[rule.allergen] = new Set();
-          found[rule.allergen].add(product);
-        }
+      const matchedKeyword =
+        !isExcluded &&
+        rule.keywords.find((keyword) => lowerProduct.includes(keyword));
 
-        subIngredients.forEach((subItem) => {
-          const lowerSubItem = subItem.toLowerCase();
-          const matchedSub = rule.keywords.find((keyword) =>
-            lowerSubItem.includes(keyword)
-          );
-
-          if (matchedSub) {
-            if (!found[rule.allergen]) found[rule.allergen] = new Set();
-            found[rule.allergen].add(`${product} → ${subItem}`);
-          }
-        });
-      });
+      if (matchedKeyword) {
+        if (!found[rule.allergen]) found[rule.allergen] = new Set();
+        found[rule.allergen].add(displayName);
+      }
     });
+  };
+
+  productsInRecipe.forEach((product) => {
+    checkProductAgainstRules(product, product);
+
+    const subIngredients = getSubRecipeIngredients(product);
+
+    subIngredients.forEach((subItem) => {
+      checkProductAgainstRules(subItem, `${product} → ${subItem}`);
+    });
+  });
+
+  return Object.entries(found).map(([allergen, products]) => ({
+    allergen,
+    products: [...products].sort(),
+  }));
+};
 
     return Object.entries(found).map(([allergen, products]) => ({
       allergen,
