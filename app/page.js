@@ -5,6 +5,19 @@ import * as XLSX from "xlsx";
 
 const SHIPS = ["BRL", "RL", "SC", "VL"];
 
+const ALLERGEN_RULES = [
+  { allergen: "Tree Nuts", keywords: ["almond", "walnut", "pecan", "cashew", "hazelnut", "pistachio", "macadamia"] },
+  { allergen: "Peanuts", keywords: ["peanut"] },
+  { allergen: "Soy", keywords: ["soy", "tofu", "edamame", "miso", "tamari"] },
+  { allergen: "Gluten", keywords: ["wheat", "flour", "gluten", "bread", "pasta", "semolina", "barley", "rye", "panko"] },
+  { allergen: "Milk / Dairy", keywords: ["milk", "cream", "butter", "cheese", "yogurt", "parmesan", "mozzarella", "ricotta", "cream cheese"] },
+  { allergen: "Egg", keywords: ["egg", "mayonnaise", "aioli"] },
+  { allergen: "Fish", keywords: ["salmon", "tuna", "cod", "anchovy", "fish", "sardine"] },
+  { allergen: "Shellfish", keywords: ["shrimp", "crab", "lobster", "clam", "mussel", "oyster", "scallop"] },
+  { allergen: "Sesame", keywords: ["sesame", "tahini"] },
+  { allergen: "Mustard", keywords: ["mustard"] }
+];
+
 const cleanText = (value) =>
   String(value || "")
     .toUpperCase()
@@ -134,7 +147,7 @@ export default function App() {
     const shipColumns = {
       BRL: 8,
       RL: 11,
-      SC: 14, // Column O, previously V1
+      SC: 14,
       VL: 17,
     };
 
@@ -164,10 +177,10 @@ export default function App() {
     const selectedCleanProduct = cleanText(product);
 
     recipeData.forEach((row) => {
-      const assignedProduct = cleanText(row[12]);
-      const recipeCode = String(row[15] || "").trim();
-      const recipeName = String(row[16] || "").trim();
-      const venue = String(row[1] || "").trim();
+      const assignedProduct = cleanText(row[12]); // M = Assigned full product name
+      const recipeCode = String(row[15] || "").trim(); // P
+      const recipeName = String(row[16] || "").trim(); // Q
+      const venue = String(row[1] || "").trim(); // B
 
       if (!assignedProduct) return;
       if (!recipeCode && !recipeName) return;
@@ -214,6 +227,32 @@ export default function App() {
     return Object.keys(items).sort();
   };
 
+  const detectAllergens = (productsInRecipe) => {
+    const found = {};
+
+    productsInRecipe.forEach((product) => {
+      const lowerProduct = product.toLowerCase();
+
+      ALLERGEN_RULES.forEach((rule) => {
+        const matchedKeyword = rule.keywords.find((keyword) =>
+          lowerProduct.includes(keyword)
+        );
+
+        if (matchedKeyword) {
+          if (!found[rule.allergen]) {
+            found[rule.allergen] = new Set();
+          }
+          found[rule.allergen].add(product);
+        }
+      });
+    });
+
+    return Object.entries(found).map(([allergen, products]) => ({
+      allergen,
+      products: [...products].sort(),
+    }));
+  };
+
   if (!loggedIn) {
     return (
       <main style={styles.page}>
@@ -249,6 +288,7 @@ export default function App() {
   const breakdown = selectedProduct ? getConsumptionBreakdown(selectedProduct) : {};
   const recipesForProduct = selectedProduct ? getRecipesUsingProduct(selectedProduct) : [];
   const productsInRecipe = selectedRecipe ? getProductsInRecipe(selectedRecipe) : [];
+  const allergenWarnings = selectedRecipe ? detectAllergens(productsInRecipe) : [];
 
   const filteredProducts = products.filter((p) =>
     p.toLowerCase().includes(search.toLowerCase())
@@ -401,6 +441,28 @@ export default function App() {
                     <li key={i}>{product}</li>
                   ))}
                 </ul>
+              )}
+
+              <h3 style={styles.sectionTitle}>⚠️ Rule-Based Allergen Warning</h3>
+              <p style={styles.warningText}>
+                This is a keyword-based warning only. Verify against official allergen data before use.
+              </p>
+
+              {allergenWarnings.length === 0 ? (
+                <p style={styles.emptyText}>No likely allergens detected by keyword rules.</p>
+              ) : (
+                <div style={styles.allergenList}>
+                  {allergenWarnings.map((item, i) => (
+                    <div key={i} style={styles.allergenCard}>
+                      <strong>{item.allergen}</strong>
+                      <ul>
+                        {item.products.map((product, j) => (
+                          <li key={j}>{product}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           )}
@@ -569,5 +631,21 @@ const styles = {
     borderRadius: 14,
     padding: 14,
     background: "#fafafa",
+  },
+  warningText: {
+    color: "#8a5a00",
+    background: "#fff4d6",
+    padding: 10,
+    borderRadius: 8,
+  },
+  allergenList: {
+    display: "grid",
+    gap: 10,
+  },
+  allergenCard: {
+    border: "1px solid #e1c16e",
+    background: "#fff9e8",
+    borderRadius: 10,
+    padding: 10,
   },
 };
