@@ -43,6 +43,13 @@ export default function App() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [message, setMessage] = useState("");
 
+  const shipColumns = {
+    BRL: 8,
+    RL: 11,
+    SC: 14,
+    VL: 17,
+  };
+
   const buildProductList = (rows) => {
     return [
       ...new Set(
@@ -56,12 +63,14 @@ export default function App() {
 
   const readExcel = (file, callback) => {
     const reader = new FileReader();
+
     reader.onload = (evt) => {
-      const wb = XLSX.read(evt.target.result, { type: "binary" });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+      const workbook = XLSX.read(evt.target.result, { type: "binary" });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
       callback(rows);
     };
+
     reader.readAsBinaryString(file);
   };
 
@@ -85,7 +94,7 @@ export default function App() {
     readExcel(file, (rows) => {
       setRecipeRows(rows);
       setSelectedRecipe(null);
-      setMessage("Recipe/location file loaded.");
+      setMessage("Recipe / location file loaded.");
     });
   };
 
@@ -94,19 +103,15 @@ export default function App() {
     [consumptionRows]
   );
 
-  const recipeData = useMemo(() => recipeRows.slice(1), [recipeRows]);
+  const recipeData = useMemo(
+    () => recipeRows.slice(1),
+    [recipeRows]
+  );
 
-  const shipColumns = {
-    BRL: 8,
-    RL: 11,
-    SC: 14,
-    VL: 17,
-  };
-
-  const productMatches = (selectedProduct, row) => {
-    const selected = cleanText(selectedProduct);
+  const productMatches = (selectedProductName, row) => {
+    const selected = cleanText(selectedProductName);
     const assignedProduct = cleanText(row[12]); // M = Assigned full product
-    const productName = cleanText(row[7]); // H = product/name
+    const productName = cleanText(row[7]); // H = Name / product
 
     if (!selected) return false;
 
@@ -114,11 +119,21 @@ export default function App() {
     if (productName === selected) return true;
 
     if (assignedProduct.length > 12) {
-      if (selected.includes(assignedProduct) || assignedProduct.includes(selected)) return true;
+      if (
+        selected.includes(assignedProduct) ||
+        assignedProduct.includes(selected)
+      ) {
+        return true;
+      }
     }
 
     if (productName.length > 12) {
-      if (selected.includes(productName) || productName.includes(selected)) return true;
+      if (
+        selected.includes(productName) ||
+        productName.includes(selected)
+      ) {
+        return true;
+      }
     }
 
     return false;
@@ -146,7 +161,9 @@ export default function App() {
       const recipeName = String(row[16] || "").trim();
 
       if (recipeCode || recipeName) {
-        required[venueKey].recipes.add(`${recipeCode || "N/A"} - ${recipeName || "Unnamed Recipe"}`);
+        required[venueKey].recipes.add(
+          `${recipeCode || "N/A"} - ${recipeName || "Unnamed Recipe"}`
+        );
       }
     });
 
@@ -158,11 +175,11 @@ export default function App() {
     const result = {};
 
     consumptionData.forEach((row) => {
-      if (row[2]) currentVenue = String(row[2]).trim();
+      if (row[2]) currentVenue = String(row[2]).trim(); // C = venue
 
       const venue = currentVenue || "Unknown";
       const venueKey = normalizeVenue(venue);
-      const productName = String(row[6] || "").trim();
+      const productName = String(row[6] || "").trim(); // G = product
 
       if (productName !== product) return;
 
@@ -176,7 +193,10 @@ export default function App() {
       SHIPS.forEach((ship) => {
         const qty = Number(row[shipColumns[ship]]) || 0;
 
-        if (!result[venueKey].ships[ship]) result[venueKey].ships[ship] = 0;
+        if (!result[venueKey].ships[ship]) {
+          result[venueKey].ships[ship] = 0;
+        }
+
         result[venueKey].ships[ship] += qty;
       });
     });
@@ -203,11 +223,18 @@ export default function App() {
 
       return {
         venueKey,
-        displayName: actualVenue?.displayName || requiredVenue?.displayName || venueKey,
+        displayName:
+          actualVenue?.displayName ||
+          requiredVenue?.displayName ||
+          venueKey,
         ships,
         required: Boolean(requiredVenue),
-        missingShips: SHIPS.filter((ship) => Boolean(requiredVenue) && (ships[ship] || 0) === 0),
-        requiredRecipes: requiredVenue ? [...requiredVenue.recipes] : [],
+        missingShips: SHIPS.filter(
+          (ship) => Boolean(requiredVenue) && (ships[ship] || 0) === 0
+        ),
+        requiredRecipes: requiredVenue
+          ? [...requiredVenue.recipes]
+          : [],
       };
     });
   };
@@ -216,15 +243,17 @@ export default function App() {
     const recipes = {};
 
     recipeData.forEach((row) => {
-      const recipeCode = String(row[15] || "").trim();
-      const recipeName = String(row[16] || "").trim();
-      const venue = String(row[1] || "").trim();
+      const recipeCode = String(row[15] || "").trim(); // P
+      const recipeName = String(row[16] || "").trim(); // Q
+      const venue = String(row[1] || "").trim(); // B
 
       if (!recipeCode && !recipeName) return;
       if (recipeName && !isNaN(Number(recipeName))) return;
       if (!productMatches(product, row)) return;
 
-      const key = `${recipeCode || "N/A"} - ${recipeName || "Unnamed Recipe"}`;
+      const key = `${recipeCode || "N/A"} - ${
+        recipeName || "Unnamed Recipe"
+      }`;
 
       if (!recipes[key]) {
         recipes[key] = {
@@ -253,7 +282,12 @@ export default function App() {
       const recipeCode = String(row[15] || "").trim();
       const recipeName = String(row[16] || "").trim();
 
-      if (recipeCode !== recipe.recipeCode || recipeName !== recipe.recipeName) return;
+      if (
+        recipeCode !== recipe.recipeCode ||
+        recipeName !== recipe.recipeName
+      ) {
+        return;
+      }
 
       const product = String(row[12] || row[7] || "").trim();
       if (!product) return;
@@ -282,43 +316,42 @@ export default function App() {
     return Object.keys(items).sort();
   };
 
- const detectAllergens = (productsInRecipe) => {
-  const found = {};
+  const detectAllergens = (productsInRecipe) => {
+    const found = {};
 
-  const checkProductAgainstRules = (product, displayName) => {
-    const lowerProduct = product.toLowerCase();
+    const checkProductAgainstRules = (product, displayName) => {
+      const lowerProduct = String(product || "").toLowerCase();
 
-    ALLERGEN_RULES.forEach((rule) => {
-      const isExcluded = rule.exclude?.some((word) =>
-        lowerProduct.includes(word)
-      );
+      ALLERGEN_RULES.forEach((rule) => {
+        const isExcluded = rule.exclude?.some((word) =>
+          lowerProduct.includes(word)
+        );
 
-      const matchedKeyword =
-        !isExcluded &&
-        rule.keywords.find((keyword) => lowerProduct.includes(keyword));
+        const matchedKeyword =
+          !isExcluded &&
+          rule.keywords.find((keyword) =>
+            lowerProduct.includes(keyword)
+          );
 
-      if (matchedKeyword) {
-        if (!found[rule.allergen]) found[rule.allergen] = new Set();
-        found[rule.allergen].add(displayName);
-      }
+        if (matchedKeyword) {
+          if (!found[rule.allergen]) {
+            found[rule.allergen] = new Set();
+          }
+
+          found[rule.allergen].add(displayName);
+        }
+      });
+    };
+
+    productsInRecipe.forEach((product) => {
+      checkProductAgainstRules(product, product);
+
+      const subIngredients = getSubRecipeIngredients(product);
+
+      subIngredients.forEach((subItem) => {
+        checkProductAgainstRules(subItem, `${product} → ${subItem}`);
+      });
     });
-  };
-
-  productsInRecipe.forEach((product) => {
-    checkProductAgainstRules(product, product);
-
-    const subIngredients = getSubRecipeIngredients(product);
-
-    subIngredients.forEach((subItem) => {
-      checkProductAgainstRules(subItem, `${product} → ${subItem}`);
-    });
-  });
-
-  return Object.entries(found).map(([allergen, products]) => ({
-    allergen,
-    products: [...products].sort(),
-  }));
-};
 
     return Object.entries(found).map(([allergen, products]) => ({
       allergen,
@@ -330,7 +363,11 @@ export default function App() {
     return (
       <main style={styles.page}>
         <section style={styles.loginCard}>
-          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.logo} />
+          <img
+            src="/virgin-logo.png"
+            alt="Virgin Voyages"
+            style={styles.logo}
+          />
 
           <h1 style={styles.title}>Product Consumption Dashboard</h1>
           <p style={styles.subtitle}>Ship, venue & recipe usage analysis</p>
@@ -358,10 +395,21 @@ export default function App() {
     );
   }
 
-  const combinedBreakdown = selectedProduct ? getCombinedVenueBreakdown(selectedProduct) : [];
-  const recipesForProduct = selectedProduct ? getRecipesUsingProduct(selectedProduct) : [];
-  const productsInRecipe = selectedRecipe ? getProductsInRecipe(selectedRecipe) : [];
-  const allergenWarnings = selectedRecipe ? detectAllergens(productsInRecipe) : [];
+  const combinedBreakdown = selectedProduct
+    ? getCombinedVenueBreakdown(selectedProduct)
+    : [];
+
+  const recipesForProduct = selectedProduct
+    ? getRecipesUsingProduct(selectedProduct)
+    : [];
+
+  const productsInRecipe = selectedRecipe
+    ? getProductsInRecipe(selectedRecipe)
+    : [];
+
+  const allergenWarnings = selectedRecipe
+    ? detectAllergens(productsInRecipe)
+    : [];
 
   const filteredProducts = products.filter((p) =>
     p.toLowerCase().includes(search.toLowerCase())
@@ -370,7 +418,11 @@ export default function App() {
   return (
     <main style={styles.page}>
       <header style={styles.header}>
-        <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
+        <img
+          src="/virgin-logo.png"
+          alt="Virgin Voyages"
+          style={styles.headerLogo}
+        />
         <div style={styles.shipBadge}>🚢 {userShip}</div>
       </header>
 
@@ -397,10 +449,16 @@ export default function App() {
           {message && <p style={styles.message}>{message}</p>}
 
           <div style={styles.infoBox}>
-            <div>📦 Products loaded: <strong>{products.length}</strong></div>
-            <div>📘 Recipe rows loaded: <strong>{Math.max(recipeRows.length - 1, 0)}</strong></div>
+            <div>
+              📦 Products loaded: <strong>{products.length}</strong>
+            </div>
+            <div>
+              📘 Recipe rows loaded:{" "}
+              <strong>{Math.max(recipeRows.length - 1, 0)}</strong>
+            </div>
             <div style={{ color: "#b00020" }}>
-              Red = recipe/location file expects usage, but consumption is 0 for that ship.
+              Red = recipe/location file expects usage, but consumption is 0
+              for that ship.
             </div>
           </div>
         </div>
@@ -425,7 +483,9 @@ export default function App() {
                 }}
                 style={{
                   ...styles.productItem,
-                  ...(selectedProduct === product ? styles.productItemActive : {}),
+                  ...(selectedProduct === product
+                    ? styles.productItemActive
+                    : {}),
                 }}
               >
                 {product}
@@ -447,7 +507,9 @@ export default function App() {
                 key={i}
                 style={{
                   ...styles.venueCard,
-                  ...(venueItem.missingShips.length > 0 ? styles.venueCardWarning : {}),
+                  ...(venueItem.missingShips.length > 0
+                    ? styles.venueCardWarning
+                    : {}),
                 }}
               >
                 <h4 style={styles.venueTitle}>
@@ -461,7 +523,9 @@ export default function App() {
 
                 <div style={styles.shipGrid}>
                   {SHIPS.map((ship) => {
-                    const isMissing = venueItem.required && (venueItem.ships[ship] || 0) === 0;
+                    const isMissing =
+                      venueItem.required &&
+                      (venueItem.ships[ship] || 0) === 0;
 
                     return (
                       <div
@@ -481,7 +545,8 @@ export default function App() {
 
                 {venueItem.missingShips.length > 0 && (
                   <div style={styles.warningSmall}>
-                    Product appears in recipe/location file for this venue, but usage is 0 for highlighted ship(s).
+                    Product appears in recipe/location file for this venue, but
+                    usage is 0 for highlighted ship(s).
                   </div>
                 )}
               </div>
@@ -491,11 +556,15 @@ export default function App() {
           <h3 style={styles.sectionTitle}>👨‍🍳 Recipes using this product</h3>
 
           {recipeRows.length === 0 && (
-            <p style={styles.emptyText}>Upload the recipe/location file to see recipe details.</p>
+            <p style={styles.emptyText}>
+              Upload the recipe/location file to see recipe details.
+            </p>
           )}
 
           {recipeRows.length > 0 && recipesForProduct.length === 0 && (
-            <p style={styles.emptyText}>No recipes found for this product.</p>
+            <p style={styles.emptyText}>
+              No recipes found for this product.
+            </p>
           )}
 
           <div style={styles.recipeList}>
@@ -505,13 +574,16 @@ export default function App() {
                 onClick={() => setSelectedRecipe(recipe)}
                 style={{
                   ...styles.recipeCard,
-                  ...(selectedRecipe?.key === recipe.key ? styles.recipeCardActive : {}),
+                  ...(selectedRecipe?.key === recipe.key
+                    ? styles.recipeCardActive
+                    : {}),
                 }}
               >
                 <div style={styles.recipeName}>{recipe.recipeName}</div>
                 <div style={styles.recipeMeta}>Code: {recipe.recipeCode}</div>
                 <div style={styles.recipeMeta}>
-                  Venues: {recipe.venues.length ? recipe.venues.join(", ") : "N/A"}
+                  Venues:{" "}
+                  {recipe.venues.length ? recipe.venues.join(", ") : "N/A"}
                 </div>
               </button>
             ))}
@@ -550,11 +622,14 @@ export default function App() {
 
               <h3 style={styles.sectionTitle}>⚠️ Rule-Based Allergen Warning</h3>
               <p style={styles.warningText}>
-                This is a keyword-based warning only. Verify against official allergen data before use.
+                This is a keyword-based warning only. Verify against official
+                allergen data before use.
               </p>
 
               {allergenWarnings.length === 0 ? (
-                <p style={styles.emptyText}>No likely allergens detected by keyword rules.</p>
+                <p style={styles.emptyText}>
+                  No likely allergens detected by keyword rules.
+                </p>
               ) : (
                 <div style={styles.allergenList}>
                   {allergenWarnings.map((item, i) => (
@@ -595,7 +670,11 @@ const styles = {
     display: "grid",
     gap: 14,
   },
-  logo: { height: 70, objectFit: "contain", marginBottom: 8 },
+  logo: {
+    height: 70,
+    objectFit: "contain",
+    marginBottom: 8,
+  },
   header: {
     display: "flex",
     alignItems: "center",
@@ -606,11 +685,27 @@ const styles = {
     boxShadow: "0 4px 18px rgba(0,0,0,0.06)",
     marginBottom: 20,
   },
-  headerLogo: { height: 54, objectFit: "contain" },
-  title: { margin: 0, fontSize: 28 },
-  subtitle: { margin: 0, color: "#666" },
-  label: { fontWeight: "bold", marginTop: 8 },
-  select: { padding: 10, borderRadius: 8, border: "1px solid #ccc" },
+  headerLogo: {
+    height: 54,
+    objectFit: "contain",
+  },
+  title: {
+    margin: 0,
+    fontSize: 28,
+  },
+  subtitle: {
+    margin: 0,
+    color: "#666",
+  },
+  label: {
+    fontWeight: "bold",
+    marginTop: 8,
+  },
+  select: {
+    padding: 10,
+    borderRadius: 8,
+    border: "1px solid #ccc",
+  },
   primaryButton: {
     marginTop: 10,
     padding: 12,
@@ -640,9 +735,17 @@ const styles = {
     padding: 20,
     boxShadow: "0 4px 18px rgba(0,0,0,0.06)",
   },
-  cardTitle: { marginTop: 0 },
-  fileInput: { display: "block", margin: "8px 0 16px" },
-  message: { color: "#555", fontSize: 14 },
+  cardTitle: {
+    marginTop: 0,
+  },
+  fileInput: {
+    display: "block",
+    margin: "8px 0 16px",
+  },
+  message: {
+    color: "#555",
+    fontSize: 14,
+  },
   infoBox: {
     marginTop: 12,
     padding: 12,
@@ -674,9 +777,17 @@ const styles = {
     background: "#fff",
     cursor: "pointer",
   },
-  productItemActive: { background: "#eee", fontWeight: "bold" },
-  productTitle: { marginTop: 0, fontSize: 24 },
-  sectionTitle: { marginTop: 22 },
+  productItemActive: {
+    background: "#eee",
+    fontWeight: "bold",
+  },
+  productTitle: {
+    marginTop: 0,
+    fontSize: 24,
+  },
+  sectionTitle: {
+    marginTop: 22,
+  },
   venueGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
@@ -706,7 +817,11 @@ const styles = {
     borderRadius: 999,
     padding: "4px 8px",
   },
-  shipGrid: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 },
+  shipGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, 1fr)",
+    gap: 8,
+  },
   shipBox: {
     padding: 10,
     borderRadius: 10,
@@ -716,21 +831,32 @@ const styles = {
     gap: 4,
     textAlign: "center",
   },
-  shipBoxActive: { background: "#111", color: "#fff" },
+  shipBoxActive: {
+    background: "#111",
+    color: "#fff",
+  },
   shipBoxMissing: {
     background: "#b00020",
     color: "#fff",
     borderColor: "#b00020",
   },
-  shipName: { fontSize: 12, opacity: 0.8 },
+  shipName: {
+    fontSize: 12,
+    opacity: 0.8,
+  },
   warningSmall: {
     marginTop: 10,
     color: "#b00020",
     fontSize: 13,
     fontWeight: "bold",
   },
-  emptyText: { color: "#777" },
-  recipeList: { display: "grid", gap: 10 },
+  emptyText: {
+    color: "#777",
+  },
+  recipeList: {
+    display: "grid",
+    gap: 10,
+  },
   recipeCard: {
     width: "100%",
     textAlign: "left",
@@ -740,9 +866,18 @@ const styles = {
     background: "#fafafa",
     cursor: "pointer",
   },
-  recipeCardActive: { background: "#eee", borderColor: "#111" },
-  recipeName: { fontWeight: "bold" },
-  recipeMeta: { color: "#555", fontSize: 14, marginTop: 4 },
+  recipeCardActive: {
+    background: "#eee",
+    borderColor: "#111",
+  },
+  recipeName: {
+    fontWeight: "bold",
+  },
+  recipeMeta: {
+    color: "#555",
+    fontSize: 14,
+    marginTop: 4,
+  },
   ingredientsCard: {
     marginTop: 18,
     border: "1px solid #ddd",
@@ -766,7 +901,10 @@ const styles = {
     padding: 10,
     borderRadius: 8,
   },
-  allergenList: { display: "grid", gap: 10 },
+  allergenList: {
+    display: "grid",
+    gap: 10,
+  },
   allergenCard: {
     border: "1px solid #e1c16e",
     background: "#fff9e8",
