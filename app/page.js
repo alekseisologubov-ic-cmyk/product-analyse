@@ -42,12 +42,13 @@ export default function App() {
         ...new Set(
           rows
             .slice(1)
-            .map((r) => String(r[6] || "").trim()) // G = product
+            .map((r) => String(r[6] || "").trim()) // G = product in consumption file
             .filter(Boolean)
         ),
       ].sort();
 
       setProducts(productList);
+      setSelectedProduct("");
     });
   };
 
@@ -57,16 +58,26 @@ export default function App() {
     readExcel(file, setRecipeRows);
   };
 
-  const consumptionData = useMemo(() => consumptionRows.slice(1), [consumptionRows]);
+  const consumptionData = useMemo(
+    () => consumptionRows.slice(1),
+    [consumptionRows]
+  );
+
   const recipeData = useMemo(() => recipeRows.slice(1), [recipeRows]);
 
   const getConsumptionBreakdown = (product) => {
     let currentVenue = "";
     const result = {};
-    const shipColumns = { BRL: 8, RL: 11, V1: 14, VL: 17 };
+
+    const shipColumns = {
+      BRL: 8, // I
+      RL: 11, // L
+      V1: 14, // O
+      VL: 17, // R
+    };
 
     consumptionData.forEach((row) => {
-      if (row[2]) currentVenue = String(row[2]).trim();
+      if (row[2]) currentVenue = String(row[2]).trim(); // C = venue
 
       const venue = currentVenue || "Unknown";
       const productName = String(row[6] || "").trim(); // G = product
@@ -89,25 +100,27 @@ export default function App() {
 
   const getRecipesUsingProduct = (product) => {
     const recipes = {};
-    const cleanProduct = cleanText(product);
+    const selectedCleanProduct = cleanText(product);
 
     recipeData.forEach((row) => {
-      const productName = cleanText(row[7]); // H = product name
-      const recipeCode = String(row[15] || "").trim(); // P = recipe code
-      const recipeName = String(row[16] || "").trim(); // Q = recipe name
-      const venue = String(row[1] || "").trim(); // B = venue
+      // IMPORTANT:
+      // Recipe file:
+      // M = Assigned full product name
+      // P = RecipeCode
+      // Q = RecipeName
+      // B = Venue / Location
+      const assignedProduct = cleanText(row[12]); // M = Assigned full product name
+      const recipeCode = String(row[15] || "").trim(); // P
+      const recipeName = String(row[16] || "").trim(); // Q
+      const venue = String(row[1] || "").trim(); // B
 
-      // skip bad/wrong rows
+      if (!assignedProduct) return;
       if (!recipeCode && !recipeName) return;
       if (recipeName && !isNaN(Number(recipeName))) return;
 
-      if (
-        productName !== cleanProduct &&
-        !productName.includes(cleanProduct) &&
-        !cleanProduct.includes(productName)
-      ) {
-        return;
-      }
+      // Exact clean match only.
+      // This prevents beef matching wrong recipes.
+      if (assignedProduct !== selectedCleanProduct) return;
 
       const key = `${recipeCode || "N/A"} - ${recipeName || "Unnamed Recipe"}`;
 
@@ -150,7 +163,10 @@ export default function App() {
             ))}
           </select>
 
-          <button style={styles.primaryButton} onClick={() => userShip && setLoggedIn(true)}>
+          <button
+            style={styles.primaryButton}
+            onClick={() => userShip && setLoggedIn(true)}
+          >
             Enter Dashboard
           </button>
         </section>
@@ -158,8 +174,14 @@ export default function App() {
     );
   }
 
-  const breakdown = selectedProduct ? getConsumptionBreakdown(selectedProduct) : {};
-  const recipesForProduct = selectedProduct ? getRecipesUsingProduct(selectedProduct) : [];
+  const breakdown = selectedProduct
+    ? getConsumptionBreakdown(selectedProduct)
+    : {};
+
+  const recipesForProduct = selectedProduct
+    ? getRecipesUsingProduct(selectedProduct)
+    : [];
+
   const filteredProducts = products.filter((p) =>
     p.toLowerCase().includes(search.toLowerCase())
   );
@@ -180,14 +202,29 @@ export default function App() {
           <h2 style={styles.cardTitle}>📤 Upload Files</h2>
 
           <label style={styles.label}>Step 1: Consumption file</label>
-          <input type="file" onChange={uploadConsumptionFile} style={styles.fileInput} />
+          <input
+            type="file"
+            accept=".xlsx,.xls,.xlsm"
+            onChange={uploadConsumptionFile}
+            style={styles.fileInput}
+          />
 
           <label style={styles.label}>Step 2: Recipe file</label>
-          <input type="file" onChange={uploadRecipeFile} style={styles.fileInput} />
+          <input
+            type="file"
+            accept=".xlsx,.xls,.xlsm"
+            onChange={uploadRecipeFile}
+            style={styles.fileInput}
+          />
 
           <div style={styles.infoBox}>
-            <div>📦 Products loaded: <strong>{products.length}</strong></div>
-            <div>📘 Recipe rows loaded: <strong>{Math.max(recipeRows.length - 1, 0)}</strong></div>
+            <div>
+              📦 Products loaded: <strong>{products.length}</strong>
+            </div>
+            <div>
+              📘 Recipe rows loaded:{" "}
+              <strong>{Math.max(recipeRows.length - 1, 0)}</strong>
+            </div>
           </div>
         </div>
 
@@ -208,7 +245,9 @@ export default function App() {
                 onClick={() => setSelectedProduct(product)}
                 style={{
                   ...styles.productItem,
-                  ...(selectedProduct === product ? styles.productItemActive : {}),
+                  ...(selectedProduct === product
+                    ? styles.productItemActive
+                    : {}),
                 }}
               >
                 {product}
@@ -250,11 +289,15 @@ export default function App() {
           <h3 style={styles.sectionTitle}>👨‍🍳 Recipes using this product</h3>
 
           {recipeRows.length === 0 && (
-            <p style={styles.emptyText}>Upload the recipe file to see recipe details.</p>
+            <p style={styles.emptyText}>
+              Upload the recipe file to see recipe details.
+            </p>
           )}
 
           {recipeRows.length > 0 && recipesForProduct.length === 0 && (
-            <p style={styles.emptyText}>No recipes found for this product.</p>
+            <p style={styles.emptyText}>
+              No recipes found for this product.
+            </p>
           )}
 
           <div style={styles.recipeList}>
@@ -263,7 +306,8 @@ export default function App() {
                 <div style={styles.recipeName}>{recipe.recipeName}</div>
                 <div style={styles.recipeMeta}>Code: {recipe.recipeCode}</div>
                 <div style={styles.recipeMeta}>
-                  Venues: {recipe.venues.length ? recipe.venues.join(", ") : "N/A"}
+                  Venues:{" "}
+                  {recipe.venues.length ? recipe.venues.join(", ") : "N/A"}
                 </div>
               </div>
             ))}
@@ -292,12 +336,32 @@ const styles = {
     display: "grid",
     gap: 14,
   },
-  logo: { height: 70, objectFit: "contain", marginBottom: 8 },
-  headerLogo: { height: 54, objectFit: "contain" },
-  title: { margin: 0, fontSize: 28 },
-  subtitle: { margin: 0, color: "#666" },
-  label: { fontWeight: "bold", marginTop: 8 },
-  select: { padding: 10, borderRadius: 8, border: "1px solid #ccc" },
+  logo: {
+    height: 70,
+    objectFit: "contain",
+    marginBottom: 8,
+  },
+  headerLogo: {
+    height: 54,
+    objectFit: "contain",
+  },
+  title: {
+    margin: 0,
+    fontSize: 28,
+  },
+  subtitle: {
+    margin: 0,
+    color: "#666",
+  },
+  label: {
+    fontWeight: "bold",
+    marginTop: 8,
+  },
+  select: {
+    padding: 10,
+    borderRadius: 8,
+    border: "1px solid #ccc",
+  },
   primaryButton: {
     marginTop: 10,
     padding: 12,
@@ -318,8 +382,14 @@ const styles = {
     boxShadow: "0 4px 18px rgba(0,0,0,0.06)",
     marginBottom: 20,
   },
-  headerTitle: { margin: 0, fontSize: 26 },
-  headerSubtitle: { margin: 0, color: "#666" },
+  headerTitle: {
+    margin: 0,
+    fontSize: 26,
+  },
+  headerSubtitle: {
+    margin: 0,
+    color: "#666",
+  },
   shipBadge: {
     marginLeft: "auto",
     padding: "10px 14px",
@@ -340,8 +410,13 @@ const styles = {
     padding: 20,
     boxShadow: "0 4px 18px rgba(0,0,0,0.06)",
   },
-  cardTitle: { marginTop: 0 },
-  fileInput: { display: "block", margin: "8px 0 16px" },
+  cardTitle: {
+    marginTop: 0,
+  },
+  fileInput: {
+    display: "block",
+    margin: "8px 0 16px",
+  },
   infoBox: {
     marginTop: 12,
     padding: 12,
@@ -373,9 +448,17 @@ const styles = {
     background: "#fff",
     cursor: "pointer",
   },
-  productItemActive: { background: "#eee", fontWeight: "bold" },
-  productTitle: { marginTop: 0, fontSize: 24 },
-  sectionTitle: { marginTop: 22 },
+  productItemActive: {
+    background: "#eee",
+    fontWeight: "bold",
+  },
+  productTitle: {
+    marginTop: 0,
+    fontSize: 24,
+  },
+  sectionTitle: {
+    marginTop: 22,
+  },
   venueGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
@@ -387,8 +470,14 @@ const styles = {
     padding: 14,
     background: "#fafafa",
   },
-  venueTitle: { marginTop: 0 },
-  shipGrid: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 },
+  venueTitle: {
+    marginTop: 0,
+  },
+  shipGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, 1fr)",
+    gap: 8,
+  },
   shipBox: {
     padding: 10,
     borderRadius: 10,
@@ -398,16 +487,33 @@ const styles = {
     gap: 4,
     textAlign: "center",
   },
-  shipBoxActive: { background: "#111", color: "#fff" },
-  shipName: { fontSize: 12, opacity: 0.8 },
-  emptyText: { color: "#777" },
-  recipeList: { display: "grid", gap: 10 },
+  shipBoxActive: {
+    background: "#111",
+    color: "#fff",
+  },
+  shipName: {
+    fontSize: 12,
+    opacity: 0.8,
+  },
+  emptyText: {
+    color: "#777",
+  },
+  recipeList: {
+    display: "grid",
+    gap: 10,
+  },
   recipeCard: {
     border: "1px solid #ddd",
     borderRadius: 12,
     padding: 12,
     background: "#fafafa",
   },
-  recipeName: { fontWeight: "bold" },
-  recipeMeta: { color: "#555", fontSize: 14, marginTop: 4 },
+  recipeName: {
+    fontWeight: "bold",
+  },
+  recipeMeta: {
+    color: "#555",
+    fontSize: 14,
+    marginTop: 4,
+  },
 };
