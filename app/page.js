@@ -5,6 +5,13 @@ import * as XLSX from "xlsx";
 
 const SHIPS = ["BRL", "RL", "V1", "VL"];
 
+// 🔥 NEW: cleaning function to match products between files
+const cleanText = (value) =>
+  String(value || "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
 export default function App() {
   const [consumptionRows, setConsumptionRows] = useState([]);
   const [recipeRows, setRecipeRows] = useState([]);
@@ -26,6 +33,7 @@ export default function App() {
     reader.readAsBinaryString(file);
   };
 
+  // 🔹 FILE 1 (consumption)
   const uploadConsumptionFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -37,7 +45,7 @@ export default function App() {
         ...new Set(
           rows
             .slice(1)
-            .map((r) => String(r[6] || "").trim()) // G = product
+            .map((r) => String(r[6] || "").trim()) // Column G
             .filter(Boolean)
         ),
       ].sort();
@@ -46,6 +54,7 @@ export default function App() {
     });
   };
 
+  // 🔹 FILE 2 (recipes)
   const uploadRecipeFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -59,22 +68,23 @@ export default function App() {
 
   const recipeData = useMemo(() => recipeRows.slice(1), [recipeRows]);
 
+  // 🔹 Consumption breakdown
   const getConsumptionBreakdown = (product) => {
     let currentVenue = "";
     const result = {};
 
     const shipColumns = {
-      BRL: 8,  // I
-      RL: 11,  // L
-      V1: 14,  // O
-      VL: 17,  // R
+      BRL: 8,
+      RL: 11,
+      V1: 14,
+      VL: 17,
     };
 
     consumptionData.forEach((row) => {
-      if (row[2]) currentVenue = String(row[2]).trim(); // C = venue
+      if (row[2]) currentVenue = String(row[2]).trim();
 
       const venue = currentVenue || "Unknown";
-      const productName = String(row[6] || "").trim(); // G = product
+      const productName = String(row[6] || "").trim();
 
       if (productName !== product) return;
 
@@ -92,16 +102,27 @@ export default function App() {
     return result;
   };
 
+  // 🔥 FIXED: recipes matching (this is what was missing)
   const getRecipesUsingProduct = (product) => {
     const recipes = {};
+    const cleanProduct = cleanText(product);
 
     recipeData.forEach((row) => {
-      const productName = String(row[7] || "").trim(); // H = product
-      if (productName !== product) return;
+      const rawProduct = row[7]; // Column H
+      const productName = cleanText(rawProduct);
 
-      const venue = String(row[1] || "").trim(); // B = venue
-      const recipeCode = String(row[15] || "").trim(); // P = recipe code
-      const recipeName = String(row[16] || "").trim(); // Q = recipe name
+      // smart match (handles different naming)
+      if (
+        productName !== cleanProduct &&
+        !productName.includes(cleanProduct) &&
+        !cleanProduct.includes(productName)
+      ) {
+        return;
+      }
+
+      const venue = String(row[1] || "").trim(); // Column B
+      const recipeCode = String(row[15] || "").trim(); // P
+      const recipeName = String(row[16] || "").trim(); // Q
 
       if (!recipeCode && !recipeName) return;
 
@@ -126,28 +147,6 @@ export default function App() {
     }));
   };
 
-  const getProductsInRecipe = (recipeKey) => {
-    const productsInRecipe = {};
-
-    recipeData.forEach((row) => {
-      const productName = String(row[7] || "").trim(); // H = product
-      const recipeCode = String(row[15] || "").trim(); // P
-      const recipeName = String(row[16] || "").trim(); // Q
-      const key = `${recipeCode} - ${recipeName}`;
-
-      if (key !== recipeKey) return;
-      if (!productName) return;
-
-      if (!productsInRecipe[productName]) {
-        productsInRecipe[productName] = 0;
-      }
-
-      productsInRecipe[productName] += 1;
-    });
-
-    return Object.keys(productsInRecipe).sort();
-  };
-
   if (!loggedIn) {
     return (
       <div style={{ padding: 20 }}>
@@ -160,10 +159,11 @@ export default function App() {
           ))}
         </select>
 
-        <br />
-        <br />
+        <br /><br />
 
-        <button onClick={() => userShip && setLoggedIn(true)}>Enter</button>
+        <button onClick={() => userShip && setLoggedIn(true)}>
+          Enter
+        </button>
       </div>
     );
   }
@@ -196,105 +196,57 @@ export default function App() {
         placeholder="Search product..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        style={{ width: 350, padding: 8 }}
       />
 
-      <div
-        style={{
-          maxHeight: 220,
-          overflowY: "scroll",
-          border: "1px solid #ccc",
-          marginTop: 10,
-        }}
-      >
+      <div style={{ maxHeight: 200, overflowY: "scroll", border: "1px solid #ccc" }}>
         {products
           .filter((p) => p.toLowerCase().includes(search.toLowerCase()))
-          .map((product, i) => (
+          .map((p, i) => (
             <div
               key={i}
               onClick={() => {
-                setSelectedProduct(product);
+                setSelectedProduct(p);
                 setSelectedRecipe("");
               }}
-              style={{
-                cursor: "pointer",
-                padding: 6,
-                background: selectedProduct === product ? "#ddd" : "white",
-              }}
+              style={{ cursor: "pointer", padding: 4 }}
             >
-              {product}
+              {p}
             </div>
           ))}
       </div>
 
       {selectedProduct && (
-        <div style={{ marginTop: 25 }}>
-          <h2>{selectedProduct}</h2>
+        <div style={{ marginTop: 20 }}>
+          <h3>{selectedProduct}</h3>
 
-          <h3>Consumption by Venue and Ship</h3>
+          <h4>Consumption by Venue and Ship</h4>
 
           {Object.entries(getConsumptionBreakdown(selectedProduct)).map(
             ([venue, ships], i) => (
-              <div key={i} style={{ borderBottom: "1px solid #ddd", padding: 10 }}>
+              <div key={i}>
                 <strong>{venue}</strong>
-
-                <div style={{ display: "flex", gap: 15 }}>
+                <div>
                   {SHIPS.map((ship) => (
-                    <div
-                      key={ship}
-                      style={{
-                        fontWeight: ship === userShip ? "bold" : "normal",
-                      }}
-                    >
+                    <span key={ship} style={{ marginRight: 10 }}>
                       {ship}: {ships[ship] || 0}
-                    </div>
+                    </span>
                   ))}
                 </div>
               </div>
             )
           )}
 
-          <h3>Recipes using this product</h3>
+          <h4>Recipes using this product</h4>
 
-          {recipeRows.length === 0 && (
-            <p>Please upload the recipe file to see recipes.</p>
-          )}
-
-          {recipesForProduct.length === 0 && recipeRows.length > 0 && (
+          {recipesForProduct.length === 0 && (
             <p>No recipes found for this product.</p>
           )}
 
           {recipesForProduct.map((recipe, i) => (
-            <div
-              key={i}
-              onClick={() => setSelectedRecipe(recipe.key)}
-              style={{
-                cursor: "pointer",
-                padding: 8,
-                borderBottom: "1px solid #ddd",
-                background: selectedRecipe === recipe.key ? "#eee" : "white",
-              }}
-            >
-              <strong>{recipe.recipeName}</strong>
-              <br />
-              Code: {recipe.recipeCode}
-              <br />
-              Venues: {recipe.venues.join(", ")}
+            <div key={i}>
+              {recipe.recipeName} ({recipe.recipeCode})
             </div>
           ))}
-        </div>
-      )}
-
-      {selectedRecipe && (
-        <div style={{ marginTop: 25 }}>
-          <h3>Products used in recipe</h3>
-          <h4>{selectedRecipe}</h4>
-
-          <ul>
-            {getProductsInRecipe(selectedRecipe).map((product, i) => (
-              <li key={i}>{product}</li>
-            ))}
-          </ul>
         </div>
       )}
     </div>
