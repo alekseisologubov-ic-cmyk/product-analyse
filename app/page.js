@@ -6,260 +6,717 @@ import * as XLSX from "xlsx";
 const SHIPS = ["BRL", "RL", "SC", "VL"];
 
 const ALLERGEN_RULES = [
-  { allergen: "Tree Nuts", keywords: ["almond","walnut","pecan","cashew","hazelnut","pistachio","macadamia"] },
+  { allergen: "Tree Nuts", keywords: ["almond", "walnut", "pecan", "cashew", "hazelnut", "pistachio", "macadamia"] },
   { allergen: "Peanuts", keywords: ["peanut"] },
-  { allergen: "Seeds", keywords: ["seed","seeds","sunflower seed","pumpkin seed","chia","flax","hemp seed"] },
-  { allergen: "Soy", keywords: ["soy","tofu","edamame","miso","tamari"] },
-  { allergen: "Gluten", keywords: ["wheat","flour","gluten","bread","pasta","semolina","barley","rye","panko"] },
-  { allergen: "Milk / Dairy", keywords: ["milk","cream","butter","cheese","yogurt","parmesan","mozzarella","ricotta","cream cheese"] },
-  { allergen: "Egg", keywords: ["egg","eggs","mayonnaise","aioli"], exclude: ["eggplant"] },
-  { allergen: "Fish", keywords: ["salmon","tuna","cod","anchovy","fish","sardine"] },
-
-  // ✅ FIXED SHELLFISH
+  { allergen: "Seeds", keywords: ["seed", "seeds", "sunflower seed", "pumpkin seed", "chia", "flax", "hemp seed"] },
+  { allergen: "Soy", keywords: ["soy", "tofu", "edamame", "miso", "tamari"] },
+  { allergen: "Gluten", keywords: ["wheat", "flour", "gluten", "bread", "pasta", "semolina", "barley", "rye", "panko"] },
+  { allergen: "Milk / Dairy", keywords: ["milk", "cream", "butter", "cheese", "yogurt", "parmesan", "mozzarella", "ricotta", "cream cheese"] },
+  { allergen: "Egg", keywords: ["egg", "eggs", "mayonnaise", "aioli"], exclude: ["eggplant"] },
+  { allergen: "Fish", keywords: ["salmon", "tuna", "cod", "anchovy", "fish", "sardine"] },
   {
     allergen: "Shellfish",
-    keywords: ["shrimp","crab","lobster","mussel","oyster","scallop"],
-    exclude: ["clam shell","clamshell","packed in","pk","tray","case"]
+    keywords: ["shrimp", "crab", "lobster", "mussel", "oyster", "scallop"],
+    exclude: ["clam shell", "clamshell", "packed in a clam shell"]
   },
-
-  { allergen: "Sesame", keywords: ["sesame","tahini"] },
+  { allergen: "Sesame", keywords: ["sesame", "tahini"] },
   { allergen: "Mustard", keywords: ["mustard"] }
 ];
 
-const cleanText = (v) =>
-  String(v || "").toUpperCase().replace(/\s+/g," ").trim();
+const cleanText = (value) =>
+  String(value || "").toUpperCase().replace(/\s+/g, " ").trim();
 
-const normalizeVenue = (v) =>
-  cleanText(v)
-    .replace(/\s*-\s*VV$/g,"")
-    .replace(/\s*VV$/g,"")
+const normalizeVenue = (value) =>
+  cleanText(value)
+    .replace(/\s*-\s*VV$/g, "")
+    .replace(/\s*VV$/g, "")
+    .replace(/\s+/g, " ")
     .trim();
 
 export default function App() {
-  const [consumptionRows,setConsumptionRows]=useState([]);
-  const [recipeRows,setRecipeRows]=useState([]);
-  const [products,setProducts]=useState([]);
-  const [selectedProduct,setSelectedProduct]=useState("");
-  const [selectedRecipe,setSelectedRecipe]=useState(null);
-  const [search,setSearch]=useState("");
-  const [userShip,setUserShip]=useState("");
-  const [loggedIn,setLoggedIn]=useState(false);
+  const [consumptionRows, setConsumptionRows] = useState([]);
+  const [recipeRows, setRecipeRows] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [selectedProduct, setSelectedProduct] = useState("");
+  const [selectedRecipe, setSelectedRecipe] = useState(null);
+  const [search, setSearch] = useState("");
+  const [userShip, setUserShip] = useState("");
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [message, setMessage] = useState("");
 
-  const shipColumns={BRL:8,RL:11,SC:14,VL:17};
+  const shipColumns = { BRL: 8, RL: 11, SC: 14, VL: 17 };
 
-  const readExcel=(file,cb)=>{
-    const r=new FileReader();
-    r.onload=(e)=>{
-      const wb=XLSX.read(e.target.result,{type:"binary"});
-      const ws=wb.Sheets[wb.SheetNames[0]];
-      cb(XLSX.utils.sheet_to_json(ws,{header:1}));
+  const buildProductList = (rows) =>
+    [...new Set(rows.slice(1).map((r) => String(r[6] || "").trim()).filter(Boolean))].sort();
+
+  const readExcel = (file, callback) => {
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const wb = XLSX.read(evt.target.result, { type: "binary" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+      callback(rows);
     };
-    r.readAsBinaryString(file);
+    reader.readAsBinaryString(file);
   };
 
-  const uploadConsumption=(e)=>{
-    const f=e.target.files?.[0];
-    if(!f)return;
-    readExcel(f,(rows)=>{
+  const uploadConsumptionFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    readExcel(file, (rows) => {
       setConsumptionRows(rows);
-      setProducts([...new Set(rows.slice(1).map(r=>r[6]).filter(Boolean))]);
+      setProducts(buildProductList(rows));
+      setSelectedProduct("");
+      setSelectedRecipe(null);
+      setMessage("Consumption file loaded.");
     });
   };
 
-  const uploadRecipe=(e)=>{
-    const f=e.target.files?.[0];
-    if(!f)return;
-    readExcel(f,setRecipeRows);
+  const uploadRecipeFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    readExcel(file, (rows) => {
+      setRecipeRows(rows);
+      setSelectedRecipe(null);
+      setMessage("Recipe / location file loaded.");
+    });
   };
 
-  const consumptionData=useMemo(()=>consumptionRows.slice(1),[consumptionRows]);
-  const recipeData=useMemo(()=>recipeRows.slice(1),[recipeRows]);
+  const consumptionData = useMemo(() => consumptionRows.slice(1), [consumptionRows]);
+  const recipeData = useMemo(() => recipeRows.slice(1), [recipeRows]);
 
-  const productMatches=(p,row)=>{
-    const sel=cleanText(p);
-    const a=cleanText(row[12]);
-    const n=cleanText(row[7]);
+  const productMatches = (selectedProductName, row) => {
+    const selected = cleanText(selectedProductName);
+    const assignedProduct = cleanText(row[12]);
+    const productName = cleanText(row[7]);
 
-    if(a===sel||n===sel)return true;
-    if(a.length>12&&(sel.includes(a)||a.includes(sel)))return true;
-    if(n.length>12&&(sel.includes(n)||n.includes(sel)))return true;
+    if (!selected) return false;
+    if (assignedProduct === selected || productName === selected) return true;
+
+    if (assignedProduct.length > 12 && (selected.includes(assignedProduct) || assignedProduct.includes(selected))) return true;
+    if (productName.length > 12 && (selected.includes(productName) || productName.includes(selected))) return true;
+
     return false;
   };
 
-  const getConsumption=(p)=>{
-    let v="";
-    const res={};
-    consumptionData.forEach(r=>{
-      if(r[2])v=r[2];
-      const key=normalizeVenue(v);
-      if(r[6]!==p)return;
-      if(!res[key])res[key]={display:v,ships:{}};
-      SHIPS.forEach(s=>{
-        res[key].ships[s]=(res[key].ships[s]||0)+(Number(r[shipColumns[s]])||0);
+  const getRequiredVenuesForProduct = (product) => {
+    const required = {};
+
+    recipeData.forEach((row) => {
+      if (!productMatches(product, row)) return;
+
+      const venueRaw = String(row[1] || "").trim();
+      const venueKey = normalizeVenue(venueRaw);
+      if (!venueKey) return;
+
+      if (!required[venueKey]) {
+        required[venueKey] = {
+          displayName: venueRaw || venueKey,
+          recipes: new Set(),
+        };
+      }
+
+      const recipeCode = String(row[15] || "").trim();
+      const recipeName = String(row[16] || "").trim();
+
+      if (recipeCode || recipeName) {
+        required[venueKey].recipes.add(`${recipeCode || "N/A"} - ${recipeName || "Unnamed Recipe"}`);
+      }
+    });
+
+    return required;
+  };
+
+  const getConsumptionBreakdown = (product) => {
+    let currentVenue = "";
+    const result = {};
+
+    consumptionData.forEach((row) => {
+      if (row[2]) currentVenue = String(row[2]).trim();
+
+      const venue = currentVenue || "Unknown";
+      const venueKey = normalizeVenue(venue);
+      const productName = String(row[6] || "").trim();
+
+      if (productName !== product) return;
+
+      if (!result[venueKey]) {
+        result[venueKey] = {
+          displayName: venue,
+          ships: {},
+        };
+      }
+
+      SHIPS.forEach((ship) => {
+        const qty = Number(row[shipColumns[ship]]) || 0;
+        result[venueKey].ships[ship] = (result[venueKey].ships[ship] || 0) + qty;
       });
     });
-    return res;
+
+    return result;
   };
 
-  const getRequired=(p)=>{
-    const req={};
-    recipeData.forEach(r=>{
-      if(!productMatches(p,r))return;
-      const v=normalizeVenue(r[1]);
-      if(!req[v])req[v]={display:r[1]};
-    });
-    return req;
-  };
+  const getCombinedVenueBreakdown = (product) => {
+    const actual = getConsumptionBreakdown(product);
+    const required = getRequiredVenuesForProduct(product);
+    const allVenueKeys = Array.from(new Set([...Object.keys(actual), ...Object.keys(required)])).sort();
 
-  const combine=(p)=>{
-    const a=getConsumption(p);
-    const r=getRequired(p);
-    const keys=[...new Set([...Object.keys(a),...Object.keys(r)])];
+    return allVenueKeys.map((venueKey) => {
+      const actualVenue = actual[venueKey];
+      const requiredVenue = required[venueKey];
 
-    return keys.map(k=>{
-      const ships={};
-      SHIPS.forEach(s=>ships[s]=a[k]?.ships?.[s]||0);
+      const ships = {};
+      SHIPS.forEach((ship) => {
+        ships[ship] = actualVenue?.ships?.[ship] || 0;
+      });
 
       return {
-        name:a[k]?.display||r[k]?.display,
+        venueKey,
+        displayName: actualVenue?.displayName || requiredVenue?.displayName || venueKey,
         ships,
-        missing:SHIPS.filter(s=>r[k]&&(ships[s]===0))
+        required: Boolean(requiredVenue),
+        missingShips: SHIPS.filter((ship) => Boolean(requiredVenue) && (ships[ship] || 0) === 0),
+        requiredRecipes: requiredVenue ? [...requiredVenue.recipes] : [],
       };
     });
   };
 
-  const getRecipes=(p)=>{
-    const res={};
-    recipeData.forEach(r=>{
-      if(!productMatches(p,r))return;
-      const code=r[15]||"N/A";
-      const name=r[16]||"Unnamed";
-      res[code+name]={code,name};
-    });
-    return Object.values(res);
-  };
+  const getRecipesUsingProduct = (product) => {
+    const recipes = {};
 
-  const getIngredients=(rec)=>{
-    const items=[];
-    recipeData.forEach(r=>{
-      if(r[15]===rec.code&&r[16]===rec.name){
-        const p=r[12]||r[7];
-        if(p)items.push(p);
+    recipeData.forEach((row) => {
+      const recipeCode = String(row[15] || "").trim();
+      const recipeName = String(row[16] || "").trim();
+      const venue = String(row[1] || "").trim();
+
+      if (!recipeCode && !recipeName) return;
+      if (recipeName && !isNaN(Number(recipeName))) return;
+      if (!productMatches(product, row)) return;
+
+      const key = `${recipeCode || "N/A"} - ${recipeName || "Unnamed Recipe"}`;
+
+      if (!recipes[key]) {
+        recipes[key] = {
+          key,
+          recipeCode: recipeCode || "N/A",
+          recipeName: recipeName || "Unnamed Recipe",
+          venues: new Set(),
+        };
       }
+
+      if (venue) recipes[key].venues.add(venue);
     });
-    return [...new Set(items)];
+
+    return Object.values(recipes).map((recipe) => ({
+      ...recipe,
+      venues: [...recipe.venues],
+    }));
   };
 
-  const getSub=(name)=>{
-    const res=[];
-    recipeData.forEach(r=>{
-      if(cleanText(r[16])===cleanText(name)){
-        const p=r[12]||r[7];
-        if(p&&cleanText(p)!==cleanText(name))res.push(p);
-      }
+  const getProductsInRecipe = (recipe) => {
+    if (!recipe) return [];
+
+    const items = {};
+
+    recipeData.forEach((row) => {
+      const recipeCode = String(row[15] || "").trim();
+      const recipeName = String(row[16] || "").trim();
+
+      if (recipeCode !== recipe.recipeCode || recipeName !== recipe.recipeName) return;
+
+      const product = String(row[12] || row[7] || "").trim();
+      if (!product) return;
+
+      items[product] = true;
     });
-    return [...new Set(res)];
+
+    return Object.keys(items).sort();
   };
 
-  const detectAllergens=(items)=>{
-    const found={};
+  const getSubRecipeIngredients = (subRecipeName) => {
+    const items = {};
+    const cleanSubRecipe = cleanText(subRecipeName);
 
-    const check=(txt,label)=>{
-      const lower=txt.toLowerCase();
-      ALLERGEN_RULES.forEach(rule=>{
-        const excluded=rule.exclude?.some(e=>lower.includes(e));
-        const hit=!excluded && rule.keywords.find(k=>lower.includes(k));
-        if(hit){
-          if(!found[rule.allergen])found[rule.allergen]=new Set();
-          found[rule.allergen].add(label);
+    recipeData.forEach((row) => {
+      const recipeName = cleanText(row[16]);
+      const ingredient = String(row[12] || row[7] || "").trim();
+
+      if (!ingredient) return;
+      if (recipeName !== cleanSubRecipe) return;
+      if (cleanText(ingredient) === cleanSubRecipe) return;
+
+      items[ingredient] = true;
+    });
+
+    return Object.keys(items).sort();
+  };
+
+  const detectAllergens = (productsInRecipe) => {
+    const found = {};
+
+    const checkProductAgainstRules = (product, displayName) => {
+      const lowerProduct = String(product || "").toLowerCase();
+
+      ALLERGEN_RULES.forEach((rule) => {
+        const isExcluded = rule.exclude?.some((word) => lowerProduct.includes(word));
+        const matchedKeyword = !isExcluded && rule.keywords.find((keyword) => lowerProduct.includes(keyword));
+
+        if (matchedKeyword) {
+          if (!found[rule.allergen]) found[rule.allergen] = new Set();
+          found[rule.allergen].add(displayName);
         }
       });
     };
 
-    items.forEach(p=>{
-      check(p,p);
-      getSub(p).forEach(s=>check(s,p+" → "+s));
+    productsInRecipe.forEach((product) => {
+      checkProductAgainstRules(product, product);
+
+      const subIngredients = getSubRecipeIngredients(product);
+      subIngredients.forEach((subItem) => {
+        checkProductAgainstRules(subItem, `${product} → ${subItem}`);
+      });
     });
 
-    return Object.entries(found);
+    return Object.entries(found).map(([allergen, products]) => ({
+      allergen,
+      products: [...products].sort(),
+    }));
   };
 
-  if(!loggedIn){
+  if (!loggedIn) {
     return (
-      <div style={{padding:40}}>
-        <img src="/virgin-logo.png" style={{height:60}}/>
-        <select onChange={e=>setUserShip(e.target.value)}>
-          <option>Select ship</option>
-          {SHIPS.map(s=><option key={s}>{s}</option>)}
-        </select>
-        <button onClick={()=>setLoggedIn(true)}>Enter</button>
-      </div>
+      <main style={styles.page}>
+        <section style={styles.loginCard}>
+          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.logo} />
+
+          <h1 style={styles.title}>Product Consumption Dashboard</h1>
+          <p style={styles.subtitle}>Ship, venue & recipe usage analysis</p>
+
+          <label style={styles.label}>🚢 Select your ship</label>
+          <select value={userShip} onChange={(e) => setUserShip(e.target.value)} style={styles.select}>
+            <option value="">Choose ship</option>
+            {SHIPS.map((ship) => (
+              <option key={ship}>{ship}</option>
+            ))}
+          </select>
+
+          <button style={styles.primaryButton} onClick={() => userShip && setLoggedIn(true)}>
+            Enter Dashboard
+          </button>
+        </section>
+      </main>
     );
   }
 
-  const venues=selectedProduct?combine(selectedProduct):[];
-  const recipes=selectedProduct?getRecipes(selectedProduct):[];
-  const ingredients=selectedRecipe?getIngredients(selectedRecipe):[];
-  const allergens=selectedRecipe?detectAllergens(ingredients):[];
+  const combinedBreakdown = selectedProduct ? getCombinedVenueBreakdown(selectedProduct) : [];
+  const recipesForProduct = selectedProduct ? getRecipesUsingProduct(selectedProduct) : [];
+  const productsInRecipe = selectedRecipe ? getProductsInRecipe(selectedRecipe) : [];
+  const allergenWarnings = selectedRecipe ? detectAllergens(productsInRecipe) : [];
+  const filteredProducts = products.filter((p) => p.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div style={{padding:20}}>
-      <img src="/virgin-logo.png" style={{height:50}}/>
+    <main style={styles.page}>
+      <header style={styles.header}>
+        <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
+        <div style={styles.shipBadge}>🚢 {userShip}</div>
+      </header>
 
-      <input type="file" onChange={uploadConsumption}/>
-      <input type="file" onChange={uploadRecipe}/>
+      <section style={styles.grid}>
+        <div style={styles.card}>
+          <h2 style={styles.cardTitle}>📤 Upload Files</h2>
 
-      <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search"/>
+          <label style={styles.label}>Step 1: Consumption file</label>
+          <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadConsumptionFile} style={styles.fileInput} />
 
-      {products.filter(p=>p.toLowerCase().includes(search.toLowerCase()))
-        .map(p=><div key={p} onClick={()=>setSelectedProduct(p)}>{p}</div>)}
+          <label style={styles.label}>Step 2: Recipe / location file</label>
+          <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadRecipeFile} style={styles.fileInput} />
+
+          {message && <p style={styles.message}>{message}</p>}
+
+          <div style={styles.infoBox}>
+            <div>📦 Products loaded: <strong>{products.length}</strong></div>
+            <div>📘 Recipe rows loaded: <strong>{Math.max(recipeRows.length - 1, 0)}</strong></div>
+            <div style={{ color: "#b00020" }}>
+              Red = recipe/location file expects usage, but consumption is 0 for that ship.
+            </div>
+          </div>
+        </div>
+
+        <div style={styles.card}>
+          <h2 style={styles.cardTitle}>🔍 Select Product</h2>
+
+          <input
+            placeholder="Search product..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={styles.searchInput}
+          />
+
+          <div style={styles.productList}>
+            {filteredProducts.map((product, i) => (
+              <button
+                key={i}
+                onClick={() => {
+                  setSelectedProduct(product);
+                  setSelectedRecipe(null);
+                }}
+                style={{
+                  ...styles.productItem,
+                  ...(selectedProduct === product ? styles.productItemActive : {}),
+                }}
+              >
+                {product}
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {selectedProduct && (
-        <>
-          <h2>{selectedProduct}</h2>
+        <section style={styles.card}>
+          <h2 style={styles.productTitle}>📦 {selectedProduct}</h2>
 
-          {venues.map((v,i)=>(
-            <div key={i}>
-              <b>{v.name}</b>
-              {SHIPS.map(s=>(
-                <span key={s}
-                  style={{color:v.missing.includes(s)?"red":"black",margin:5}}>
-                  {s}:{v.ships[s]}
-                </span>
-              ))}
-            </div>
-          ))}
+          <h3 style={styles.sectionTitle}>🏢 Consumption by Venue and Ship</h3>
 
-          <h3>Recipes</h3>
-          {recipes.map(r=>(
-            <div key={r.code} onClick={()=>setSelectedRecipe(r)}>
-              {r.name}
-            </div>
-          ))}
+          <div style={styles.venueGrid}>
+            {combinedBreakdown.map((venueItem, i) => (
+              <div
+                key={i}
+                style={{
+                  ...styles.venueCard,
+                  ...(venueItem.missingShips.length > 0 ? styles.venueCardWarning : {}),
+                }}
+              >
+                <h4 style={styles.venueTitle}>
+                  {venueItem.displayName}
+                  {venueItem.missingShips.length > 0 && (
+                    <span style={styles.missingBadge}>
+                      Missing: {venueItem.missingShips.join(", ")}
+                    </span>
+                  )}
+                </h4>
+
+                <div style={styles.shipGrid}>
+                  {SHIPS.map((ship) => {
+                    const isMissing = venueItem.required && (venueItem.ships[ship] || 0) === 0;
+
+                    return (
+                      <div
+                        key={ship}
+                        style={{
+                          ...styles.shipBox,
+                          ...(ship === userShip ? styles.shipBoxActive : {}),
+                          ...(isMissing ? styles.shipBoxMissing : {}),
+                        }}
+                      >
+                        <span style={styles.shipName}>{ship}</span>
+                        <strong>{venueItem.ships[ship] || 0}</strong>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {venueItem.missingShips.length > 0 && (
+                  <div style={styles.warningSmall}>
+                    Product appears in recipe/location file for this venue, but usage is 0 for highlighted ship(s).
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <h3 style={styles.sectionTitle}>👨‍🍳 Recipes using this product</h3>
+
+          {recipeRows.length === 0 && (
+            <p style={styles.emptyText}>Upload the recipe/location file to see recipe details.</p>
+          )}
+
+          {recipeRows.length > 0 && recipesForProduct.length === 0 && (
+            <p style={styles.emptyText}>No recipes found for this product.</p>
+          )}
+
+          <div style={styles.recipeList}>
+            {recipesForProduct.map((recipe, i) => (
+              <button
+                key={i}
+                onClick={() => setSelectedRecipe(recipe)}
+                style={{
+                  ...styles.recipeCard,
+                  ...(selectedRecipe?.key === recipe.key ? styles.recipeCardActive : {}),
+                }}
+              >
+                <div style={styles.recipeName}>{recipe.recipeName}</div>
+                <div style={styles.recipeMeta}>Code: {recipe.recipeCode}</div>
+                <div style={styles.recipeMeta}>
+                  Venues: {recipe.venues.length ? recipe.venues.join(", ") : "N/A"}
+                </div>
+              </button>
+            ))}
+          </div>
 
           {selectedRecipe && (
-            <>
-              <h3>Ingredients</h3>
-              {ingredients.map(i=>(
-                <div key={i}>
-                  {i}
-                  {getSub(i).map(s=>(
-                    <div key={s} style={{marginLeft:20}}>{s}</div>
+            <div style={styles.ingredientsCard}>
+              <h3 style={styles.sectionTitle}>🧾 Products used in recipe</h3>
+              <h4 style={{ marginTop: 0 }}>
+                {selectedRecipe.recipeName} ({selectedRecipe.recipeCode})
+              </h4>
+
+              {productsInRecipe.length === 0 ? (
+                <p style={styles.emptyText}>No products found for this recipe.</p>
+              ) : (
+                <ul>
+                  {productsInRecipe.map((product, i) => {
+                    const subIngredients = getSubRecipeIngredients(product);
+
+                    return (
+                      <li key={i} style={{ marginBottom: 10 }}>
+                        <strong>{product}</strong>
+
+                        {subIngredients.length > 0 && (
+                          <ul style={styles.subRecipeList}>
+                            {subIngredients.map((subItem, j) => (
+                              <li key={j}>{subItem}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              <h3 style={styles.sectionTitle}>⚠️ Rule-Based Allergen Warning</h3>
+              <p style={styles.warningText}>
+                This is a keyword-based warning only. Verify against official allergen data before use.
+              </p>
+
+              {allergenWarnings.length === 0 ? (
+                <p style={styles.emptyText}>No likely allergens detected by keyword rules.</p>
+              ) : (
+                <div style={styles.allergenList}>
+                  {allergenWarnings.map((item, i) => (
+                    <div key={i} style={styles.allergenCard}>
+                      <strong>{item.allergen}</strong>
+                      <ul>
+                        {item.products.map((product, j) => (
+                          <li key={j}>{product}</li>
+                        ))}
+                      </ul>
+                    </div>
                   ))}
                 </div>
-              ))}
-
-              <h3>Allergens</h3>
-              {allergens.map(([a,items])=>(
-                <div key={a}>
-                  <b>{a}</b>
-                  <ul>{[...items].map(i=><li key={i}>{i}</li>)}</ul>
-                </div>
-              ))}
-            </>
+              )}
+            </div>
           )}
-        </>
+        </section>
       )}
-    </div>
+    </main>
   );
 }
+
+const styles = {
+  page: {
+    minHeight: "100vh",
+    padding: 24,
+    background: "#f5f5f5",
+    fontFamily: "Arial, sans-serif",
+    color: "#111",
+  },
+  loginCard: {
+    maxWidth: 460,
+    margin: "80px auto",
+    padding: 28,
+    background: "#fff",
+    borderRadius: 16,
+    boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+    display: "grid",
+    gap: 14,
+  },
+  logo: { height: 70, objectFit: "contain", marginBottom: 8 },
+  header: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 18,
+    background: "#fff",
+    borderRadius: 16,
+    boxShadow: "0 4px 18px rgba(0,0,0,0.06)",
+    marginBottom: 20,
+  },
+  headerLogo: { height: 54, objectFit: "contain" },
+  title: { margin: 0, fontSize: 28 },
+  subtitle: { margin: 0, color: "#666" },
+  label: { fontWeight: "bold", marginTop: 8 },
+  select: { padding: 10, borderRadius: 8, border: "1px solid #ccc" },
+  primaryButton: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 10,
+    border: 0,
+    background: "#111",
+    color: "#fff",
+    fontWeight: "bold",
+    cursor: "pointer",
+  },
+  shipBadge: {
+    padding: "10px 14px",
+    borderRadius: 999,
+    background: "#111",
+    color: "#fff",
+    fontWeight: "bold",
+  },
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1.4fr",
+    gap: 20,
+    marginBottom: 20,
+  },
+  card: {
+    background: "#fff",
+    borderRadius: 16,
+    padding: 20,
+    boxShadow: "0 4px 18px rgba(0,0,0,0.06)",
+  },
+  cardTitle: { marginTop: 0 },
+  fileInput: { display: "block", margin: "8px 0 16px" },
+  message: { color: "#555", fontSize: 14 },
+  infoBox: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    background: "#f2f2f2",
+    display: "grid",
+    gap: 6,
+  },
+  searchInput: {
+    width: "100%",
+    padding: 12,
+    borderRadius: 10,
+    border: "1px solid #ccc",
+    marginBottom: 10,
+  },
+  productList: {
+    maxHeight: 300,
+    overflowY: "auto",
+    border: "1px solid #ddd",
+    borderRadius: 12,
+  },
+  productItem: {
+    width: "100%",
+    display: "block",
+    textAlign: "left",
+    padding: 10,
+    border: 0,
+    borderBottom: "1px solid #eee",
+    background: "#fff",
+    cursor: "pointer",
+  },
+  productItemActive: { background: "#eee", fontWeight: "bold" },
+  productTitle: { marginTop: 0, fontSize: 24 },
+  sectionTitle: { marginTop: 22 },
+  venueGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+    gap: 14,
+  },
+  venueCard: {
+    border: "1px solid #ddd",
+    borderRadius: 14,
+    padding: 14,
+    background: "#fafafa",
+  },
+  venueCardWarning: {
+    border: "2px solid #b00020",
+    background: "#fff0f0",
+  },
+  venueTitle: {
+    marginTop: 0,
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 10,
+    alignItems: "center",
+  },
+  missingBadge: {
+    fontSize: 12,
+    color: "#fff",
+    background: "#b00020",
+    borderRadius: 999,
+    padding: "4px 8px",
+  },
+  shipGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(4, 1fr)",
+    gap: 8,
+  },
+  shipBox: {
+    padding: 10,
+    borderRadius: 10,
+    background: "#fff",
+    border: "1px solid #ddd",
+    display: "grid",
+    gap: 4,
+    textAlign: "center",
+  },
+  shipBoxActive: { background: "#111", color: "#fff" },
+  shipBoxMissing: {
+    background: "#b00020",
+    color: "#fff",
+    borderColor: "#b00020",
+  },
+  shipName: { fontSize: 12, opacity: 0.8 },
+  warningSmall: {
+    marginTop: 10,
+    color: "#b00020",
+    fontSize: 13,
+    fontWeight: "bold",
+  },
+  emptyText: { color: "#777" },
+  recipeList: { display: "grid", gap: 10 },
+  recipeCard: {
+    width: "100%",
+    textAlign: "left",
+    border: "1px solid #ddd",
+    borderRadius: 12,
+    padding: 12,
+    background: "#fafafa",
+    cursor: "pointer",
+  },
+  recipeCardActive: { background: "#eee", borderColor: "#111" },
+  recipeName: { fontWeight: "bold" },
+  recipeMeta: { color: "#555", fontSize: 14, marginTop: 4 },
+  ingredientsCard: {
+    marginTop: 18,
+    border: "1px solid #ddd",
+    borderRadius: 14,
+    padding: 14,
+    background: "#fafafa",
+  },
+  subRecipeList: {
+    marginTop: 6,
+    marginBottom: 8,
+    paddingLeft: 24,
+    color: "#333",
+    background: "#f2f2f2",
+    borderRadius: 8,
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
+  warningText: {
+    color: "#8a5a00",
+    background: "#fff4d6",
+    padding: 10,
+    borderRadius: 8,
+  },
+  allergenList: {
+    display: "grid",
+    gap: 10,
+  },
+  allergenCard: {
+    border: "1px solid #e1c16e",
+    background: "#fff9e8",
+    borderRadius: 10,
+    padding: 10,
+  },
+};
