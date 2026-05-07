@@ -703,8 +703,7 @@ export default function App() {
                   >
                     {item.image ? (
                      {item.image ? (
-  <div>
-    {item.image ? (
+ {item.image ? (
   <div>
     <img
       src={item.image}
@@ -715,6 +714,7 @@ export default function App() {
         const link = e.currentTarget.nextElementSibling;
         if (link) link.style.display = "block";
       }}
+    />
 
     <a
       href={item.image}
