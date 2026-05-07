@@ -1445,4 +1445,3 @@ const styles = {
   textDecoration: "none",
   fontWeight: "bold",
   },
-};
