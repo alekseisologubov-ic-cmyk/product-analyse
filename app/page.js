@@ -704,6 +704,8 @@ export default function App() {
                     {item.image ? (
                      {item.image ? (
   <div>
+    {item.image ? (
+  <div>
     <img
       src={item.image}
       alt={item.name}
@@ -714,6 +716,19 @@ export default function App() {
         if (link) link.style.display = "block";
       }}
     />
+
+    <a
+      href={item.image}
+      target="_blank"
+      rel="noreferrer"
+      style={styles.imageLink}
+    >
+      Open Picture
+    </a>
+  </div>
+) : (
+  <div style={styles.equipmentNoImage}>No image</div>
+)}
 
     <a
       href={item.image}
