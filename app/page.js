@@ -1,28 +1,21 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 
 const SHIPS = ["BRL", "RL", "SC", "VL"];
+const TEMPLATE_PRODUCT_COLUMNS = [2, 6, 10, 14, 18, 22]; // C, G, K, O, S, W
 
 const ALLERGEN_RULES = [
   { allergen: "Tree Nuts", keywords: ["almond", "walnut", "pecan", "cashew", "hazelnut", "pistachio", "macadamia"] },
   { allergen: "Peanuts", keywords: ["peanut"] },
-  {
-  allergen: "Seeds",
-  keywords: ["seed", "seeds", "sunflower seed", "pumpkin seed", "chia", "flax", "hemp seed"],
-  exclude: ["seedless", "seedless cucumber"]
-},
+  { allergen: "Seeds", keywords: ["seed", "seeds", "sunflower seed", "pumpkin seed", "chia", "flax", "hemp seed"], exclude: ["seedless", "seedless cucumber"] },
   { allergen: "Soy", keywords: ["soy", "tofu", "edamame", "miso", "tamari"] },
   { allergen: "Gluten", keywords: ["wheat", "flour", "gluten", "bread", "pasta", "semolina", "barley", "rye", "panko"] },
   { allergen: "Milk / Dairy", keywords: ["milk", "cream", "butter", "cheese", "yogurt", "parmesan", "mozzarella", "ricotta", "cream cheese"] },
   { allergen: "Egg", keywords: ["egg", "eggs", "mayonnaise", "aioli"], exclude: ["eggplant"] },
   { allergen: "Fish", keywords: ["salmon", "tuna", "cod", "anchovy", "fish", "sardine"] },
-  {
-    allergen: "Shellfish",
-    keywords: ["shrimp", "crab", "lobster", "mussel", "oyster", "scallop"],
-    exclude: ["clam shell", "clamshell", "packed in a clam shell"]
-  },
+  { allergen: "Shellfish", keywords: ["shrimp", "crab", "lobster", "mussel", "oyster", "scallop"], exclude: ["clam shell", "clamshell", "packed in a clam shell"] },
   { allergen: "Sesame", keywords: ["sesame", "tahini"] },
   { allergen: "Mustard", keywords: ["mustard"] }
 ];
@@ -42,6 +35,8 @@ const formatQty = (value) => Number(value || 0).toFixed(2);
 export default function App() {
   const [consumptionRows, setConsumptionRows] = useState([]);
   const [recipeRows, setRecipeRows] = useState([]);
+  const [templateMap, setTemplateMap] = useState({});
+  const [templateStatus, setTemplateStatus] = useState("Loading template...");
   const [products, setProducts] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState("");
   const [selectedRecipe, setSelectedRecipe] = useState(null);
@@ -52,25 +47,97 @@ export default function App() {
 
   const shipColumns = { BRL: 8, RL: 11, SC: 14, VL: 17 };
 
+  useEffect(() => {
+    loadDefaultTemplate();
+  }, []);
+
   const buildProductList = (rows) =>
     [...new Set(rows.slice(1).map((r) => String(r[6] || "").trim()).filter(Boolean))].sort();
 
-  const readExcel = (file, callback) => {
+  const readExcelFile = (file, callback) => {
     const reader = new FileReader();
     reader.onload = (evt) => {
       const wb = XLSX.read(evt.target.result, { type: "binary" });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
-      callback(rows);
+      callback(wb);
     };
     reader.readAsBinaryString(file);
+  };
+
+  const workbookToRows = (workbook) => {
+    const ws = workbook.Sheets[workbook.SheetNames[0]];
+    return XLSX.utils.sheet_to_json(ws, { header: 1 });
+  };
+
+  const loadDefaultTemplate = async () => {
+    try {
+      const response = await fetch("/template.xlsx");
+      if (!response.ok) {
+        setTemplateStatus("Template file not found.");
+        return;
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: "array" });
+      setTemplateMap(parseTemplateWorkbook(workbook));
+      setTemplateStatus("Template loaded.");
+    } catch {
+      setTemplateStatus("Could not load template.");
+    }
+  };
+
+  const parseTemplateWorkbook = (workbook) => {
+    const map = {};
+
+    workbook.SheetNames.forEach((sheetName) => {
+      const venueKey = normalizeVenue(sheetName);
+      if (!venueKey) return;
+
+      if (!map[venueKey]) map[venueKey] = {};
+
+      const sheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      const firstRow = rows[0] || [];
+
+      TEMPLATE_PRODUCT_COLUMNS.forEach((colIndex) => {
+        const templateName =
+          String(firstRow[colIndex] || firstRow[0] || "Template").trim();
+
+        rows.slice(1).forEach((row) => {
+          const product = String(row[colIndex] || "").trim();
+          if (!product) return;
+
+          const productKey = cleanText(product);
+          if (!productKey) return;
+
+          if (!map[venueKey][productKey]) {
+            map[venueKey][productKey] = {
+              product,
+              templates: new Set(),
+            };
+          }
+
+          map[venueKey][productKey].templates.add(templateName);
+        });
+      });
+    });
+
+    Object.keys(map).forEach((venueKey) => {
+      Object.keys(map[venueKey]).forEach((productKey) => {
+        map[venueKey][productKey].templates = [
+          ...map[venueKey][productKey].templates,
+        ];
+      });
+    });
+
+    return map;
   };
 
   const uploadConsumptionFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    readExcel(file, (rows) => {
+    readExcelFile(file, (workbook) => {
+      const rows = workbookToRows(workbook);
       setConsumptionRows(rows);
       setProducts(buildProductList(rows));
       setSelectedProduct("");
@@ -83,10 +150,20 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    readExcel(file, (rows) => {
-      setRecipeRows(rows);
+    readExcelFile(file, (workbook) => {
+      setRecipeRows(workbookToRows(workbook));
       setSelectedRecipe(null);
       setMessage("Recipe / location file loaded.");
+    });
+  };
+
+  const uploadTemplateFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    readExcelFile(file, (workbook) => {
+      setTemplateMap(parseTemplateWorkbook(workbook));
+      setTemplateStatus("Custom template loaded.");
     });
   };
 
@@ -100,11 +177,40 @@ export default function App() {
 
     if (!selected) return false;
     if (assignedProduct === selected || productName === selected) return true;
-
     if (assignedProduct.length > 12 && (selected.includes(assignedProduct) || assignedProduct.includes(selected))) return true;
     if (productName.length > 12 && (selected.includes(productName) || productName.includes(selected))) return true;
 
     return false;
+  };
+
+  const templateHasProduct = (venueKey, product) => {
+    const selected = cleanText(product);
+    const venueTemplates = templateMap[venueKey] || {};
+
+    return Object.entries(venueTemplates).some(([templateProductKey]) => {
+      if (templateProductKey === selected) return true;
+      if (templateProductKey.length > 12 && (selected.includes(templateProductKey) || templateProductKey.includes(selected))) return true;
+      return false;
+    });
+  };
+
+  const getTemplateMatches = (venueKey, product) => {
+    const selected = cleanText(product);
+    const venueTemplates = templateMap[venueKey] || {};
+    const matches = [];
+
+    Object.entries(venueTemplates).forEach(([templateProductKey, data]) => {
+      const isMatch =
+        templateProductKey === selected ||
+        (templateProductKey.length > 12 &&
+          (selected.includes(templateProductKey) || templateProductKey.includes(selected)));
+
+      if (isMatch) {
+        matches.push(...data.templates);
+      }
+    });
+
+    return [...new Set(matches)];
   };
 
   const getRequiredVenuesForProduct = (product) => {
@@ -178,12 +284,19 @@ export default function App() {
         ships[ship] = actualVenue?.ships?.[ship] || 0;
       });
 
+      const templateMatches = getTemplateMatches(venueKey, product);
+      const requiredByRecipe = Boolean(requiredVenue);
+      const inTemplate = templateHasProduct(venueKey, product);
+      const missingFromTemplate = requiredByRecipe && !inTemplate;
+
       return {
         venueKey,
         displayName: actualVenue?.displayName || requiredVenue?.displayName || venueKey,
         ships,
-        required: Boolean(requiredVenue),
-        missingShips: SHIPS.filter((ship) => Boolean(requiredVenue) && (ships[ship] || 0) === 0),
+        required: requiredByRecipe,
+        missingShips: SHIPS.filter((ship) => requiredByRecipe && (ships[ship] || 0) === 0),
+        missingFromTemplate,
+        templateMatches,
       };
     });
   };
@@ -297,7 +410,7 @@ export default function App() {
           <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.logo} />
 
           <h1 style={styles.title}>Product Consumption Dashboard</h1>
-          <p style={styles.subtitle}>Ship, venue & recipe usage analysis</p>
+          <p style={styles.subtitle}>Ship, venue, recipe & template analysis</p>
 
           <label style={styles.label}>🚢 Select your ship</label>
           <select value={userShip} onChange={(e) => setUserShip(e.target.value)} style={styles.select}>
@@ -352,14 +465,17 @@ export default function App() {
           <label style={styles.label}>Step 2: Recipe / location file</label>
           <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadRecipeFile} style={styles.fileInput} />
 
+          <label style={styles.label}>Optional: Replace template file</label>
+          <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadTemplateFile} style={styles.fileInput} />
+
           {message && <p style={styles.message}>{message}</p>}
 
           <div style={styles.infoBox}>
             <div>📦 Products loaded: <strong>{products.length}</strong></div>
             <div>📘 Recipe rows loaded: <strong>{Math.max(recipeRows.length - 1, 0)}</strong></div>
-            <div style={{ color: "#b00020" }}>
-              Red = recipe/location file expects usage, but consumption is 0 for that ship.
-            </div>
+            <div>📋 Template: <strong>{templateStatus}</strong></div>
+            <div style={{ color: "#b00020" }}>Red = recipe/location expects usage, but consumption is 0 for that ship.</div>
+            <div style={{ color: "#0057b8" }}>Blue = product is in recipe/location, but missing from template for that venue.</div>
           </div>
         </div>
 
@@ -400,9 +516,7 @@ export default function App() {
           <h3 style={styles.sectionTitle}>📊 Total Consumption</h3>
 
           <div style={styles.totalBox}>
-            <div style={styles.totalMain}>
-              Total All Ships: {formatQty(totalConsumption.allShips)}
-            </div>
+            <div style={styles.totalMain}>Total All Ships: {formatQty(totalConsumption.allShips)}</div>
 
             <div style={styles.totalShipGrid}>
               {SHIPS.map((ship) => (
@@ -423,16 +537,34 @@ export default function App() {
                 style={{
                   ...styles.venueCard,
                   ...(venueItem.missingShips.length > 0 ? styles.venueCardWarning : {}),
+                  ...(venueItem.missingFromTemplate ? styles.venueCardTemplateWarning : {}),
                 }}
               >
                 <h4 style={styles.venueTitle}>
                   {venueItem.displayName}
-                  {venueItem.missingShips.length > 0 && (
-                    <span style={styles.missingBadge}>
-                      Missing: {venueItem.missingShips.join(", ")}
-                    </span>
-                  )}
+                  <span style={styles.badgeGroup}>
+                    {venueItem.missingFromTemplate && (
+                      <span style={styles.templateBadge}>Missing Template</span>
+                    )}
+                    {venueItem.missingShips.length > 0 && (
+                      <span style={styles.missingBadge}>
+                        Missing: {venueItem.missingShips.join(", ")}
+                      </span>
+                    )}
+                  </span>
                 </h4>
+
+                {venueItem.templateMatches.length > 0 && (
+                  <div style={styles.templateFound}>
+                    Template/Menu: {venueItem.templateMatches.join(", ")}
+                  </div>
+                )}
+
+                {venueItem.missingFromTemplate && (
+                  <div style={styles.templateWarningText}>
+                    Product is used in recipe/location file for this venue but is not found in any template. Product has to be used.
+                  </div>
+                )}
 
                 <div style={styles.shipGrid}>
                   {SHIPS.map((ship) => {
@@ -448,9 +580,7 @@ export default function App() {
                         }}
                       >
                         <span style={styles.shipName}>{ship}</span>
-                        <strong style={styles.shipQty}>
-  {formatQty(venueItem.ships[ship])}
-</strong>
+                        <strong style={styles.shipQty}>{formatQty(venueItem.ships[ship])}</strong>
                       </div>
                     );
                   })}
@@ -661,10 +791,7 @@ const styles = {
     padding: 16,
     marginBottom: 18,
   },
-  totalMain: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
+  totalMain: { fontSize: 20, fontWeight: "bold" },
   totalShipGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(4, 1fr)",
@@ -682,7 +809,7 @@ const styles = {
   },
   venueGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
     gap: 14,
   },
   venueCard: {
@@ -695,12 +822,22 @@ const styles = {
     border: "2px solid #b00020",
     background: "#fff0f0",
   },
+  venueCardTemplateWarning: {
+    border: "2px solid #0057b8",
+    background: "#eef5ff",
+  },
   venueTitle: {
     marginTop: 0,
     display: "flex",
     justifyContent: "space-between",
     gap: 10,
     alignItems: "center",
+  },
+  badgeGroup: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 6,
+    justifyContent: "flex-end",
   },
   missingBadge: {
     fontSize: 12,
@@ -709,33 +846,61 @@ const styles = {
     borderRadius: 999,
     padding: "4px 8px",
   },
+  templateBadge: {
+    fontSize: 12,
+    color: "#fff",
+    background: "#0057b8",
+    borderRadius: 999,
+    padding: "4px 8px",
+  },
+  templateFound: {
+    color: "#0057b8",
+    fontSize: 13,
+    fontWeight: "bold",
+    marginBottom: 10,
+  },
+  templateWarningText: {
+    color: "#0057b8",
+    fontSize: 13,
+    fontWeight: "bold",
+    marginBottom: 10,
+  },
   shipGrid: {
-  display: "grid",
-  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-  gap: 6,
-},
-shipBox: {
-  minWidth: 0,
-  padding: "8px 4px",
-  borderRadius: 10,
-  background: "#fff",
-  border: "1px solid #ddd",
-  display: "grid",
-  gap: 3,
-  textAlign: "center",
-  overflow: "hidden",
-},
-shipName: {
-  fontSize: 11,
-  opacity: 0.8,
-},
-shipQty: {
-  fontSize: 14,
-  lineHeight: 1.1,
-  whiteSpace: "nowrap",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-},
+    display: "grid",
+    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gap: 6,
+  },
+  shipBox: {
+    minWidth: 0,
+    padding: "8px 4px",
+    borderRadius: 10,
+    background: "#fff",
+    border: "1px solid #ddd",
+    display: "grid",
+    gap: 3,
+    textAlign: "center",
+    overflow: "hidden",
+  },
+  shipBoxActive: { background: "#111", color: "#fff" },
+  shipBoxMissing: {
+    background: "#b00020",
+    color: "#fff",
+    borderColor: "#b00020",
+  },
+  shipName: { fontSize: 11, opacity: 0.8 },
+  shipQty: {
+    fontSize: 14,
+    lineHeight: 1.1,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  warningSmall: {
+    marginTop: 10,
+    color: "#b00020",
+    fontSize: 13,
+    fontWeight: "bold",
+  },
   emptyText: { color: "#777" },
   recipeList: { display: "grid", gap: 10 },
   recipeCard: {
@@ -773,10 +938,7 @@ shipQty: {
     padding: 10,
     borderRadius: 8,
   },
-  allergenList: {
-    display: "grid",
-    gap: 10,
-  },
+  allergenList: { display: "grid", gap: 10 },
   allergenCard: {
     border: "1px solid #e1c16e",
     background: "#fff9e8",
