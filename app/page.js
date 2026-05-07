@@ -667,3 +667,24 @@ if (module === "equipment" && equipmentMode === "muster") {
     </div>
   );
 }
+
+const styles = {
+  page: {
+    padding: 20,
+    fontFamily: "Arial",
+  },
+  card: {
+    background: "#fff",
+    padding: 20,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  primaryButton: {
+    padding: "10px 14px",
+    borderRadius: 8,
+    background: "#111",
+    color: "#fff",
+    border: "none",
+    cursor: "pointer",
+  },
+};
