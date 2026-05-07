@@ -702,14 +702,31 @@ export default function App() {
                     onClick={() => setSelectedEquipment(item)}
                   >
                     {item.image ? (
-                      <img
-                        src={item.image}
-                        alt={item.name}
-                        style={styles.equipmentImage}
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
-                        }}
-                      />
+                     {item.image ? (
+  <div>
+    <img
+      src={item.image}
+      alt={item.name}
+      style={styles.equipmentImage}
+      onError={(e) => {
+        e.currentTarget.style.display = "none";
+        const link = e.currentTarget.nextElementSibling;
+        if (link) link.style.display = "block";
+      }}
+    />
+
+    <a
+      href={item.image}
+      target="_blank"
+      rel="noreferrer"
+      style={styles.imageLink}
+    >
+      Open Picture
+    </a>
+  </div>
+) : (
+  <div style={styles.equipmentNoImage}>No image</div>
+)}
                     ) : (
                       <div style={styles.equipmentNoImage}>No image</div>
                     )}
