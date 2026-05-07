@@ -8,21 +8,13 @@ const SHIPS = ["BRL", "RL", "SC", "VL"];
 const ALLERGEN_RULES = [
   { allergen: "Tree Nuts", keywords: ["almond", "walnut", "pecan", "cashew", "hazelnut", "pistachio", "macadamia"] },
   { allergen: "Peanuts", keywords: ["peanut"] },
-  {
-    allergen: "Seeds",
-    keywords: ["seed", "seeds", "sunflower seed", "pumpkin seed", "chia", "flax", "hemp seed"],
-    exclude: ["seedless", "seedless cucumber"]
-  },
+  { allergen: "Seeds", keywords: ["seed", "seeds", "sunflower seed", "pumpkin seed", "chia", "flax", "hemp seed"], exclude: ["seedless", "seedless cucumber"] },
   { allergen: "Soy", keywords: ["soy", "tofu", "edamame", "miso", "tamari"] },
   { allergen: "Gluten", keywords: ["wheat", "flour", "gluten", "bread", "pasta", "semolina", "barley", "rye", "panko"] },
   { allergen: "Milk / Dairy", keywords: ["milk", "cream", "butter", "cheese", "yogurt", "parmesan", "mozzarella", "ricotta", "cream cheese"] },
   { allergen: "Egg", keywords: ["egg", "eggs", "mayonnaise", "aioli"], exclude: ["eggplant"] },
   { allergen: "Fish", keywords: ["salmon", "tuna", "cod", "anchovy", "fish", "sardine"] },
-  {
-    allergen: "Shellfish",
-    keywords: ["shrimp", "crab", "lobster", "mussel", "oyster", "scallop"],
-    exclude: ["clam shell", "clamshell", "packed in a clam shell"]
-  },
+  { allergen: "Shellfish", keywords: ["shrimp", "crab", "lobster", "mussel", "oyster", "scallop"], exclude: ["clam shell", "clamshell", "packed in a clam shell"] },
   { allergen: "Sesame", keywords: ["sesame", "tahini"] },
   { allergen: "Mustard", keywords: ["mustard"] }
 ];
@@ -50,6 +42,11 @@ const normalizeVenue = (value) =>
 const formatQty = (value) => Number(value || 0).toFixed(2);
 
 export default function App() {
+  const [userShip, setUserShip] = useState("");
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [module, setModule] = useState("");
+  const [equipmentMode, setEquipmentMode] = useState("");
+
   const [consumptionRows, setConsumptionRows] = useState([]);
   const [recipeRows, setRecipeRows] = useState([]);
   const [templateMap, setTemplateMap] = useState({});
@@ -58,10 +55,11 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState("");
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [search, setSearch] = useState("");
-  const [userShip, setUserShip] = useState("");
-  const [loggedIn, setLoggedIn] = useState(false);
   const [message, setMessage] = useState("");
   const [viewMode, setViewMode] = useState("all");
+
+  const [musterRows, setMusterRows] = useState([]);
+  const [musterSearch, setMusterSearch] = useState("");
 
   const shipColumns = { BRL: 8, RL: 11, SC: 14, VL: 17 };
 
@@ -206,6 +204,16 @@ export default function App() {
     });
   };
 
+  const uploadMusterFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    readExcelFile(file, (workbook) => {
+      const rows = workbookToRows(workbook);
+      setMusterRows(rows);
+    });
+  };
+
   const consumptionData = useMemo(() => consumptionRows.slice(1), [consumptionRows]);
   const recipeData = useMemo(() => recipeRows.slice(1), [recipeRows]);
 
@@ -250,9 +258,7 @@ export default function App() {
     });
 
     return [...new Set(matches)];
-  };
-
-  const getRequiredVenuesForProduct = (product) => {
+  };  const getRequiredVenuesForProduct = (product) => {
     const required = {};
 
     recipeData.forEach((row) => {
@@ -267,13 +273,6 @@ export default function App() {
           displayName: venueRaw || venueKey,
           recipes: new Set(),
         };
-      }
-
-      const recipeCode = String(row[15] || "").trim();
-      const recipeName = String(row[16] || "").trim();
-
-      if (recipeCode || recipeName) {
-        required[venueKey].recipes.add(`${recipeCode || "N/A"} - ${recipeName || "Unnamed Recipe"}`);
       }
     });
 
@@ -302,7 +301,8 @@ export default function App() {
 
       SHIPS.forEach((ship) => {
         const qty = Number(row[shipColumns[ship]]) || 0;
-        result[venueKey].ships[ship] = (result[venueKey].ships[ship] || 0) + qty;
+        result[venueKey].ships[ship] =
+          (result[venueKey].ships[ship] || 0) + qty;
       });
     });
 
@@ -312,7 +312,10 @@ export default function App() {
   const getCombinedVenueBreakdown = (product) => {
     const actual = getConsumptionBreakdown(product);
     const required = getRequiredVenuesForProduct(product);
-    const allVenueKeys = Array.from(new Set([...Object.keys(actual), ...Object.keys(required)])).sort();
+
+    const allVenueKeys = Array.from(
+      new Set([...Object.keys(actual), ...Object.keys(required)])
+    ).sort();
 
     return allVenueKeys.map((venueKey) => {
       const actualVenue = actual[venueKey];
@@ -330,10 +333,15 @@ export default function App() {
 
       return {
         venueKey,
-        displayName: actualVenue?.displayName || requiredVenue?.displayName || venueKey,
+        displayName:
+          actualVenue?.displayName ||
+          requiredVenue?.displayName ||
+          venueKey,
         ships,
         required: requiredByRecipe,
-        missingShips: visibleShips.filter((ship) => requiredByRecipe && (ships[ship] || 0) === 0),
+        missingShips: visibleShips.filter(
+          (ship) => requiredByRecipe && (ships[ship] || 0) === 0
+        ),
         missingFromTemplate,
         templateMatches,
       };
@@ -346,132 +354,56 @@ export default function App() {
     recipeData.forEach((row) => {
       const recipeCode = String(row[15] || "").trim();
       const recipeName = String(row[16] || "").trim();
-      const venue = String(row[1] || "").trim();
 
-      if (!recipeCode && !recipeName) return;
-      if (recipeName && !isNaN(Number(recipeName))) return;
       if (!productMatches(product, row)) return;
 
-      const key = `${recipeCode || "N/A"} - ${recipeName || "Unnamed Recipe"}`;
+      const key = `${recipeCode || "N/A"} - ${
+        recipeName || "Unnamed Recipe"
+      }`;
 
       if (!recipes[key]) {
         recipes[key] = {
           key,
-          recipeCode: recipeCode || "N/A",
-          recipeName: recipeName || "Unnamed Recipe",
-          venues: new Set(),
+          recipeCode,
+          recipeName,
         };
       }
-
-      if (venue) recipes[key].venues.add(venue);
     });
 
-    return Object.values(recipes).map((recipe) => ({
-      ...recipe,
-      venues: [...recipe.venues],
-    }));
+    return Object.values(recipes);
   };
 
   const getProductsInRecipe = (recipe) => {
     if (!recipe) return [];
 
-    const items = {};
-
-    recipeData.forEach((row) => {
-      const recipeCode = String(row[15] || "").trim();
-      const recipeName = String(row[16] || "").trim();
-
-      if (recipeCode !== recipe.recipeCode || recipeName !== recipe.recipeName) return;
-
-      const product = String(row[12] || row[7] || "").trim();
-      if (!product) return;
-
-      items[product] = true;
-    });
-
-    return Object.keys(items).sort();
-  };
-
-  const getSubRecipeIngredients = (subRecipeName) => {
-    const items = {};
-    const cleanSubRecipe = cleanText(subRecipeName);
-
-    recipeData.forEach((row) => {
-      const recipeName = cleanText(row[16]);
-      const ingredient = String(row[12] || row[7] || "").trim();
-
-      if (!ingredient) return;
-      if (recipeName !== cleanSubRecipe) return;
-      if (cleanText(ingredient) === cleanSubRecipe) return;
-
-      items[ingredient] = true;
-    });
-
-    return Object.keys(items).sort();
+    return recipeData
+      .filter(
+        (r) =>
+          String(r[15]) === recipe.recipeCode &&
+          String(r[16]) === recipe.recipeName
+      )
+      .map((r) => String(r[12] || r[7]))
+      .filter(Boolean);
   };
 
   const detectAllergens = (productsInRecipe) => {
     const found = {};
 
-    const checkProductAgainstRules = (product, displayName) => {
-      const lowerProduct = String(product || "").toLowerCase();
+    productsInRecipe.forEach((product) => {
+      const lower = product.toLowerCase();
 
       ALLERGEN_RULES.forEach((rule) => {
-        const isExcluded = rule.exclude?.some((word) => lowerProduct.includes(word));
-        const matchedKeyword = !isExcluded && rule.keywords.find((keyword) => lowerProduct.includes(keyword));
+        if (rule.exclude?.some((e) => lower.includes(e))) return;
 
-        if (matchedKeyword) {
-          if (!found[rule.allergen]) found[rule.allergen] = new Set();
-          found[rule.allergen].add(displayName);
+        if (rule.keywords.some((k) => lower.includes(k))) {
+          if (!found[rule.allergen]) found[rule.allergen] = [];
+          found[rule.allergen].push(product);
         }
-      });
-    };
-
-    productsInRecipe.forEach((product) => {
-      checkProductAgainstRules(product, product);
-
-      const subIngredients = getSubRecipeIngredients(product);
-      subIngredients.forEach((subItem) => {
-        checkProductAgainstRules(subItem, `${product} → ${subItem}`);
       });
     });
 
-    return Object.entries(found).map(([allergen, products]) => ({
-      allergen,
-      products: [...products].sort(),
-    }));
+    return found;
   };
-
-  if (!loggedIn) {
-    return (
-      <main style={styles.page}>
-        <section style={styles.loginCard}>
-          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.logo} />
-
-          <h1 style={styles.title}>Product Consumption Dashboard</h1>
-          <p style={styles.subtitle}>Ship, venue, recipe & template analysis</p>
-
-          <label style={styles.label}>🚢 Select your ship</label>
-          <select value={userShip} onChange={(e) => setUserShip(e.target.value)} style={styles.select}>
-            <option value="">Choose ship</option>
-            {SHIPS.map((ship) => (
-              <option key={ship}>{ship}</option>
-            ))}
-          </select>
-
-          <button style={styles.primaryButton} onClick={() => userShip && setLoggedIn(true)}>
-            Enter Dashboard
-          </button>
-        </section>
-      </main>
-    );
-  }
-
-  const combinedBreakdown = selectedProduct ? getCombinedVenueBreakdown(selectedProduct) : [];
-  const recipesForProduct = selectedProduct ? getRecipesUsingProduct(selectedProduct) : [];
-  const productsInRecipe = selectedRecipe ? getProductsInRecipe(selectedRecipe) : [];
-  const allergenWarnings = selectedRecipe ? detectAllergens(productsInRecipe) : [];
-  const filteredProducts = products.filter((p) => p.toLowerCase().includes(search.toLowerCase()));
 
   const totalConsumption = (() => {
     const totals = { BRL: 0, RL: 0, SC: 0, VL: 0 };
@@ -482,549 +414,165 @@ export default function App() {
       });
     });
 
-    const allShips = visibleShips.reduce((sum, ship) => sum + totals[ship], 0);
+    const allShips = visibleShips.reduce(
+      (sum, ship) => sum + totals[ship],
+      0
+    );
 
     return { totals, allShips };
   })();
 
-  return (
-    <main style={styles.page}>
-      <header style={styles.header}>
-        <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
-        <div style={styles.shipBadge}>🚢 {userShip}</div>
-      </header>
+  if (!loggedIn) {
+    return (
+      <div style={{ padding: 40 }}>
+        <img src="/virgin-logo.png" style={{ height: 60 }} />
+        <h2>Select Ship</h2>
 
-      <div style={styles.viewModeBox}>
-        <button
-          onClick={() => setViewMode("single")}
-          style={{
-            ...styles.viewModeButton,
-            ...(viewMode === "single" ? styles.viewModeButtonActive : {}),
-          }}
+        <select
+          onChange={(e) => setUserShip(e.target.value)}
+          value={userShip}
         >
-          🚢 {userShip} Only
+          <option value="">Choose ship</option>
+          {SHIPS.map((s) => (
+            <option key={s}>{s}</option>
+          ))}
+        </select>
+
+        <button onClick={() => setLoggedIn(true)}>Continue</button>
+      </div>
+    );
+  }
+
+  if (!module) {
+    return (
+      <div style={{ padding: 40 }}>
+        <h2>Select Module</h2>
+
+        <button onClick={() => setModule("product")}>
+          Product Dashboard
         </button>
 
-        <button
-          onClick={() => setViewMode("all")}
-          style={{
-            ...styles.viewModeButton,
-            ...(viewMode === "all" ? styles.viewModeButtonActive : {}),
-          }}
-        >
-          🌍 All Ships Overview
+        <button onClick={() => setModule("equipment")}>
+          Equipment
         </button>
       </div>
+    );
+  }
 
-      <section style={styles.grid}>
-        <div style={styles.card}>
-          <h2 style={styles.cardTitle}>📤 Upload Files</h2>
+  if (module === "equipment" && !equipmentMode) {
+    return (
+      <div style={{ padding: 40 }}>
+        <h2>Equipment Options</h2>
 
-          <label style={styles.label}>Step 1: Consumption file</label>
-          <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadConsumptionFile} style={styles.fileInput} />
+        <button onClick={() => setEquipmentMode("muster")}>
+          Equipment Muster List
+        </button>
 
-          <label style={styles.label}>Step 2: Recipe / location file</label>
-          <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadRecipeFile} style={styles.fileInput} />
+        <button onClick={() => setEquipmentMode("inventory")}>
+          Equipment Inventory
+        </button>
+      </div>
+    );
+  }
 
-          <label style={styles.label}>Optional: Replace template file</label>
-          <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadTemplateFile} style={styles.fileInput} />
+  if (module === "equipment" && equipmentMode === "muster") {
+    const grouped = {};
 
-          {message && <p style={styles.message}>{message}</p>}
+    musterRows.slice(1).forEach((row) => {
+      const category = row[2];
+      const code = row[3];
+      const name = row[4];
+      const img = row[7];
 
-          <div style={styles.infoBox}>
-            <div>📦 Products loaded: <strong>{products.length}</strong></div>
-            <div>📘 Recipe rows loaded: <strong>{Math.max(recipeRows.length - 1, 0)}</strong></div>
-            <div>📋 Template: <strong>{templateStatus}</strong></div>
-            <div style={{ color: "#b00020" }}>Red = recipe/location expects usage, but consumption is 0 for visible ship(s).</div>
-            <div style={{ color: "#0057b8" }}>Blue = product is in recipe/location, but missing from template for that venue.</div>
-          </div>
-        </div>
+      if (!category || !name) return;
 
-        <div style={styles.card}>
-          <h2 style={styles.cardTitle}>🔍 Select Product</h2>
+      if (!grouped[category]) grouped[category] = [];
+      grouped[category].push({ code, name, img });
+    });
 
-          <input
-            placeholder="Search product..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={styles.searchInput}
-          />
+    return (
+      <div style={{ padding: 20 }}>
+        <h2>Equipment Muster List</h2>
 
-          <div style={styles.productList}>
-            {filteredProducts.map((product, i) => (
-              <button
-                key={i}
-                onClick={() => {
-                  setSelectedProduct(product);
-                  setSelectedRecipe(null);
-                }}
-                style={{
-                  ...styles.productItem,
-                  ...(selectedProduct === product ? styles.productItemActive : {}),
-                }}
-              >
-                {product}
-              </button>
-            ))}
-          </div>
-        </div>
-      </section>
+        <input type="file" onChange={uploadMusterFile} />
 
-      {selectedProduct && (
-        <section style={styles.card}>
-          <h2 style={styles.productTitle}>📦 {selectedProduct}</h2>
+        {Object.entries(grouped).map(([cat, items]) => (
+          <div key={cat}>
+            <h3>{cat}</h3>
 
-          <h3 style={styles.sectionTitle}>📊 Total Consumption</h3>
-
-          <div style={styles.totalBox}>
-            <div style={styles.totalMain}>
-              {viewMode === "single" ? `${userShip} Total: ` : "Total All Ships: "}
-              {formatQty(totalConsumption.allShips)}
-            </div>
-
-            <div style={styles.totalShipGrid}>
-              {visibleShips.map((ship) => (
-                <div key={ship} style={styles.totalShipBox}>
-                  <span>{ship}</span>
-                  <strong>{formatQty(totalConsumption.totals[ship])}</strong>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+              {items.map((i) => (
+                <div key={i.code} style={{ border: "1px solid #ccc", padding: 10 }}>
+                  <img src={i.img} style={{ width: "100%", height: 100, objectFit: "cover" }} />
+                  <div>{i.code}</div>
+                  <div>{i.name}</div>
                 </div>
               ))}
             </div>
           </div>
+        ))}
+      </div>
+    );
+  }
 
-          <h3 style={styles.sectionTitle}>🏢 Consumption by Venue and Ship</h3>
+  const combinedBreakdown = selectedProduct
+    ? getCombinedVenueBreakdown(selectedProduct)
+    : [];
 
-          <div style={styles.venueGrid}>
-            {combinedBreakdown.map((venueItem, i) => (
-              <div
-                key={i}
-                style={{
-                  ...styles.venueCard,
-                  ...(venueItem.missingShips.length > 0 ? styles.venueCardWarning : {}),
-                  ...(venueItem.missingFromTemplate ? styles.venueCardTemplateWarning : {}),
-                }}
-              >
-                <h4 style={styles.venueTitle}>
-                  {venueItem.displayName}
-                  <span style={styles.badgeGroup}>
-                    {venueItem.missingFromTemplate && (
-                      <span style={styles.templateBadge}>Missing Template</span>
-                    )}
-                    {venueItem.missingShips.length > 0 && (
-                      <span style={styles.missingBadge}>
-                        Missing: {venueItem.missingShips.join(", ")}
-                      </span>
-                    )}
-                  </span>
-                </h4>
+  const recipesForProduct = selectedProduct
+    ? getRecipesUsingProduct(selectedProduct)
+    : [];
 
-                {venueItem.templateMatches.length > 0 && (
-                  <div style={styles.templateFound}>
-                    Template/Menu: {venueItem.templateMatches.join(", ")}
-                  </div>
-                )}
+  return (
+    <div style={{ padding: 20 }}>
+      <h2>Product Dashboard</h2>
 
-                {venueItem.missingFromTemplate && (
-                  <div style={styles.templateWarningText}>
-                    Product is used in recipe/location file for this venue but is not found in any template. Product has to be used.
-                  </div>
-                )}
+      <input type="file" onChange={uploadConsumptionFile} />
+      <input type="file" onChange={uploadRecipeFile} />
 
-                <div style={styles.shipGrid}>
-                  {visibleShips.map((ship) => {
-                    const isMissing = venueItem.required && (venueItem.ships[ship] || 0) === 0;
+      <input
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Search product"
+      />
 
-                    return (
-                      <div
-                        key={ship}
-                        style={{
-                          ...styles.shipBox,
-                          ...(ship === userShip ? styles.shipBoxActive : {}),
-                          ...(isMissing ? styles.shipBoxMissing : {}),
-                        }}
-                      >
-                        <span style={styles.shipName}>{ship}</span>
-                        <strong style={styles.shipQty}>{formatQty(venueItem.ships[ship])}</strong>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {venueItem.missingShips.length > 0 && (
-                  <div style={styles.warningSmall}>
-                    Product appears in recipe/location file for this venue, but usage is 0 for highlighted ship(s).
-                  </div>
-                )}
-              </div>
-            ))}
+      {products
+        .filter((p) =>
+          p.toLowerCase().includes(search.toLowerCase())
+        )
+        .map((p) => (
+          <div key={p} onClick={() => setSelectedProduct(p)}>
+            {p}
           </div>
+        ))}
 
-          <h3 style={styles.sectionTitle}>👨‍🍳 Recipes using this product</h3>
+      {selectedProduct && (
+        <>
+          <h3>{selectedProduct}</h3>
 
-          {recipeRows.length === 0 && (
-            <p style={styles.emptyText}>Upload the recipe/location file to see recipe details.</p>
-          )}
+          {combinedBreakdown.map((v) => (
+            <div key={v.venueKey}>
+              <b>{v.displayName}</b>
 
-          {recipeRows.length > 0 && recipesForProduct.length === 0 && (
-            <p style={styles.emptyText}>No recipes found for this product.</p>
-          )}
-
-          <div style={styles.recipeList}>
-            {recipesForProduct.map((recipe, i) => (
-              <button
-                key={i}
-                onClick={() => setSelectedRecipe(recipe)}
-                style={{
-                  ...styles.recipeCard,
-                  ...(selectedRecipe?.key === recipe.key ? styles.recipeCardActive : {}),
-                }}
-              >
-                <div style={styles.recipeName}>{recipe.recipeName}</div>
-                <div style={styles.recipeMeta}>Code: {recipe.recipeCode}</div>
-                <div style={styles.recipeMeta}>
-                  Venues: {recipe.venues.length ? recipe.venues.join(", ") : "N/A"}
-                </div>
-              </button>
-            ))}
-          </div>
-
-          {selectedRecipe && (
-            <div style={styles.ingredientsCard}>
-              <h3 style={styles.sectionTitle}>🧾 Products used in recipe</h3>
-              <h4 style={{ marginTop: 0 }}>
-                {selectedRecipe.recipeName} ({selectedRecipe.recipeCode})
-              </h4>
-
-              {productsInRecipe.length === 0 ? (
-                <p style={styles.emptyText}>No products found for this recipe.</p>
-              ) : (
-                <ul>
-                  {productsInRecipe.map((product, i) => {
-                    const subIngredients = getSubRecipeIngredients(product);
-
-                    return (
-                      <li key={i} style={{ marginBottom: 10 }}>
-                        <strong>{product}</strong>
-
-                        {subIngredients.length > 0 && (
-                          <ul style={styles.subRecipeList}>
-                            {subIngredients.map((subItem, j) => (
-                              <li key={j}>{subItem}</li>
-                            ))}
-                          </ul>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-
-              <h3 style={styles.sectionTitle}>⚠️ Rule-Based Allergen Warning</h3>
-              <p style={styles.warningText}>
-                This is a keyword-based warning only. Verify against official allergen data before use.
-              </p>
-
-              {allergenWarnings.length === 0 ? (
-                <p style={styles.emptyText}>No likely allergens detected by keyword rules.</p>
-              ) : (
-                <div style={styles.allergenList}>
-                  {allergenWarnings.map((item, i) => (
-                    <div key={i} style={styles.allergenCard}>
-                      <strong>{item.allergen}</strong>
-                      <ul>
-                        {item.products.map((product, j) => (
-                          <li key={j}>{product}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              )}
+              {visibleShips.map((s) => (
+                <span
+                  key={s}
+                  style={{
+                    margin: 5,
+                    color: v.missingShips.includes(s)
+                      ? "red"
+                      : v.missingFromTemplate
+                      ? "blue"
+                      : "black",
+                  }}
+                >
+                  {s}:{formatQty(v.ships[s])}
+                </span>
+              ))}
             </div>
-          )}
-        </section>
+          ))}
+        </>
       )}
-    </main>
+    </div>
   );
 }
-
-const styles = {
-  page: {
-    minHeight: "100vh",
-    padding: 24,
-    background: "#f5f5f5",
-    fontFamily: "Arial, sans-serif",
-    color: "#111",
-  },
-  loginCard: {
-    maxWidth: 460,
-    margin: "80px auto",
-    padding: 28,
-    background: "#fff",
-    borderRadius: 16,
-    boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
-    display: "grid",
-    gap: 14,
-  },
-  logo: { height: 70, objectFit: "contain", marginBottom: 8 },
-  header: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 18,
-    background: "#fff",
-    borderRadius: 16,
-    boxShadow: "0 4px 18px rgba(0,0,0,0.06)",
-    marginBottom: 20,
-  },
-  headerLogo: { height: 54, objectFit: "contain" },
-  title: { margin: 0, fontSize: 28 },
-  subtitle: { margin: 0, color: "#666" },
-  label: { fontWeight: "bold", marginTop: 8 },
-  select: { padding: 10, borderRadius: 8, border: "1px solid #ccc" },
-  primaryButton: {
-    marginTop: 10,
-    padding: 12,
-    borderRadius: 10,
-    border: 0,
-    background: "#111",
-    color: "#fff",
-    fontWeight: "bold",
-    cursor: "pointer",
-  },
-  shipBadge: {
-    padding: "10px 14px",
-    borderRadius: 999,
-    background: "#111",
-    color: "#fff",
-    fontWeight: "bold",
-  },
-  viewModeBox: {
-    display: "flex",
-    gap: 10,
-    marginBottom: 20,
-  },
-  viewModeButton: {
-    padding: "10px 14px",
-    borderRadius: 999,
-    border: "1px solid #ccc",
-    background: "#fff",
-    cursor: "pointer",
-    fontWeight: "bold",
-  },
-  viewModeButtonActive: {
-    background: "#111",
-    color: "#fff",
-    borderColor: "#111",
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1.4fr",
-    gap: 20,
-    marginBottom: 20,
-  },
-  card: {
-    background: "#fff",
-    borderRadius: 16,
-    padding: 20,
-    boxShadow: "0 4px 18px rgba(0,0,0,0.06)",
-  },
-  cardTitle: { marginTop: 0 },
-  fileInput: { display: "block", margin: "8px 0 16px" },
-  message: { color: "#555", fontSize: 14 },
-  infoBox: {
-    marginTop: 12,
-    padding: 12,
-    borderRadius: 12,
-    background: "#f2f2f2",
-    display: "grid",
-    gap: 6,
-  },
-  searchInput: {
-    width: "100%",
-    padding: 12,
-    borderRadius: 10,
-    border: "1px solid #ccc",
-    marginBottom: 10,
-  },
-  productList: {
-    maxHeight: 300,
-    overflowY: "auto",
-    border: "1px solid #ddd",
-    borderRadius: 12,
-  },
-  productItem: {
-    width: "100%",
-    display: "block",
-    textAlign: "left",
-    padding: 10,
-    border: 0,
-    borderBottom: "1px solid #eee",
-    background: "#fff",
-    cursor: "pointer",
-  },
-  productItemActive: { background: "#eee", fontWeight: "bold" },
-  productTitle: { marginTop: 0, fontSize: 24 },
-  sectionTitle: { marginTop: 22 },
-  totalBox: {
-    background: "#111",
-    color: "#fff",
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 18,
-  },
-  totalMain: { fontSize: 20, fontWeight: "bold" },
-  totalShipGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-    gap: 10,
-    marginTop: 12,
-  },
-  totalShipBox: {
-    background: "#fff",
-    color: "#111",
-    borderRadius: 10,
-    padding: 10,
-    textAlign: "center",
-    display: "grid",
-    gap: 4,
-  },
-  venueGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-    gap: 14,
-  },
-  venueCard: {
-    border: "1px solid #ddd",
-    borderRadius: 14,
-    padding: 14,
-    background: "#fafafa",
-  },
-  venueCardWarning: {
-    border: "2px solid #b00020",
-    background: "#fff0f0",
-  },
-  venueCardTemplateWarning: {
-    border: "2px solid #0057b8",
-    background: "#eef5ff",
-  },
-  venueTitle: {
-    marginTop: 0,
-    display: "flex",
-    justifyContent: "space-between",
-    gap: 10,
-    alignItems: "center",
-  },
-  badgeGroup: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: 6,
-    justifyContent: "flex-end",
-  },
-  missingBadge: {
-    fontSize: 12,
-    color: "#fff",
-    background: "#b00020",
-    borderRadius: 999,
-    padding: "4px 8px",
-  },
-  templateBadge: {
-    fontSize: 12,
-    color: "#fff",
-    background: "#0057b8",
-    borderRadius: 999,
-    padding: "4px 8px",
-  },
-  templateFound: {
-    color: "#0057b8",
-    fontSize: 13,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  templateWarningText: {
-    color: "#0057b8",
-    fontSize: 13,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  shipGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(70px, 1fr))",
-    gap: 6,
-  },
-  shipBox: {
-    minWidth: 0,
-    padding: "8px 4px",
-    borderRadius: 10,
-    background: "#fff",
-    border: "1px solid #ddd",
-    display: "grid",
-    gap: 3,
-    textAlign: "center",
-    overflow: "hidden",
-  },
-  shipBoxActive: { background: "#111", color: "#fff" },
-  shipBoxMissing: {
-    background: "#b00020",
-    color: "#fff",
-    borderColor: "#b00020",
-  },
-  shipName: { fontSize: 11, opacity: 0.8 },
-  shipQty: {
-    fontSize: 14,
-    lineHeight: 1.1,
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  },
-  warningSmall: {
-    marginTop: 10,
-    color: "#b00020",
-    fontSize: 13,
-    fontWeight: "bold",
-  },
-  emptyText: { color: "#777" },
-  recipeList: { display: "grid", gap: 10 },
-  recipeCard: {
-    width: "100%",
-    textAlign: "left",
-    border: "1px solid #ddd",
-    borderRadius: 12,
-    padding: 12,
-    background: "#fafafa",
-    cursor: "pointer",
-  },
-  recipeCardActive: { background: "#eee", borderColor: "#111" },
-  recipeName: { fontWeight: "bold" },
-  recipeMeta: { color: "#555", fontSize: 14, marginTop: 4 },
-  ingredientsCard: {
-    marginTop: 18,
-    border: "1px solid #ddd",
-    borderRadius: 14,
-    padding: 14,
-    background: "#fafafa",
-  },
-  subRecipeList: {
-    marginTop: 6,
-    marginBottom: 8,
-    paddingLeft: 24,
-    color: "#333",
-    background: "#f2f2f2",
-    borderRadius: 8,
-    paddingTop: 8,
-    paddingBottom: 8,
-  },
-  warningText: {
-    color: "#8a5a00",
-    background: "#fff4d6",
-    padding: 10,
-    borderRadius: 8,
-  },
-  allergenList: { display: "grid", gap: 10 },
-  allergenCard: {
-    border: "1px solid #e1c16e",
-    background: "#fff9e8",
-    borderRadius: 10,
-    padding: 10,
-  },
-};
