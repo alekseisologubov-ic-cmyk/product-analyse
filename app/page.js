@@ -433,6 +433,7 @@ export default function App() {
   })();
 
   if (!loggedIn) {
+    
     if (!module) {
   return (
     <main style={styles.page}>
@@ -446,6 +447,76 @@ export default function App() {
         <button onClick={() => setModule("equipment")} style={styles.primaryButton}>
           Equipment
         </button>
+      </div>
+    </main>
+  );
+}
+
+if (module === "equipment" && !equipmentMode) {
+  return (
+    <main style={styles.page}>
+      <div style={styles.card}>
+        <h2>Equipment Options</h2>
+
+        <button onClick={() => setEquipmentMode("muster")} style={styles.primaryButton}>
+          Equipment Muster List
+        </button>
+
+        <button onClick={() => setEquipmentMode("inventory")} style={styles.primaryButton}>
+          Equipment Inventory
+        </button>
+      </div>
+    </main>
+  );
+}
+
+const uploadMusterFile = (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  readExcelFile(file, (workbook) => {
+    const rows = workbookToRows(workbook);
+    setMusterRows(rows);
+  });
+};
+
+if (module === "equipment" && equipmentMode === "muster") {
+  const grouped = {};
+
+  musterRows.slice(1).forEach((row) => {
+    const category = row[2];
+    const code = row[3];
+    const name = row[4];
+    const img = row[7];
+
+    if (!category || !name) return;
+
+    if (!grouped[category]) grouped[category] = [];
+    grouped[category].push({ code, name, img });
+  });
+
+  return (
+    <main style={styles.page}>
+      <div style={styles.card}>
+        <h2>Equipment Muster List</h2>
+
+        <input type="file" onChange={uploadMusterFile} />
+
+        {Object.entries(grouped).map(([cat, items]) => (
+          <div key={cat}>
+            <h3>{cat}</h3>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12 }}>
+              {items.map((i) => (
+                <div key={i.code} style={styles.venueCard}>
+                  <img src={i.img} style={{ width: "100%", height: 120, objectFit: "cover" }} />
+                  <strong>{i.name}</strong>
+                  <div>{i.code}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </main>
   );
