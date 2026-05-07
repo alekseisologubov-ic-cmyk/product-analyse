@@ -25,8 +25,18 @@ const cleanText = (value) =>
 
 const normalizeVenue = (value) =>
   cleanText(value)
+    .replace(/^\d+\s*[-]?\s*/g, "")
     .replace(/\s*-\s*VV$/g, "")
     .replace(/\s*VV$/g, "")
+    .replace(/\bTHE\s+/g, "")
+    .replace(/\bSCL\b/g, "")
+    .replace(/\bVAL\b/g, "")
+    .replace(/\bRES\b/g, "")
+    .replace(/\bBRL\b/g, "")
+    .replace(/\bROJO\b/g, "")
+    .replace(/\bARIYA\b/g, "")
+    .replace(/\bONLY\b/g, "")
+    .replace(/\bMANNOR\b/g, "MANOR")
     .replace(/\s+/g, " ")
     .trim();
 
