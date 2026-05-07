@@ -754,11 +754,31 @@ export default function App() {
                 <p><strong>Category:</strong> {selectedEquipment.category || "N/A"}</p>
 
                 {selectedEquipment.image ? (
-                  <img
-                    src={selectedEquipment.image}
-                    alt={selectedEquipment.name}
-                    style={styles.modalImage}
-                  />
+                  {selectedEquipment.image ? (
+  <div>
+    <img
+      src={selectedEquipment.image}
+      alt={selectedEquipment.name}
+      style={styles.modalImage}
+      onError={(e) => {
+        e.currentTarget.style.display = "none";
+        const link = e.currentTarget.nextElementSibling;
+        if (link) link.style.display = "block";
+      }}
+    />
+
+    <a
+      href={selectedEquipment.image}
+      target="_blank"
+      rel="noreferrer"
+      style={styles.imageLink}
+    >
+      Open Picture
+    </a>
+  </div>
+) : (
+  <div style={styles.equipmentNoImage}>No image</div>
+)}
                 ) : (
                   <div style={styles.equipmentNoImage}>No image</div>
                 )}
