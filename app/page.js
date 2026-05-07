@@ -258,7 +258,8 @@ export default function App() {
     });
 
     return [...new Set(matches)];
-  };  
+  }; 
+  
   const getRequiredVenuesForProduct = (product) => {
     const required = {};
 
