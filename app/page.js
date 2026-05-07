@@ -433,6 +433,23 @@ export default function App() {
   })();
 
   if (!loggedIn) {
+    if (!module) {
+  return (
+    <main style={styles.page}>
+      <div style={styles.card}>
+        <h2>Select Module</h2>
+
+        <button onClick={() => setModule("product")} style={styles.primaryButton}>
+          Product Dashboard
+        </button>
+
+        <button onClick={() => setModule("equipment")} style={styles.primaryButton}>
+          Equipment
+        </button>
+      </div>
+    </main>
+  );
+}
     return (
       <div style={{ padding: 40 }}>
         <img src="/virgin-logo.png" style={{ height: 60 }} />
