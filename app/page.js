@@ -702,14 +702,31 @@ export default function App() {
                     onClick={() => setSelectedEquipment(item)}
                   >
                     {item.image ? (
-                      <img
-                        src={item.image}
-                        alt={item.name}
-                        style={styles.equipmentImage}
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
-                        }}
-                      />
+  <div>
+    <img
+      src={item.image}
+      alt={item.name}
+      style={styles.equipmentImage}
+      onError={(e) => {
+        e.currentTarget.style.display = "none";
+        const link = e.currentTarget.nextElementSibling;
+        if (link) link.style.display = "block";
+      }}
+    />
+
+    <a
+      href={item.image}
+      target="_blank"
+      rel="noreferrer"
+      style={styles.imageLink}
+    >
+      Open Picture
+    </a>
+  </div>
+) : (
+  <div style={styles.equipmentNoImage}>No image</div>
+)}
+
                     ) : (
                       <div style={styles.equipmentNoImage}>No image</div>
                     )}
@@ -736,15 +753,32 @@ export default function App() {
                 <p><strong>Sheet:</strong> {selectedEquipment.sheetName || "N/A"}</p>
                 <p><strong>Category:</strong> {selectedEquipment.category || "N/A"}</p>
 
-                {selectedEquipment.image ? (
-                  <img
-                    src={selectedEquipment.image}
-                    alt={selectedEquipment.name}
-                    style={styles.modalImage}
-                  />
-                ) : (
-                  <div style={styles.equipmentNoImage}>No image</div>
-                )}
+              {selectedEquipment.image ? (
+  <div>
+    <img
+      src={selectedEquipment.image}
+      alt={selectedEquipment.name}
+      style={styles.modalImage}
+      onError={(e) => {
+        e.currentTarget.style.display = "none";
+        const link = e.currentTarget.nextElementSibling;
+        if (link) link.style.display = "block";
+      }}
+    />
+
+    <a
+      href={selectedEquipment.image}
+      target="_blank"
+      rel="noreferrer"
+      style={styles.imageLink}
+    >
+      Open Picture
+    </a>
+  </div>
+) : (
+  <div style={styles.equipmentNoImage}>No image</div>
+)}
+
               </div>
             </div>
           )}
@@ -1402,5 +1436,16 @@ const styles = {
     height: 34,
     cursor: "pointer",
     fontWeight: "bold",
+    imageLink: {
+  display: "none",
+  marginTop: 8,
+  padding: 10,
+  borderRadius: 10,
+  background: "#111",
+  color: "#fff",
+  textAlign: "center",
+  textDecoration: "none",
+  fontWeight: "bold",
+},
   },
 };
