@@ -96,28 +96,43 @@ export default function App() {
   };
 
   const parseTemplateWorkbook = (workbook) => {
-    const map = {};
+  const map = {};
 
-    workbook.SheetNames.forEach((sheetName) => {
-      const venueKey = normalizeVenue(sheetName);
-      if (!venueKey) return;
+  workbook.SheetNames.forEach((sheetName) => {
+    const venueKey = normalizeVenue(sheetName);
+    if (!venueKey) return;
 
-      if (!map[venueKey]) map[venueKey] = {};
+    if (!map[venueKey]) map[venueKey] = {};
 
-      const sheet = workbook.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-      const firstRow = rows[0] || [];
+    const sheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-      TEMPLATE_PRODUCT_COLUMNS.forEach((colIndex) => {
+    if (!rows.length) return;
+
+    rows.forEach((row, rowIndex) => {
+      row.forEach((cell, colIndex) => {
+        const header = cleanText(cell);
+
+        if (header !== "INGREDIENT NAME") return;
+
         const templateName =
-          String(firstRow[colIndex] || firstRow[0] || "Template").trim();
+          String(rows[rowIndex - 1]?.[colIndex] || rows[rowIndex - 1]?.[colIndex - 1] || sheetName || "Template").trim();
 
-        rows.slice(1).forEach((row) => {
-          const product = String(row[colIndex] || "").trim();
+        rows.slice(rowIndex + 1).forEach((dataRow) => {
+          const product = String(dataRow[colIndex] || "").trim();
           if (!product) return;
 
           const productKey = cleanText(product);
           if (!productKey) return;
+
+          if (
+            productKey === "INGREDIENT NAME" ||
+            productKey === "CODE" ||
+            productKey === "UM" ||
+            productKey.includes("#REF")
+          ) {
+            return;
+          }
 
           if (!map[venueKey][productKey]) {
             map[venueKey][productKey] = {
@@ -130,17 +145,18 @@ export default function App() {
         });
       });
     });
+  });
 
-    Object.keys(map).forEach((venueKey) => {
-      Object.keys(map[venueKey]).forEach((productKey) => {
-        map[venueKey][productKey].templates = [
-          ...map[venueKey][productKey].templates,
-        ];
-      });
+  Object.keys(map).forEach((venueKey) => {
+    Object.keys(map[venueKey]).forEach((productKey) => {
+      map[venueKey][productKey].templates = [
+        ...map[venueKey][productKey].templates,
+      ];
     });
+  });
 
-    return map;
-  };
+  return map;
+};
 
   const uploadConsumptionFile = (e) => {
     const file = e.target.files?.[0];
