@@ -407,6 +407,14 @@ export default function App() {
     return found;
   };
 
+  const combinedBreakdown = selectedProduct
+    ? getCombinedVenueBreakdown(selectedProduct)
+    : [];
+
+  const recipesForProduct = selectedProduct
+    ? getRecipesUsingProduct(selectedProduct)
+    : [];
+  
   const totalConsumption = (() => {
     const totals = { BRL: 0, RL: 0, SC: 0, VL: 0 };
 
@@ -517,14 +525,7 @@ export default function App() {
     );
   }
 
-  const combinedBreakdown = selectedProduct
-    ? getCombinedVenueBreakdown(selectedProduct)
-    : [];
-
-  const recipesForProduct = selectedProduct
-    ? getRecipesUsingProduct(selectedProduct)
-    : [];
-
+  
   return (
     <div style={{ padding: 20 }}>
       <h2>Product Dashboard</h2>
