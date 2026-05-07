@@ -4,18 +4,25 @@ import React, { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 
 const SHIPS = ["BRL", "RL", "SC", "VL"];
-const TEMPLATE_PRODUCT_COLUMNS = [2, 6, 10, 14, 18, 22]; // C, G, K, O, S, W
 
 const ALLERGEN_RULES = [
   { allergen: "Tree Nuts", keywords: ["almond", "walnut", "pecan", "cashew", "hazelnut", "pistachio", "macadamia"] },
   { allergen: "Peanuts", keywords: ["peanut"] },
-  { allergen: "Seeds", keywords: ["seed", "seeds", "sunflower seed", "pumpkin seed", "chia", "flax", "hemp seed"], exclude: ["seedless", "seedless cucumber"] },
+  {
+    allergen: "Seeds",
+    keywords: ["seed", "seeds", "sunflower seed", "pumpkin seed", "chia", "flax", "hemp seed"],
+    exclude: ["seedless", "seedless cucumber"]
+  },
   { allergen: "Soy", keywords: ["soy", "tofu", "edamame", "miso", "tamari"] },
   { allergen: "Gluten", keywords: ["wheat", "flour", "gluten", "bread", "pasta", "semolina", "barley", "rye", "panko"] },
   { allergen: "Milk / Dairy", keywords: ["milk", "cream", "butter", "cheese", "yogurt", "parmesan", "mozzarella", "ricotta", "cream cheese"] },
   { allergen: "Egg", keywords: ["egg", "eggs", "mayonnaise", "aioli"], exclude: ["eggplant"] },
   { allergen: "Fish", keywords: ["salmon", "tuna", "cod", "anchovy", "fish", "sardine"] },
-  { allergen: "Shellfish", keywords: ["shrimp", "crab", "lobster", "mussel", "oyster", "scallop"], exclude: ["clam shell", "clamshell", "packed in a clam shell"] },
+  {
+    allergen: "Shellfish",
+    keywords: ["shrimp", "crab", "lobster", "mussel", "oyster", "scallop"],
+    exclude: ["clam shell", "clamshell", "packed in a clam shell"]
+  },
   { allergen: "Sesame", keywords: ["sesame", "tahini"] },
   { allergen: "Mustard", keywords: ["mustard"] }
 ];
@@ -54,12 +61,15 @@ export default function App() {
   const [userShip, setUserShip] = useState("");
   const [loggedIn, setLoggedIn] = useState(false);
   const [message, setMessage] = useState("");
+  const [viewMode, setViewMode] = useState("all");
 
   const shipColumns = { BRL: 8, RL: 11, SC: 14, VL: 17 };
 
   useEffect(() => {
     loadDefaultTemplate();
   }, []);
+
+  const visibleShips = viewMode === "single" ? [userShip] : SHIPS;
 
   const buildProductList = (rows) =>
     [...new Set(rows.slice(1).map((r) => String(r[6] || "").trim()).filter(Boolean))].sort();
@@ -96,67 +106,70 @@ export default function App() {
   };
 
   const parseTemplateWorkbook = (workbook) => {
-  const map = {};
+    const map = {};
 
-  workbook.SheetNames.forEach((sheetName) => {
-    const venueKey = normalizeVenue(sheetName);
-    if (!venueKey) return;
+    workbook.SheetNames.forEach((sheetName) => {
+      const venueKey = normalizeVenue(sheetName);
+      if (!venueKey) return;
 
-    if (!map[venueKey]) map[venueKey] = {};
+      if (!map[venueKey]) map[venueKey] = {};
 
-    const sheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      const sheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+      if (!rows.length) return;
 
-    if (!rows.length) return;
+      rows.forEach((row, rowIndex) => {
+        row.forEach((cell, colIndex) => {
+          const header = cleanText(cell);
+          if (header !== "INGREDIENT NAME") return;
 
-    rows.forEach((row, rowIndex) => {
-      row.forEach((cell, colIndex) => {
-        const header = cleanText(cell);
+          const templateName =
+            String(
+              rows[rowIndex - 1]?.[colIndex] ||
+              rows[rowIndex - 1]?.[colIndex - 1] ||
+              sheetName ||
+              "Template"
+            ).trim();
 
-        if (header !== "INGREDIENT NAME") return;
+          rows.slice(rowIndex + 1).forEach((dataRow) => {
+            const product = String(dataRow[colIndex] || "").trim();
+            if (!product) return;
 
-        const templateName =
-          String(rows[rowIndex - 1]?.[colIndex] || rows[rowIndex - 1]?.[colIndex - 1] || sheetName || "Template").trim();
+            const productKey = cleanText(product);
+            if (!productKey) return;
 
-        rows.slice(rowIndex + 1).forEach((dataRow) => {
-          const product = String(dataRow[colIndex] || "").trim();
-          if (!product) return;
+            if (
+              productKey === "INGREDIENT NAME" ||
+              productKey === "CODE" ||
+              productKey === "UM" ||
+              productKey.includes("#REF")
+            ) {
+              return;
+            }
 
-          const productKey = cleanText(product);
-          if (!productKey) return;
+            if (!map[venueKey][productKey]) {
+              map[venueKey][productKey] = {
+                product,
+                templates: new Set(),
+              };
+            }
 
-          if (
-            productKey === "INGREDIENT NAME" ||
-            productKey === "CODE" ||
-            productKey === "UM" ||
-            productKey.includes("#REF")
-          ) {
-            return;
-          }
-
-          if (!map[venueKey][productKey]) {
-            map[venueKey][productKey] = {
-              product,
-              templates: new Set(),
-            };
-          }
-
-          map[venueKey][productKey].templates.add(templateName);
+            map[venueKey][productKey].templates.add(templateName);
+          });
         });
       });
     });
-  });
 
-  Object.keys(map).forEach((venueKey) => {
-    Object.keys(map[venueKey]).forEach((productKey) => {
-      map[venueKey][productKey].templates = [
-        ...map[venueKey][productKey].templates,
-      ];
+    Object.keys(map).forEach((venueKey) => {
+      Object.keys(map[venueKey]).forEach((productKey) => {
+        map[venueKey][productKey].templates = [
+          ...map[venueKey][productKey].templates,
+        ];
+      });
     });
-  });
 
-  return map;
-};
+    return map;
+  };
 
   const uploadConsumptionFile = (e) => {
     const file = e.target.files?.[0];
@@ -320,7 +333,7 @@ export default function App() {
         displayName: actualVenue?.displayName || requiredVenue?.displayName || venueKey,
         ships,
         required: requiredByRecipe,
-        missingShips: SHIPS.filter((ship) => requiredByRecipe && (ships[ship] || 0) === 0),
+        missingShips: visibleShips.filter((ship) => requiredByRecipe && (ships[ship] || 0) === 0),
         missingFromTemplate,
         templateMatches,
       };
@@ -464,12 +477,12 @@ export default function App() {
     const totals = { BRL: 0, RL: 0, SC: 0, VL: 0 };
 
     combinedBreakdown.forEach((venue) => {
-      SHIPS.forEach((ship) => {
+      visibleShips.forEach((ship) => {
         totals[ship] += Number(venue.ships[ship] || 0);
       });
     });
 
-    const allShips = SHIPS.reduce((sum, ship) => sum + totals[ship], 0);
+    const allShips = visibleShips.reduce((sum, ship) => sum + totals[ship], 0);
 
     return { totals, allShips };
   })();
@@ -480,6 +493,28 @@ export default function App() {
         <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
         <div style={styles.shipBadge}>🚢 {userShip}</div>
       </header>
+
+      <div style={styles.viewModeBox}>
+        <button
+          onClick={() => setViewMode("single")}
+          style={{
+            ...styles.viewModeButton,
+            ...(viewMode === "single" ? styles.viewModeButtonActive : {}),
+          }}
+        >
+          🚢 {userShip} Only
+        </button>
+
+        <button
+          onClick={() => setViewMode("all")}
+          style={{
+            ...styles.viewModeButton,
+            ...(viewMode === "all" ? styles.viewModeButtonActive : {}),
+          }}
+        >
+          🌍 All Ships Overview
+        </button>
+      </div>
 
       <section style={styles.grid}>
         <div style={styles.card}>
@@ -500,7 +535,7 @@ export default function App() {
             <div>📦 Products loaded: <strong>{products.length}</strong></div>
             <div>📘 Recipe rows loaded: <strong>{Math.max(recipeRows.length - 1, 0)}</strong></div>
             <div>📋 Template: <strong>{templateStatus}</strong></div>
-            <div style={{ color: "#b00020" }}>Red = recipe/location expects usage, but consumption is 0 for that ship.</div>
+            <div style={{ color: "#b00020" }}>Red = recipe/location expects usage, but consumption is 0 for visible ship(s).</div>
             <div style={{ color: "#0057b8" }}>Blue = product is in recipe/location, but missing from template for that venue.</div>
           </div>
         </div>
@@ -542,10 +577,13 @@ export default function App() {
           <h3 style={styles.sectionTitle}>📊 Total Consumption</h3>
 
           <div style={styles.totalBox}>
-            <div style={styles.totalMain}>Total All Ships: {formatQty(totalConsumption.allShips)}</div>
+            <div style={styles.totalMain}>
+              {viewMode === "single" ? `${userShip} Total: ` : "Total All Ships: "}
+              {formatQty(totalConsumption.allShips)}
+            </div>
 
             <div style={styles.totalShipGrid}>
-              {SHIPS.map((ship) => (
+              {visibleShips.map((ship) => (
                 <div key={ship} style={styles.totalShipBox}>
                   <span>{ship}</span>
                   <strong>{formatQty(totalConsumption.totals[ship])}</strong>
@@ -593,7 +631,7 @@ export default function App() {
                 )}
 
                 <div style={styles.shipGrid}>
-                  {SHIPS.map((ship) => {
+                  {visibleShips.map((ship) => {
                     const isMissing = venueItem.required && (venueItem.ships[ship] || 0) === 0;
 
                     return (
@@ -761,6 +799,24 @@ const styles = {
     color: "#fff",
     fontWeight: "bold",
   },
+  viewModeBox: {
+    display: "flex",
+    gap: 10,
+    marginBottom: 20,
+  },
+  viewModeButton: {
+    padding: "10px 14px",
+    borderRadius: 999,
+    border: "1px solid #ccc",
+    background: "#fff",
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
+  viewModeButtonActive: {
+    background: "#111",
+    color: "#fff",
+    borderColor: "#111",
+  },
   grid: {
     display: "grid",
     gridTemplateColumns: "1fr 1.4fr",
@@ -820,7 +876,7 @@ const styles = {
   totalMain: { fontSize: 20, fontWeight: "bold" },
   totalShipGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(4, 1fr)",
+    gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
     gap: 10,
     marginTop: 12,
   },
@@ -893,7 +949,7 @@ const styles = {
   },
   shipGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+    gridTemplateColumns: "repeat(auto-fit, minmax(70px, 1fr))",
     gap: 6,
   },
   shipBox: {
