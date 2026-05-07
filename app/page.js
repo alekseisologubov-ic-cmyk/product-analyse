@@ -65,9 +65,10 @@ export default function App() {
 
   const [module, setModule] = useState("");
   const [equipmentMode, setEquipmentMode] = useState("");
-  const [musterRows, setMusterRows] = useState([]);
+  const [musterItems, setMusterItems] = useState([]);
   const [musterSearch, setMusterSearch] = useState("");
   const [musterMessage, setMusterMessage] = useState("");
+  const [selectedEquipment, setSelectedEquipment] = useState(null);
 
   const shipColumns = { BRL: 8, RL: 11, SC: 14, VL: 17 };
 
@@ -177,6 +178,34 @@ export default function App() {
     return map;
   };
 
+  const parseMusterWorkbook = (workbook) => {
+    const items = [];
+
+    workbook.SheetNames.forEach((sheetName) => {
+      const sheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+      rows.slice(1).forEach((row) => {
+        const category = String(row[2] || "").trim(); // C
+        const code = String(row[3] || "").trim(); // D
+        const name = String(row[4] || "").trim(); // E
+        const image = String(row[7] || "").trim(); // H
+
+        if (!category || !name) return;
+
+        items.push({
+          sheetName,
+          category,
+          code,
+          name,
+          image,
+        });
+      });
+    });
+
+    return items;
+  };
+
   const uploadConsumptionFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -217,9 +246,10 @@ export default function App() {
     if (!file) return;
 
     readExcelFile(file, (workbook) => {
-      const rows = workbookToRows(workbook);
-      setMusterRows(rows);
-      setMusterMessage("Equipment Muster List loaded.");
+      const items = parseMusterWorkbook(workbook);
+      setMusterItems(items);
+      setSelectedEquipment(null);
+      setMusterMessage(`Equipment Muster List loaded from ${workbook.SheetNames.length} sheet(s).`);
     });
   };
 
@@ -462,19 +492,13 @@ export default function App() {
   const parseMusterItems = () => {
     const grouped = {};
 
-    musterRows.slice(1).forEach((row) => {
-      const category = String(row[2] || "").trim();
-      const code = String(row[3] || "").trim();
-      const name = String(row[4] || "").trim();
-      const image = String(row[7] || "").trim();
-
-      if (!category || !name) return;
-
-      const searchText = `${category} ${code} ${name}`.toLowerCase();
+    musterItems.forEach((item) => {
+      const searchText = `${item.sheetName} ${item.category} ${item.code} ${item.name}`.toLowerCase();
       if (musterSearch && !searchText.includes(musterSearch.toLowerCase())) return;
 
-      if (!grouped[category]) grouped[category] = [];
-      grouped[category].push({ category, code, name, image });
+      const groupKey = `${item.sheetName} / ${item.category}`;
+      if (!grouped[groupKey]) grouped[groupKey] = [];
+      grouped[groupKey].push(item);
     });
 
     return grouped;
@@ -572,7 +596,7 @@ export default function App() {
             <button style={styles.moduleCard} onClick={() => setEquipmentMode("muster")}>
               <div style={styles.moduleIcon}>📋</div>
               <strong>Equipment Muster List</strong>
-              <span>Grouped by sub category with code, name and image</span>
+              <span>Grouped by all sheets and sub categories with code, name and image</span>
             </button>
 
             <button style={styles.moduleCard} onClick={() => setEquipmentMode("inventory")}>
@@ -630,7 +654,8 @@ export default function App() {
 
             <div style={styles.infoBox}>
               <div>📋 Items loaded: <strong>{totalItems}</strong></div>
-              <div>🗂️ Sub categories: <strong>{Object.keys(groupedMuster).length}</strong></div>
+              <div>📄 Sheets included: <strong>{[...new Set(musterItems.map((i) => i.sheetName))].length}</strong></div>
+              <div>🗂️ Groups: <strong>{Object.keys(groupedMuster).length}</strong></div>
               <div>Column C = Sub Category</div>
               <div>Column D = Code</div>
               <div>Column E = Name</div>
@@ -642,14 +667,14 @@ export default function App() {
             <h2 style={styles.cardTitle}>🔍 Search Equipment</h2>
 
             <input
-              placeholder="Search equipment, code or category..."
+              placeholder="Search equipment, code, sheet or sub category..."
               value={musterSearch}
               onChange={(e) => setMusterSearch(e.target.value)}
               style={styles.searchInput}
             />
 
             <p style={styles.emptyText}>
-              Upload the muster file, then search by equipment name, code or sub category.
+              Click any equipment card to open the picture and full details.
             </p>
           </div>
         </section>
@@ -657,11 +682,11 @@ export default function App() {
         <section style={styles.card}>
           <h2 style={styles.productTitle}>📋 Equipment Muster List</h2>
 
-          {musterRows.length === 0 && (
+          {musterItems.length === 0 && (
             <p style={styles.emptyText}>Upload the Equipment Muster List file to begin.</p>
           )}
 
-          {musterRows.length > 0 && totalItems === 0 && (
+          {musterItems.length > 0 && totalItems === 0 && (
             <p style={styles.emptyText}>No equipment found for this search.</p>
           )}
 
@@ -671,7 +696,11 @@ export default function App() {
 
               <div style={styles.equipmentGrid}>
                 {items.map((item, index) => (
-                  <div key={`${item.code}-${index}`} style={styles.equipmentCard}>
+                  <button
+                    key={`${item.sheetName}-${item.code}-${index}`}
+                    style={styles.equipmentCard}
+                    onClick={() => setSelectedEquipment(item)}
+                  >
                     {item.image ? (
                       <img
                         src={item.image}
@@ -687,12 +716,38 @@ export default function App() {
 
                     <div style={styles.recipeName}>{item.name}</div>
                     <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                    <div style={styles.recipeMeta}>Category: {category}</div>
-                  </div>
+                    <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
+                    <div style={styles.recipeMeta}>Category: {item.category}</div>
+                  </button>
                 ))}
               </div>
             </div>
           ))}
+
+          {selectedEquipment && (
+            <div style={styles.modalBackdrop} onClick={() => setSelectedEquipment(null)}>
+              <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+                <button style={styles.closeButton} onClick={() => setSelectedEquipment(null)}>
+                  ✕
+                </button>
+
+                <h2>{selectedEquipment.name}</h2>
+                <p><strong>Code:</strong> {selectedEquipment.code || "N/A"}</p>
+                <p><strong>Sheet:</strong> {selectedEquipment.sheetName || "N/A"}</p>
+                <p><strong>Category:</strong> {selectedEquipment.category || "N/A"}</p>
+
+                {selectedEquipment.image ? (
+                  <img
+                    src={selectedEquipment.image}
+                    alt={selectedEquipment.name}
+                    style={styles.modalImage}
+                  />
+                ) : (
+                  <div style={styles.equipmentNoImage}>No image</div>
+                )}
+              </div>
+            </div>
+          )}
         </section>
       </main>
     );
@@ -1288,6 +1343,8 @@ const styles = {
     background: "#fafafa",
     display: "grid",
     gap: 8,
+    cursor: "pointer",
+    textAlign: "left",
   },
   equipmentImage: {
     width: "100%",
@@ -1304,5 +1361,46 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     color: "#777",
+  },
+  modalBackdrop: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.55)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 9999,
+    padding: 20,
+  },
+  modalCard: {
+    background: "#fff",
+    borderRadius: 18,
+    padding: 22,
+    maxWidth: 760,
+    width: "100%",
+    maxHeight: "90vh",
+    overflowY: "auto",
+    position: "relative",
+    boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+  },
+  modalImage: {
+    width: "100%",
+    maxHeight: "65vh",
+    objectFit: "contain",
+    borderRadius: 14,
+    background: "#f2f2f2",
+  },
+  closeButton: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    border: 0,
+    background: "#111",
+    color: "#fff",
+    borderRadius: 999,
+    width: 34,
+    height: 34,
+    cursor: "pointer",
+    fontWeight: "bold",
   },
 };
