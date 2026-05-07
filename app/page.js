@@ -63,6 +63,12 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [viewMode, setViewMode] = useState("all");
 
+  const [module, setModule] = useState("");
+  const [equipmentMode, setEquipmentMode] = useState("");
+  const [musterRows, setMusterRows] = useState([]);
+  const [musterSearch, setMusterSearch] = useState("");
+  const [musterMessage, setMusterMessage] = useState("");
+
   const shipColumns = { BRL: 8, RL: 11, SC: 14, VL: 17 };
 
   useEffect(() => {
@@ -203,6 +209,17 @@ export default function App() {
     readExcelFile(file, (workbook) => {
       setTemplateMap(parseTemplateWorkbook(workbook));
       setTemplateStatus("Custom template loaded.");
+    });
+  };
+
+  const uploadMusterFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    readExcelFile(file, (workbook) => {
+      const rows = workbookToRows(workbook);
+      setMusterRows(rows);
+      setMusterMessage("Equipment Muster List loaded.");
     });
   };
 
@@ -442,30 +459,26 @@ export default function App() {
     }));
   };
 
-  if (!loggedIn) {
-    return (
-      <main style={styles.page}>
-        <section style={styles.loginCard}>
-          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.logo} />
+  const parseMusterItems = () => {
+    const grouped = {};
 
-          <h1 style={styles.title}>Product Consumption Dashboard</h1>
-          <p style={styles.subtitle}>Ship, venue, recipe & template analysis</p>
+    musterRows.slice(1).forEach((row) => {
+      const category = String(row[2] || "").trim();
+      const code = String(row[3] || "").trim();
+      const name = String(row[4] || "").trim();
+      const image = String(row[7] || "").trim();
 
-          <label style={styles.label}>🚢 Select your ship</label>
-          <select value={userShip} onChange={(e) => setUserShip(e.target.value)} style={styles.select}>
-            <option value="">Choose ship</option>
-            {SHIPS.map((ship) => (
-              <option key={ship}>{ship}</option>
-            ))}
-          </select>
+      if (!category || !name) return;
 
-          <button style={styles.primaryButton} onClick={() => userShip && setLoggedIn(true)}>
-            Enter Dashboard
-          </button>
-        </section>
-      </main>
-    );
-  }
+      const searchText = `${category} ${code} ${name}`.toLowerCase();
+      if (musterSearch && !searchText.includes(musterSearch.toLowerCase())) return;
+
+      if (!grouped[category]) grouped[category] = [];
+      grouped[category].push({ category, code, name, image });
+    });
+
+    return grouped;
+  };
 
   const combinedBreakdown = selectedProduct ? getCombinedVenueBreakdown(selectedProduct) : [];
   const recipesForProduct = selectedProduct ? getRecipesUsingProduct(selectedProduct) : [];
@@ -487,11 +500,212 @@ export default function App() {
     return { totals, allShips };
   })();
 
+  if (!loggedIn) {
+    return (
+      <main style={styles.page}>
+        <section style={styles.loginCard}>
+          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.logo} />
+
+          <h1 style={styles.title}>Virgin Voyages Dashboard</h1>
+          <p style={styles.subtitle}>Product and equipment tools</p>
+
+          <label style={styles.label}>🚢 Select your ship</label>
+          <select value={userShip} onChange={(e) => setUserShip(e.target.value)} style={styles.select}>
+            <option value="">Choose ship</option>
+            {SHIPS.map((ship) => (
+              <option key={ship}>{ship}</option>
+            ))}
+          </select>
+
+          <button style={styles.primaryButton} onClick={() => userShip && setLoggedIn(true)}>
+            Continue
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  if (!module) {
+    return (
+      <main style={styles.page}>
+        <header style={styles.header}>
+          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
+          <div style={styles.shipBadge}>🚢 {userShip}</div>
+        </header>
+
+        <section style={styles.card}>
+          <h2 style={styles.cardTitle}>🧭 Select Module</h2>
+
+          <div style={styles.moduleGrid}>
+            <button style={styles.moduleCard} onClick={() => setModule("product")}>
+              <div style={styles.moduleIcon}>📦</div>
+              <strong>Product Dashboard</strong>
+              <span>Consumption, recipes, templates and allergens</span>
+            </button>
+
+            <button style={styles.moduleCard} onClick={() => setModule("equipment")}>
+              <div style={styles.moduleIcon}>🍽️</div>
+              <strong>Equipment</strong>
+              <span>Muster list and inventory tools</span>
+            </button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (module === "equipment" && !equipmentMode) {
+    return (
+      <main style={styles.page}>
+        <header style={styles.header}>
+          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
+          <div style={styles.headerActions}>
+            <button style={styles.backButton} onClick={() => setModule("")}>← Back</button>
+            <div style={styles.shipBadge}>🚢 {userShip}</div>
+          </div>
+        </header>
+
+        <section style={styles.card}>
+          <h2 style={styles.cardTitle}>🍽️ Equipment Options</h2>
+
+          <div style={styles.moduleGrid}>
+            <button style={styles.moduleCard} onClick={() => setEquipmentMode("muster")}>
+              <div style={styles.moduleIcon}>📋</div>
+              <strong>Equipment Muster List</strong>
+              <span>Grouped by sub category with code, name and image</span>
+            </button>
+
+            <button style={styles.moduleCard} onClick={() => setEquipmentMode("inventory")}>
+              <div style={styles.moduleIcon}>📊</div>
+              <strong>Equipment Inventory</strong>
+              <span>Coming next</span>
+            </button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (module === "equipment" && equipmentMode === "inventory") {
+    return (
+      <main style={styles.page}>
+        <header style={styles.header}>
+          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
+          <div style={styles.headerActions}>
+            <button style={styles.backButton} onClick={() => setEquipmentMode("")}>← Back</button>
+            <div style={styles.shipBadge}>🚢 {userShip}</div>
+          </div>
+        </header>
+
+        <section style={styles.card}>
+          <h2 style={styles.cardTitle}>📊 Equipment Inventory</h2>
+          <p style={styles.emptyText}>This section is ready to build next.</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (module === "equipment" && equipmentMode === "muster") {
+    const groupedMuster = parseMusterItems();
+    const totalItems = Object.values(groupedMuster).reduce((sum, items) => sum + items.length, 0);
+
+    return (
+      <main style={styles.page}>
+        <header style={styles.header}>
+          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
+          <div style={styles.headerActions}>
+            <button style={styles.backButton} onClick={() => setEquipmentMode("")}>← Back</button>
+            <div style={styles.shipBadge}>🚢 {userShip}</div>
+          </div>
+        </header>
+
+        <section style={styles.grid}>
+          <div style={styles.card}>
+            <h2 style={styles.cardTitle}>📤 Upload Equipment File</h2>
+
+            <label style={styles.label}>Equipment Muster List file</label>
+            <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadMusterFile} style={styles.fileInput} />
+
+            {musterMessage && <p style={styles.message}>{musterMessage}</p>}
+
+            <div style={styles.infoBox}>
+              <div>📋 Items loaded: <strong>{totalItems}</strong></div>
+              <div>🗂️ Sub categories: <strong>{Object.keys(groupedMuster).length}</strong></div>
+              <div>Column C = Sub Category</div>
+              <div>Column D = Code</div>
+              <div>Column E = Name</div>
+              <div>Column H = Picture Link</div>
+            </div>
+          </div>
+
+          <div style={styles.card}>
+            <h2 style={styles.cardTitle}>🔍 Search Equipment</h2>
+
+            <input
+              placeholder="Search equipment, code or category..."
+              value={musterSearch}
+              onChange={(e) => setMusterSearch(e.target.value)}
+              style={styles.searchInput}
+            />
+
+            <p style={styles.emptyText}>
+              Upload the muster file, then search by equipment name, code or sub category.
+            </p>
+          </div>
+        </section>
+
+        <section style={styles.card}>
+          <h2 style={styles.productTitle}>📋 Equipment Muster List</h2>
+
+          {musterRows.length === 0 && (
+            <p style={styles.emptyText}>Upload the Equipment Muster List file to begin.</p>
+          )}
+
+          {musterRows.length > 0 && totalItems === 0 && (
+            <p style={styles.emptyText}>No equipment found for this search.</p>
+          )}
+
+          {Object.entries(groupedMuster).map(([category, items]) => (
+            <div key={category} style={styles.equipmentCategory}>
+              <h3 style={styles.sectionTitle}>🗂️ {category}</h3>
+
+              <div style={styles.equipmentGrid}>
+                {items.map((item, index) => (
+                  <div key={`${item.code}-${index}`} style={styles.equipmentCard}>
+                    {item.image ? (
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        style={styles.equipmentImage}
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                        }}
+                      />
+                    ) : (
+                      <div style={styles.equipmentNoImage}>No image</div>
+                    )}
+
+                    <div style={styles.recipeName}>{item.name}</div>
+                    <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
+                    <div style={styles.recipeMeta}>Category: {category}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main style={styles.page}>
       <header style={styles.header}>
         <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
-        <div style={styles.shipBadge}>🚢 {userShip}</div>
+        <div style={styles.headerActions}>
+          <button style={styles.backButton} onClick={() => setModule("")}>← Modules</button>
+          <div style={styles.shipBadge}>🚢 {userShip}</div>
+        </div>
       </header>
 
       <div style={styles.viewModeBox}>
@@ -778,6 +992,19 @@ const styles = {
     marginBottom: 20,
   },
   headerLogo: { height: 54, objectFit: "contain" },
+  headerActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+  },
+  backButton: {
+    padding: "10px 14px",
+    borderRadius: 999,
+    border: "1px solid #ccc",
+    background: "#fff",
+    cursor: "pointer",
+    fontWeight: "bold",
+  },
   title: { margin: 0, fontSize: 28 },
   subtitle: { margin: 0, color: "#666" },
   label: { fontWeight: "bold", marginTop: 8 },
@@ -798,6 +1025,25 @@ const styles = {
     background: "#111",
     color: "#fff",
     fontWeight: "bold",
+  },
+  moduleGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+    gap: 16,
+  },
+  moduleCard: {
+    border: "1px solid #ddd",
+    background: "#fafafa",
+    borderRadius: 16,
+    padding: 20,
+    cursor: "pointer",
+    textAlign: "left",
+    display: "grid",
+    gap: 8,
+    boxShadow: "0 4px 12px rgba(0,0,0,0.04)",
+  },
+  moduleIcon: {
+    fontSize: 34,
   },
   viewModeBox: {
     display: "flex",
@@ -1026,5 +1272,37 @@ const styles = {
     background: "#fff9e8",
     borderRadius: 10,
     padding: 10,
+  },
+  equipmentCategory: {
+    marginBottom: 24,
+  },
+  equipmentGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 14,
+  },
+  equipmentCard: {
+    border: "1px solid #ddd",
+    borderRadius: 14,
+    padding: 14,
+    background: "#fafafa",
+    display: "grid",
+    gap: 8,
+  },
+  equipmentImage: {
+    width: "100%",
+    height: 150,
+    objectFit: "cover",
+    borderRadius: 10,
+    background: "#eee",
+  },
+  equipmentNoImage: {
+    height: 150,
+    borderRadius: 10,
+    background: "#eee",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#777",
   },
 };
