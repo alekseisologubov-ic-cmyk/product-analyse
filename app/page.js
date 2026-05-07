@@ -714,7 +714,7 @@ export default function App() {
       }}
     />
 
-    <a
+        <a
       href={item.image}
       target="_blank"
       rel="noreferrer"
@@ -726,7 +726,6 @@ export default function App() {
 ) : (
   <div style={styles.equipmentNoImage}>No image</div>
 )}
-
                     ) : (
                       <div style={styles.equipmentNoImage}>No image</div>
                     )}
@@ -778,7 +777,6 @@ export default function App() {
 ) : (
   <div style={styles.equipmentNoImage}>No image</div>
 )}
-
               </div>
             </div>
           )}
