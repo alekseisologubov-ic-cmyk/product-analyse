@@ -728,7 +728,7 @@ export default function App() {
 )}
                     ) : (
                       <div style={styles.equipmentNoImage}>No image</div>
-                    )}
+                    )
 
                     <div style={styles.recipeName}>{item.name}</div>
                     <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
