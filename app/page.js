@@ -1434,6 +1434,7 @@ const styles = {
     height: 34,
     cursor: "pointer",
     fontWeight: "bold",
+    },
     imageLink: {
     display: "none",
     marginTop: 8,
