@@ -1444,6 +1444,5 @@ const styles = {
   textAlign: "center",
   textDecoration: "none",
   fontWeight: "bold",
-},
   },
 };
