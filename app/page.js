@@ -47,9 +47,22 @@ const normalizeVenue = (value) =>
     .replace(/\s+/g, " ")
     .trim();
 
-const formatQty = (value) => Number(value || 0).toFixed(2);
 
-export default function App() {
+export default function App() {const formatQty = (value) => Number(value || 0).toFixed(2);
+
+const getImageUrl = (url) => {
+  const value = String(url || "").trim();
+  if (!value) return "";
+
+  if (value.includes("sharepoint.com") || value.includes("1drv.ms")) {
+    return value.includes("?")
+      ? `${value}&download=1`
+      : `${value}?download=1`;
+  }
+
+  return value;
+};
+                               
   const [consumptionRows, setConsumptionRows] = useState([]);
   const [recipeRows, setRecipeRows] = useState([]);
   const [templateMap, setTemplateMap] = useState({});
