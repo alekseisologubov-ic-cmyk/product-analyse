@@ -68,6 +68,7 @@ export default function App() {
 
   const [module, setModule] = useState("");
   const [equipmentMode, setEquipmentMode] = useState("");
+
   const [musterItems, setMusterItems] = useState([]);
   const [musterSearch, setMusterSearch] = useState("");
   const [musterMessage, setMusterMessage] = useState("");
@@ -80,6 +81,13 @@ export default function App() {
   const [inUseRows, setInUseRows] = useState([]);
   const [inUseSearch, setInUseSearch] = useState("");
   const [inUseMessage, setInUseMessage] = useState("");
+
+  const [makeInventoryItems, setMakeInventoryItems] = useState([]);
+  const [makeInventorySearch, setMakeInventorySearch] = useState("");
+  const [makeInventoryMessage, setMakeInventoryMessage] = useState("");
+  const [currentInventoryItem, setCurrentInventoryItem] = useState(null);
+  const [inventoryQty, setInventoryQty] = useState("");
+  const [inventorySummary, setInventorySummary] = useState([]);
 
   const shipColumns = { BRL: 8, RL: 11, SC: 14, VL: 17 };
 
@@ -154,7 +162,9 @@ export default function App() {
               productKey === "CODE" ||
               productKey === "UM" ||
               productKey.includes("#REF")
-            ) return;
+            ) {
+              return;
+            }
 
             if (!map[venueKey][productKey]) {
               map[venueKey][productKey] = { product, templates: new Set() };
@@ -253,6 +263,32 @@ export default function App() {
       });
   };
 
+  const getFilteredMakeInventoryItems = () => {
+    return makeInventoryItems.filter((item) =>
+      `${item.sheetName} ${item.category} ${item.code} ${item.name}`
+        .toLowerCase()
+        .includes(makeInventorySearch.toLowerCase())
+    );
+  };
+
+  const confirmInventoryQty = () => {
+    if (!currentInventoryItem) return;
+
+    const qty = Number(inventoryQty || 0);
+
+    setInventorySummary((prev) => [
+      ...prev,
+      {
+        ...currentInventoryItem,
+        qty,
+        confirmedAt: new Date().toLocaleString(),
+      },
+    ]);
+
+    setCurrentInventoryItem(null);
+    setInventoryQty("");
+  };
+
   const uploadConsumptionFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -317,6 +353,20 @@ export default function App() {
     readExcelFile(file, (workbook) => {
       setInUseRows(workbookToRows(workbook));
       setInUseMessage("Inventory in Use file loaded.");
+    });
+  };
+
+  const uploadMakeInventoryFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    readExcelFile(file, (workbook) => {
+      const items = parseMusterWorkbook(workbook);
+      setMakeInventoryItems(items);
+      setCurrentInventoryItem(null);
+      setInventoryQty("");
+      setInventorySummary([]);
+      setMakeInventoryMessage(`Master inventory loaded from ${workbook.SheetNames.length} sheet(s).`);
     });
   };
 
@@ -653,7 +703,7 @@ export default function App() {
             <button style={styles.moduleCard} onClick={() => setEquipmentMode("inventory")}>
               <div style={styles.moduleIcon}>📊</div>
               <strong>Equipment Inventory</strong>
-              <span>Inventory in use and warehouse stock</span>
+              <span>Inventory in use, warehouse stock and make inventory</span>
             </button>
           </div>
         </section>
@@ -687,6 +737,186 @@ export default function App() {
               <strong>Inventory Warehouse</strong>
               <span>Par, on hand, future order and suggested order</span>
             </button>
+
+            <button style={styles.moduleCard} onClick={() => setEquipmentMode("makeinventory")}>
+              <div style={styles.moduleIcon}>📝</div>
+              <strong>Make Inventory</strong>
+              <span>Open master list, confirm product, enter quantity and create summary</span>
+            </button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (module === "equipment" && equipmentMode === "makeinventory") {
+    const filteredMakeInventoryItems = getFilteredMakeInventoryItems();
+
+    return (
+      <main style={styles.page}>
+        <header style={styles.header}>
+          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
+          <div style={styles.headerActions}>
+            <button style={styles.backButton} onClick={() => setEquipmentMode("inventory")}>← Back</button>
+            <div style={styles.shipBadge}>🚢 {userShip}</div>
+          </div>
+        </header>
+
+        <section style={styles.grid}>
+          <div style={styles.card}>
+            <h2 style={styles.cardTitle}>📝 Make Inventory</h2>
+
+            <label style={styles.label}>Upload Master Inventory / Muster List</label>
+            <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadMakeInventoryFile} style={styles.fileInput} />
+
+            {makeInventoryMessage && <p style={styles.message}>{makeInventoryMessage}</p>}
+
+            <div style={styles.infoBox}>
+              <div>📋 Master items loaded: <strong>{makeInventoryItems.length}</strong></div>
+              <div>✅ Confirmed items: <strong>{inventorySummary.length}</strong></div>
+              <div>Click item → confirm picture/product → enter quantity → Confirm.</div>
+            </div>
+          </div>
+
+          <div style={styles.card}>
+            <h2 style={styles.cardTitle}>🔍 Search Product</h2>
+
+            <input
+              placeholder="Search code, name, category or sheet..."
+              value={makeInventorySearch}
+              onChange={(e) => setMakeInventorySearch(e.target.value)}
+              style={styles.searchInput}
+            />
+
+            <p style={styles.emptyText}>
+              Select the correct product from the master list.
+            </p>
+          </div>
+        </section>
+
+        <section style={styles.card}>
+          <h2 style={styles.productTitle}>📦 Select Product for Inventory</h2>
+
+          {makeInventoryItems.length === 0 && (
+            <p style={styles.emptyText}>Upload the master inventory file to begin.</p>
+          )}
+
+          <div style={styles.equipmentGrid}>
+            {filteredMakeInventoryItems.map((item, index) => (
+              <button
+                key={`${item.sheetName}-${item.code}-${index}`}
+                style={styles.equipmentCard}
+                onClick={() => {
+                  setCurrentInventoryItem(item);
+                  setInventoryQty("");
+                }}
+              >
+                {item.image ? (
+                  <div>
+                    <img
+                      src={getImageUrl(item.image)}
+                      alt={item.name}
+                      style={styles.equipmentImage}
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                        const link = e.currentTarget.nextElementSibling;
+                        if (link) link.style.display = "block";
+                      }}
+                    />
+                    <a href={item.image} target="_blank" rel="noreferrer" style={styles.imageLink}>
+                      Open Picture
+                    </a>
+                  </div>
+                ) : (
+                  <div style={styles.equipmentNoImage}>No image</div>
+                )}
+
+                <div style={styles.recipeName}>{item.name}</div>
+                <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
+                <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
+                <div style={styles.recipeMeta}>Category: {item.category}</div>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {currentInventoryItem && (
+          <section style={styles.card}>
+            <h2 style={styles.productTitle}>✅ Confirm Product</h2>
+
+            <div style={styles.grid}>
+              <div>
+                {currentInventoryItem.image ? (
+                  <div>
+                    <img
+                      src={getImageUrl(currentInventoryItem.image)}
+                      alt={currentInventoryItem.name}
+                      style={styles.modalImage}
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                        const link = e.currentTarget.nextElementSibling;
+                        if (link) link.style.display = "block";
+                      }}
+                    />
+                    <a href={currentInventoryItem.image} target="_blank" rel="noreferrer" style={styles.imageLink}>
+                      Open Picture
+                    </a>
+                  </div>
+                ) : (
+                  <div style={styles.equipmentNoImage}>No image</div>
+                )}
+              </div>
+
+              <div>
+                <h3>{currentInventoryItem.name}</h3>
+                <p><strong>Code:</strong> {currentInventoryItem.code || "N/A"}</p>
+                <p><strong>Sheet:</strong> {currentInventoryItem.sheetName}</p>
+                <p><strong>Category:</strong> {currentInventoryItem.category}</p>
+
+                <p style={styles.warningText}>Is this the correct product?</p>
+
+                <label style={styles.label}>Quantity counted</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={inventoryQty}
+                  onChange={(e) => setInventoryQty(e.target.value)}
+                  style={styles.searchInput}
+                  placeholder="Enter quantity..."
+                />
+
+                <div style={styles.headerActions}>
+                  <button style={styles.backButton} onClick={() => setCurrentInventoryItem(null)}>
+                    No / Back
+                  </button>
+
+                  <button style={styles.primaryButton} onClick={confirmInventoryQty}>
+                    Confirm Quantity
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        <section style={styles.card}>
+          <h2 style={styles.productTitle}>📄 Inventory Summary</h2>
+
+          {inventorySummary.length === 0 && (
+            <p style={styles.emptyText}>Confirmed quantities will appear here.</p>
+          )}
+
+          <div style={styles.equipmentGrid}>
+            {inventorySummary.map((item, index) => (
+              <div key={`${item.code}-${index}`} style={styles.equipmentCard}>
+                <div style={styles.recipeName}>{item.name}</div>
+                <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
+                <div style={styles.recipeMeta}>Category: {item.category}</div>
+                <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
+                <div style={styles.statusGood}>Quantity: {formatQty(item.qty)}</div>
+                <div style={styles.recipeMeta}>Confirmed: {item.confirmedAt}</div>
+              </div>
+            ))}
           </div>
         </section>
       </main>
