@@ -87,7 +87,7 @@ const [musterSearch, setMusterSearch] = useState("");
 const [musterMessage, setMusterMessage] = useState("");
 const [selectedEquipment, setSelectedEquipment] = useState(null);
 
-// ⬇️ ADD HERE
+// 
 const [warehouseRows, setWarehouseRows] = useState([]);
 const [warehouseSearch, setWarehouseSearch] = useState("");
 const [warehouseMessage, setWarehouseMessage] = useState("");
