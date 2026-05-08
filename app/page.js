@@ -79,7 +79,6 @@ const getImageUrl = (url) => {
   const [module, setModule] = useState("");
   const [equipmentMode, setEquipmentMode] = useState("");
   const [musterItems, setMusterItems] = useState([]);
-  const [musterItems, setMusterItems] = useState([]);
 const [musterSearch, setMusterSearch] = useState("");
 const [musterMessage, setMusterMessage] = useState("");
 const [selectedEquipment, setSelectedEquipment] = useState(null);
