@@ -248,7 +248,17 @@ const [warehouseMessage, setWarehouseMessage] = useState("");
     });
   };
 
-     const uploadWarehouseFile = (e) => {
+     const uploadTemplateFile = (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  readExcelFile(file, (workbook) => {
+    setTemplateMap(parseTemplateWorkbook(workbook));
+    setTemplateStatus("Custom template loaded.");
+  });
+};
+
+const uploadWarehouseFile = (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
 
@@ -257,7 +267,7 @@ const [warehouseMessage, setWarehouseMessage] = useState("");
     setWarehouseRows(rows);
     setWarehouseMessage("Warehouse inventory loaded.");
   });
-};                          
+};        
       const file = e.target.files?.[0];
     if (!file) return;
 
