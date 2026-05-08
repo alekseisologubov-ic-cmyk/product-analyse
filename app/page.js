@@ -77,10 +77,6 @@ export default function App() {
   const [warehouseSearch, setWarehouseSearch] = useState("");
   const [warehouseMessage, setWarehouseMessage] = useState("");
 
-  const [inUseRows, setInUseRows] = useState([]);
-  const [inUseSearch, setInUseSearch] = useState("");
-  const [inUseMessage, setInUseMessage] = useState("");
-
   const shipColumns = { BRL: 8, RL: 11, SC: 14, VL: 17 };
 
   useEffect(() => {
@@ -132,12 +128,14 @@ export default function App() {
 
       if (!map[venueKey]) map[venueKey] = {};
 
-      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
+      const sheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
       if (!rows.length) return;
 
       rows.forEach((row, rowIndex) => {
         row.forEach((cell, colIndex) => {
-          if (cleanText(cell) !== "INGREDIENT NAME") return;
+          const header = cleanText(cell);
+          if (header !== "INGREDIENT NAME") return;
 
           const templateName =
             String(rows[rowIndex - 1]?.[colIndex] || rows[rowIndex - 1]?.[colIndex - 1] || sheetName || "Template").trim();
@@ -154,7 +152,9 @@ export default function App() {
               productKey === "CODE" ||
               productKey === "UM" ||
               productKey.includes("#REF")
-            ) return;
+            ) {
+              return;
+            }
 
             if (!map[venueKey][productKey]) {
               map[venueKey][productKey] = { product, templates: new Set() };
@@ -179,7 +179,8 @@ export default function App() {
     const items = [];
 
     workbook.SheetNames.forEach((sheetName) => {
-      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
+      const sheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
       rows.slice(1).forEach((row) => {
         const category = String(row[2] || "").trim();
@@ -204,52 +205,16 @@ export default function App() {
         const name = String(row[1] || "").trim();
         const par = Number(row[6] || 0);
         const onHand = Number(row[7] || 0);
+        const image = String(row[8] || "").trim(); // Picture link in Column I
         const future = Number(row[12] || 0);
         const suggested = Math.max(par - onHand - future, 0);
 
-        return { code, name, par, onHand, future, suggested };
+        return { code, name, par, onHand, future, suggested, image };
       })
       .filter((item) => item.name || item.code)
-      .filter((item) => `${item.code} ${item.name}`.toLowerCase().includes(warehouseSearch.toLowerCase()));
-  };
-
-  const parseInUseItems = () => {
-    const actualMap = {};
-
-    inUseRows.slice(1).forEach((row) => {
-      const code = String(row[0] || "").trim();
-      const name = String(row[1] || "").trim();
-      const onHand = Number(row[7] || 0);
-
-      if (!code && !name) return;
-
-      actualMap[cleanText(code)] = { code, name, onHand };
-    });
-
-    return musterItems
-      .map((item) => {
-        const actual = actualMap[cleanText(item.code)];
-        const onHand = actual ? actual.onHand : 0;
-
-        let status = "Missing";
-        if (actual && onHand > 0) status = "In Use";
-        if (actual && onHand <= 0) status = "Zero Count";
-
-        return {
-          ...item,
-          actualName: actual?.name || "",
-          onHand,
-          status,
-        };
-      })
-      .filter((item) =>
-        `${item.sheetName} ${item.category} ${item.code} ${item.name} ${item.status}`
-          .toLowerCase()
-          .includes(inUseSearch.toLowerCase())
-      )
-      .sort((a, b) => {
-        const order = { Missing: 0, "Zero Count": 1, "In Use": 2 };
-        return order[a.status] - order[b.status];
+      .filter((item) => {
+        const query = warehouseSearch.toLowerCase();
+        return `${item.code} ${item.name}`.toLowerCase().includes(query);
       });
   };
 
@@ -305,18 +270,9 @@ export default function App() {
     if (!file) return;
 
     readExcelFile(file, (workbook) => {
-      setWarehouseRows(workbookToRows(workbook));
+      const rows = workbookToRows(workbook);
+      setWarehouseRows(rows);
       setWarehouseMessage("Warehouse inventory loaded.");
-    });
-  };
-
-  const uploadInUseFile = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    readExcelFile(file, (workbook) => {
-      setInUseRows(workbookToRows(workbook));
-      setInUseMessage("Inventory in Use file loaded.");
     });
   };
 
@@ -413,7 +369,8 @@ export default function App() {
 
     return result;
   };
-    const getCombinedVenueBreakdown = (product) => {
+
+  const getCombinedVenueBreakdown = (product) => {
     const actual = getConsumptionBreakdown(product);
     const required = getRequiredVenuesForProduct(product);
     const allVenueKeys = Array.from(new Set([...Object.keys(actual), ...Object.keys(required)])).sort();
@@ -583,13 +540,16 @@ export default function App() {
       <main style={styles.page}>
         <section style={styles.loginCard}>
           <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.logo} />
+
           <h1 style={styles.title}>Virgin Voyages Dashboard</h1>
           <p style={styles.subtitle}>Product and equipment tools</p>
 
           <label style={styles.label}>🚢 Select your ship</label>
           <select value={userShip} onChange={(e) => setUserShip(e.target.value)} style={styles.select}>
             <option value="">Choose ship</option>
-            {SHIPS.map((ship) => <option key={ship}>{ship}</option>)}
+            {SHIPS.map((ship) => (
+              <option key={ship}>{ship}</option>
+            ))}
           </select>
 
           <button style={styles.primaryButton} onClick={() => userShip && setLoggedIn(true)}>
@@ -647,7 +607,7 @@ export default function App() {
             <button style={styles.moduleCard} onClick={() => setEquipmentMode("muster")}>
               <div style={styles.moduleIcon}>📋</div>
               <strong>Equipment Muster List</strong>
-              <span>Grouped by all sheets and sub categories</span>
+              <span>Grouped by all sheets and sub categories with code, name and image</span>
             </button>
 
             <button style={styles.moduleCard} onClick={() => setEquipmentMode("inventory")}>
@@ -679,13 +639,13 @@ export default function App() {
             <button style={styles.moduleCard} onClick={() => setEquipmentMode("inuse")}>
               <div style={styles.moduleIcon}>✅</div>
               <strong>Inventory in Use</strong>
-              <span>Compare muster list against in-use inventory</span>
+              <span>Coming next</span>
             </button>
 
             <button style={styles.moduleCard} onClick={() => setEquipmentMode("warehouse")}>
               <div style={styles.moduleIcon}>🏬</div>
               <strong>Inventory Warehouse</strong>
-              <span>Par, on hand, future order and suggested order</span>
+              <span>Par level, on hand, future order and suggested next order</span>
             </button>
           </div>
         </section>
@@ -694,11 +654,6 @@ export default function App() {
   }
 
   if (module === "equipment" && equipmentMode === "inuse") {
-    const inUseItems = parseInUseItems();
-    const missingItems = inUseItems.filter((item) => item.status === "Missing");
-    const zeroItems = inUseItems.filter((item) => item.status === "Zero Count");
-    const activeItems = inUseItems.filter((item) => item.status === "In Use");
-
     return (
       <main style={styles.page}>
         <header style={styles.header}>
@@ -709,98 +664,9 @@ export default function App() {
           </div>
         </header>
 
-        <section style={styles.grid}>
-          <div style={styles.card}>
-            <h2 style={styles.cardTitle}>📤 Upload Inventory in Use</h2>
-
-            <label style={styles.label}>Step 1: Equipment Muster List file</label>
-            <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadMusterFile} style={styles.fileInput} />
-
-            <label style={styles.label}>Step 2: Inventory in Use file</label>
-            <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadInUseFile} style={styles.fileInput} />
-
-            {musterMessage && <p style={styles.message}>{musterMessage}</p>}
-            {inUseMessage && <p style={styles.message}>{inUseMessage}</p>}
-
-            <div style={styles.infoBox}>
-              <div>❌ Missing from Inventory: <strong>{missingItems.length}</strong></div>
-              <div>⚠️ Zero Count: <strong>{zeroItems.length}</strong></div>
-              <div>✅ In Use: <strong>{activeItems.length}</strong></div>
-              <div>Muster: C = Category, D = Code, E = Name</div>
-              <div>In Use: A = Code, B = Name, H = On Hand</div>
-            </div>
-          </div>
-
-          <div style={styles.card}>
-            <h2 style={styles.cardTitle}>🔍 Search Inventory in Use</h2>
-
-            <input
-              placeholder="Search code, name, category, sheet or status..."
-              value={inUseSearch}
-              onChange={(e) => setInUseSearch(e.target.value)}
-              style={styles.searchInput}
-            />
-
-            <p style={styles.emptyText}>
-              Missing items are shown first in red under Missing from Inventory.
-            </p>
-          </div>
-        </section>
-
         <section style={styles.card}>
-          <h2 style={{ ...styles.productTitle, color: "#b00020" }}>❌ Missing from Inventory</h2>
-
-          {musterItems.length === 0 && <p style={styles.emptyText}>Upload the Equipment Muster List first.</p>}
-          {inUseRows.length === 0 && <p style={styles.emptyText}>Upload the Inventory in Use file to compare.</p>}
-          {musterItems.length > 0 && inUseRows.length > 0 && missingItems.length === 0 && (
-            <p style={styles.emptyText}>No missing items found.</p>
-          )}
-
-          <div style={styles.equipmentGrid}>
-            {missingItems.map((item, i) => (
-              <div key={`${item.code}-missing-${i}`} style={{ ...styles.equipmentCard, ...styles.orderWarningCard }}>
-                <div style={styles.recipeName}>{item.name || "Unnamed Item"}</div>
-                <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
-                <div style={styles.recipeMeta}>Category: {item.category}</div>
-                <div style={styles.statusBad}>Missing</div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section style={styles.card}>
-          <h2 style={{ ...styles.productTitle, color: "#8a5a00" }}>⚠️ Zero Count</h2>
-
-          <div style={styles.equipmentGrid}>
-            {zeroItems.map((item, i) => (
-              <div key={`${item.code}-zero-${i}`} style={{ ...styles.equipmentCard, ...styles.zeroCountCard }}>
-                <div style={styles.recipeName}>{item.name || "Unnamed Item"}</div>
-                <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
-                <div style={styles.recipeMeta}>Category: {item.category}</div>
-                <div style={styles.recipeMeta}>On Hand: {formatQty(item.onHand)}</div>
-                <div style={styles.statusWarning}>Zero Count</div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section style={styles.card}>
-          <h2 style={{ ...styles.productTitle, color: "#2e7d32" }}>✅ In Use</h2>
-
-          <div style={styles.equipmentGrid}>
-            {activeItems.map((item, i) => (
-              <div key={`${item.code}-active-${i}`} style={styles.equipmentCard}>
-                <div style={styles.recipeName}>{item.name || "Unnamed Item"}</div>
-                <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
-                <div style={styles.recipeMeta}>Category: {item.category}</div>
-                <div style={styles.recipeMeta}>On Hand: {formatQty(item.onHand)}</div>
-                <div style={styles.statusGood}>In Use</div>
-              </div>
-            ))}
-          </div>
+          <h2 style={styles.cardTitle}>✅ Inventory in Use</h2>
+          <p style={styles.emptyText}>This section is ready to build next.</p>
         </section>
       </main>
     );
@@ -824,6 +690,7 @@ export default function App() {
         <section style={styles.grid}>
           <div style={styles.card}>
             <h2 style={styles.cardTitle}>📤 Upload Warehouse Inventory</h2>
+
             <label style={styles.label}>Warehouse inventory file</label>
             <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadWarehouseFile} style={styles.fileInput} />
 
@@ -833,30 +700,71 @@ export default function App() {
               <div>📦 Items loaded: <strong>{warehouseItems.length}</strong></div>
               <div>🚨 Items needing order: <strong>{criticalItems}</strong></div>
               <div>🛒 Total suggested order: <strong>{formatQty(totalSuggested)}</strong></div>
-              <div>A = Code, B = Name, G = Par, H = On Hand, M = Future Order</div>
+              <div>Column A = Code</div>
+              <div>Column B = Name</div>
+              <div>Column G = Par Level</div>
+              <div>Column H = Quantity On Hand</div>
+              <div>Column I = Picture Link</div>
+              <div>Column M = Future Order</div>
             </div>
           </div>
 
           <div style={styles.card}>
             <h2 style={styles.cardTitle}>🔍 Search Warehouse</h2>
+
             <input
               placeholder="Search code or equipment name..."
               value={warehouseSearch}
               onChange={(e) => setWarehouseSearch(e.target.value)}
               style={styles.searchInput}
             />
-            <p style={styles.emptyText}>Suggested Next Order = Par Level - On Hand - Future Order. Minimum is 0.</p>
+
+            <p style={styles.emptyText}>
+              Suggested Next Order = Par Level - On Hand - Future Order. Minimum result is 0.
+            </p>
           </div>
         </section>
 
         <section style={styles.card}>
           <h2 style={styles.productTitle}>🏬 Inventory Warehouse</h2>
 
-          {warehouseRows.length === 0 && <p style={styles.emptyText}>Upload the warehouse inventory file to begin.</p>}
+          {warehouseRows.length === 0 && (
+            <p style={styles.emptyText}>Upload the warehouse inventory file to begin.</p>
+          )}
+
+          {warehouseRows.length > 0 && warehouseItems.length === 0 && (
+            <p style={styles.emptyText}>No warehouse items found for this search.</p>
+          )}
 
           <div style={styles.equipmentGrid}>
             {warehouseItems.map((item, i) => (
-              <div key={`${item.code}-${i}`} style={{ ...styles.equipmentCard, ...(item.suggested > 0 ? styles.orderWarningCard : {}) }}>
+              <div
+                key={`${item.code}-${i}`}
+                style={{
+                  ...styles.equipmentCard,
+                  ...(item.suggested > 0 ? styles.orderWarningCard : {}),
+                }}
+              >
+                {item.image ? (
+                  <div>
+                    <img
+                      src={getImageUrl(item.image)}
+                      alt={item.name}
+                      style={styles.equipmentImage}
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                        const link = e.currentTarget.nextElementSibling;
+                        if (link) link.style.display = "block";
+                      }}
+                    />
+
+                    <a href={item.image} target="_blank" rel="noreferrer" style={styles.imageLink}>
+                      Open Picture
+                    </a>
+                  </div>
+                ) : (
+                  <div style={styles.equipmentNoImage}>No image</div>
+                )}
                 <div style={styles.recipeName}>{item.name || "Unnamed Item"}</div>
                 <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
                 <div style={styles.recipeMeta}>Par Level: {formatQty(item.par)}</div>
@@ -890,6 +798,7 @@ export default function App() {
         <section style={styles.grid}>
           <div style={styles.card}>
             <h2 style={styles.cardTitle}>📤 Upload Equipment File</h2>
+
             <label style={styles.label}>Equipment Muster List file</label>
             <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadMusterFile} style={styles.fileInput} />
 
@@ -899,26 +808,39 @@ export default function App() {
               <div>📋 Items loaded: <strong>{totalItems}</strong></div>
               <div>📄 Sheets included: <strong>{[...new Set(musterItems.map((i) => i.sheetName))].length}</strong></div>
               <div>🗂️ Groups: <strong>{Object.keys(groupedMuster).length}</strong></div>
-              <div>C = Sub Category, D = Code, E = Name, H = Picture Link</div>
+              <div>Column C = Sub Category</div>
+              <div>Column D = Code</div>
+              <div>Column E = Name</div>
+              <div>Column H = Picture Link</div>
             </div>
           </div>
 
           <div style={styles.card}>
             <h2 style={styles.cardTitle}>🔍 Search Equipment</h2>
+
             <input
               placeholder="Search equipment, code, sheet or sub category..."
               value={musterSearch}
               onChange={(e) => setMusterSearch(e.target.value)}
               style={styles.searchInput}
             />
-            <p style={styles.emptyText}>Click any equipment card to open the picture and full details.</p>
+
+            <p style={styles.emptyText}>
+              Click any equipment card to open the picture and full details.
+            </p>
           </div>
         </section>
 
         <section style={styles.card}>
           <h2 style={styles.productTitle}>📋 Equipment Muster List</h2>
 
-          {musterItems.length === 0 && <p style={styles.emptyText}>Upload the Equipment Muster List file to begin.</p>}
+          {musterItems.length === 0 && (
+            <p style={styles.emptyText}>Upload the Equipment Muster List file to begin.</p>
+          )}
+
+          {musterItems.length > 0 && totalItems === 0 && (
+            <p style={styles.emptyText}>No equipment found for this search.</p>
+          )}
 
           {Object.entries(groupedMuster).map(([category, items]) => (
             <div key={category} style={styles.equipmentCategory}>
@@ -943,7 +865,10 @@ export default function App() {
                             if (link) link.style.display = "block";
                           }}
                         />
-                        <a href={item.image} target="_blank" rel="noreferrer" style={styles.imageLink}>Open Picture</a>
+
+                        <a href={item.image} target="_blank" rel="noreferrer" style={styles.imageLink}>
+                          Open Picture
+                        </a>
                       </div>
                     ) : (
                       <div style={styles.equipmentNoImage}>No image</div>
@@ -962,7 +887,9 @@ export default function App() {
           {selectedEquipment && (
             <div style={styles.modalBackdrop} onClick={() => setSelectedEquipment(null)}>
               <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
-                <button style={styles.closeButton} onClick={() => setSelectedEquipment(null)}>✕</button>
+                <button style={styles.closeButton} onClick={() => setSelectedEquipment(null)}>
+                  ✕
+                </button>
 
                 <h2>{selectedEquipment.name}</h2>
                 <p><strong>Code:</strong> {selectedEquipment.code || "N/A"}</p>
@@ -981,7 +908,10 @@ export default function App() {
                         if (link) link.style.display = "block";
                       }}
                     />
-                    <a href={selectedEquipment.image} target="_blank" rel="noreferrer" style={styles.imageLink}>Open Picture</a>
+
+                    <a href={selectedEquipment.image} target="_blank" rel="noreferrer" style={styles.imageLink}>
+                      Open Picture
+                    </a>
                   </div>
                 ) : (
                   <div style={styles.equipmentNoImage}>No image</div>
@@ -1005,11 +935,17 @@ export default function App() {
       </header>
 
       <div style={styles.viewModeBox}>
-        <button onClick={() => setViewMode("single")} style={{ ...styles.viewModeButton, ...(viewMode === "single" ? styles.viewModeButtonActive : {}) }}>
+        <button
+          onClick={() => setViewMode("single")}
+          style={{ ...styles.viewModeButton, ...(viewMode === "single" ? styles.viewModeButtonActive : {}) }}
+        >
           🚢 {userShip} Only
         </button>
 
-        <button onClick={() => setViewMode("all")} style={{ ...styles.viewModeButton, ...(viewMode === "all" ? styles.viewModeButtonActive : {}) }}>
+        <button
+          onClick={() => setViewMode("all")}
+          style={{ ...styles.viewModeButton, ...(viewMode === "all" ? styles.viewModeButtonActive : {}) }}
+        >
           🌍 All Ships Overview
         </button>
       </div>
@@ -1040,6 +976,7 @@ export default function App() {
 
         <div style={styles.card}>
           <h2 style={styles.cardTitle}>🔍 Select Product</h2>
+
           <input placeholder="Search product..." value={search} onChange={(e) => setSearch(e.target.value)} style={styles.searchInput} />
 
           <div style={styles.productList}>
@@ -1062,6 +999,7 @@ export default function App() {
       {selectedProduct && (
         <section style={styles.card}>
           <h2 style={styles.productTitle}>📦 {selectedProduct}</h2>
+
           <h3 style={styles.sectionTitle}>📊 Total Consumption</h3>
 
           <div style={styles.totalBox}>
@@ -1084,16 +1022,27 @@ export default function App() {
 
           <div style={styles.venueGrid}>
             {combinedBreakdown.map((venueItem, i) => (
-              <div key={i} style={{ ...styles.venueCard, ...(venueItem.missingShips.length > 0 ? styles.venueCardWarning : {}), ...(venueItem.missingFromTemplate ? styles.venueCardTemplateWarning : {}) }}>
+              <div
+                key={i}
+                style={{
+                  ...styles.venueCard,
+                  ...(venueItem.missingShips.length > 0 ? styles.venueCardWarning : {}),
+                  ...(venueItem.missingFromTemplate ? styles.venueCardTemplateWarning : {}),
+                }}
+              >
                 <h4 style={styles.venueTitle}>
                   {venueItem.displayName}
                   <span style={styles.badgeGroup}>
                     {venueItem.missingFromTemplate && <span style={styles.templateBadge}>Missing Template</span>}
-                    {venueItem.missingShips.length > 0 && <span style={styles.missingBadge}>Missing: {venueItem.missingShips.join(", ")}</span>}
+                    {venueItem.missingShips.length > 0 && (
+                      <span style={styles.missingBadge}>Missing: {venueItem.missingShips.join(", ")}</span>
+                    )}
                   </span>
                 </h4>
 
-                {venueItem.templateMatches.length > 0 && <div style={styles.templateFound}>Template/Menu: {venueItem.templateMatches.join(", ")}</div>}
+                {venueItem.templateMatches.length > 0 && (
+                  <div style={styles.templateFound}>Template/Menu: {venueItem.templateMatches.join(", ")}</div>
+                )}
 
                 {venueItem.missingFromTemplate && (
                   <div style={styles.templateWarningText}>
@@ -1106,7 +1055,14 @@ export default function App() {
                     const isMissing = venueItem.required && (venueItem.ships[ship] || 0) === 0;
 
                     return (
-                      <div key={ship} style={{ ...styles.shipBox, ...(ship === userShip ? styles.shipBoxActive : {}), ...(isMissing ? styles.shipBoxMissing : {}) }}>
+                      <div
+                        key={ship}
+                        style={{
+                          ...styles.shipBox,
+                          ...(ship === userShip ? styles.shipBoxActive : {}),
+                          ...(isMissing ? styles.shipBoxMissing : {}),
+                        }}
+                      >
                         <span style={styles.shipName}>{ship}</span>
                         <strong style={styles.shipQty}>{formatQty(venueItem.ships[ship])}</strong>
                       </div>
@@ -1115,7 +1071,9 @@ export default function App() {
                 </div>
 
                 {venueItem.missingShips.length > 0 && (
-                  <div style={styles.warningSmall}>Product appears in recipe/location file for this venue, but usage is 0 for highlighted ship(s).</div>
+                  <div style={styles.warningSmall}>
+                    Product appears in recipe/location file for this venue, but usage is 0 for highlighted ship(s).
+                  </div>
                 )}
               </div>
             ))}
@@ -1128,7 +1086,11 @@ export default function App() {
 
           <div style={styles.recipeList}>
             {recipesForProduct.map((recipe, i) => (
-              <button key={i} onClick={() => setSelectedRecipe(recipe)} style={{ ...styles.recipeCard, ...(selectedRecipe?.key === recipe.key ? styles.recipeCardActive : {}) }}>
+              <button
+                key={i}
+                onClick={() => setSelectedRecipe(recipe)}
+                style={{ ...styles.recipeCard, ...(selectedRecipe?.key === recipe.key ? styles.recipeCardActive : {}) }}
+              >
                 <div style={styles.recipeName}>{recipe.recipeName}</div>
                 <div style={styles.recipeMeta}>Code: {recipe.recipeCode}</div>
                 <div style={styles.recipeMeta}>Venues: {recipe.venues.length ? recipe.venues.join(", ") : "N/A"}</div>
@@ -1151,9 +1113,12 @@ export default function App() {
                     return (
                       <li key={i} style={{ marginBottom: 10 }}>
                         <strong>{product}</strong>
+
                         {subIngredients.length > 0 && (
                           <ul style={styles.subRecipeList}>
-                            {subIngredients.map((subItem, j) => <li key={j}>{subItem}</li>)}
+                            {subIngredients.map((subItem, j) => (
+                              <li key={j}>{subItem}</li>
+                            ))}
                           </ul>
                         )}
                       </li>
@@ -1173,7 +1138,9 @@ export default function App() {
                     <div key={i} style={styles.allergenCard}>
                       <strong>{item.allergen}</strong>
                       <ul>
-                        {item.products.map((product, j) => <li key={j}>{product}</li>)}
+                        {item.products.map((product, j) => (
+                          <li key={j}>{product}</li>
+                        ))}
                       </ul>
                     </div>
                   ))}
@@ -1262,10 +1229,6 @@ const styles = {
   closeButton: { position: "absolute", top: 12, right: 12, border: 0, background: "#111", color: "#fff", borderRadius: 999, width: 34, height: 34, cursor: "pointer", fontWeight: "bold" },
   imageLink: { display: "none", marginTop: 8, padding: 10, borderRadius: 10, background: "#111", color: "#fff", textAlign: "center", textDecoration: "none", fontWeight: "bold" },
   orderWarningCard: { border: "2px solid #b00020", background: "#fff0f0" },
-  zeroCountCard: { border: "2px solid #8a5a00", background: "#fff8e1" },
   suggestedOrderBad: { marginTop: 8, padding: 8, borderRadius: 10, background: "#b00020", color: "#fff", fontWeight: "bold", textAlign: "center" },
   suggestedOrderGood: { marginTop: 8, padding: 8, borderRadius: 10, background: "#e8f5e9", color: "#2e7d32", fontWeight: "bold", textAlign: "center" },
-  statusGood: { marginTop: 8, padding: 8, borderRadius: 10, background: "#e8f5e9", color: "#2e7d32", fontWeight: "bold", textAlign: "center" },
-  statusWarning: { marginTop: 8, padding: 8, borderRadius: 10, background: "#fff4d6", color: "#8a5a00", fontWeight: "bold", textAlign: "center" },
-  statusBad: { marginTop: 8, padding: 8, borderRadius: 10, background: "#b00020", color: "#fff", fontWeight: "bold", textAlign: "center" },
 };
