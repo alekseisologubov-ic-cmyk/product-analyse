@@ -82,12 +82,11 @@ const getImageUrl = (url) => {
   const [musterSearch, setMusterSearch] = useState("");
   const [musterMessage, setMusterMessage] = useState("");
   const [selectedEquipment, setSelectedEquipment] = useState(null);
-                               const [musterItems, setMusterItems] = useState([]);
+  const [musterItems, setMusterItems] = useState([]);
 const [musterSearch, setMusterSearch] = useState("");
 const [musterMessage, setMusterMessage] = useState("");
 const [selectedEquipment, setSelectedEquipment] = useState(null);
 
-// 
 const [warehouseRows, setWarehouseRows] = useState([]);
 const [warehouseSearch, setWarehouseSearch] = useState("");
 const [warehouseMessage, setWarehouseMessage] = useState("");
