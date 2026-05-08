@@ -1160,7 +1160,6 @@ const uploadWarehouseFile = (e) => {
     </section>
   </main>
 );
-}
 const styles = {
   page: {
     minHeight: "100vh",
