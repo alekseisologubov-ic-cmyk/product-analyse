@@ -1081,10 +1081,23 @@ const uploadWarehouseFile = (e) => {
           )}
         </section>
       )}
-    return (
+   return (
+  <main style={styles.page}>
+
+    {/* your upload section */}
+    <section style={styles.grid}>
+      ...
+    </section>
+
+    {/* your selected product */}
+    {selectedProduct && (
+      <section style={styles.card}>
+        ...
+      </section>
+    )}
+
   </main>
 );
-}
 
 const styles = {
   page: {
