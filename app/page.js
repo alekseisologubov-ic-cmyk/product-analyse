@@ -115,8 +115,7 @@ export default function App() {
         const order = { Missing: 0, "Zero Count": 1, "In Use": 2 };
         return order[a.status] - order[b.status];
       });
-  };
-    if (!loggedIn) {
+  };  if (!loggedIn) {
     return (
       <main style={styles.page}>
         <div style={styles.card}>
