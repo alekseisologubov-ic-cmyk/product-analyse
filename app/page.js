@@ -1081,8 +1081,10 @@ const uploadWarehouseFile = (e) => {
           )}
         </section>
       )}
-    </main>
-  );
+    return (
+  </main>
+);
+}
 
 const styles = {
   page: {
