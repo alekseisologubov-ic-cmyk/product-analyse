@@ -717,7 +717,7 @@ const getImageUrl = (url) => {
                     {item.image ? (
   <div>
     <img
-      src={item.image}
+      src={getImageUrl(item.image)}
       alt={item.name}
       style={styles.equipmentImage}
       onError={(e) => {
