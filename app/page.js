@@ -248,8 +248,17 @@ const [warehouseMessage, setWarehouseMessage] = useState("");
     });
   };
 
-  const uploadTemplateFile = (e) => {
-    const file = e.target.files?.[0];
+     const uploadWarehouseFile = (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  readExcelFile(file, (workbook) => {
+    const rows = workbookToRows(workbook);
+    setWarehouseRows(rows);
+    setWarehouseMessage("Warehouse inventory loaded.");
+  });
+};                          
+      const file = e.target.files?.[0];
     if (!file) return;
 
     readExcelFile(file, (workbook) => {
