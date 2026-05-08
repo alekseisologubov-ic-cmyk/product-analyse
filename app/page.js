@@ -267,15 +267,7 @@ const uploadWarehouseFile = (e) => {
     setWarehouseRows(rows);
     setWarehouseMessage("Warehouse inventory loaded.");
   });
-};        
-      const file = e.target.files?.[0];
-    if (!file) return;
-
-    readExcelFile(file, (workbook) => {
-      setTemplateMap(parseTemplateWorkbook(workbook));
-      setTemplateStatus("Custom template loaded.");
-    });
-  };
+};
 
   const uploadMusterFile = (e) => {
     const file = e.target.files?.[0];
