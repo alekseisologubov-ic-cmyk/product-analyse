@@ -82,6 +82,15 @@ const getImageUrl = (url) => {
   const [musterSearch, setMusterSearch] = useState("");
   const [musterMessage, setMusterMessage] = useState("");
   const [selectedEquipment, setSelectedEquipment] = useState(null);
+                               const [musterItems, setMusterItems] = useState([]);
+const [musterSearch, setMusterSearch] = useState("");
+const [musterMessage, setMusterMessage] = useState("");
+const [selectedEquipment, setSelectedEquipment] = useState(null);
+
+// ⬇️ ADD HERE
+const [warehouseRows, setWarehouseRows] = useState([]);
+const [warehouseSearch, setWarehouseSearch] = useState("");
+const [warehouseMessage, setWarehouseMessage] = useState("");
 
   const shipColumns = { BRL: 8, RL: 11, SC: 14, VL: 17 };
 
