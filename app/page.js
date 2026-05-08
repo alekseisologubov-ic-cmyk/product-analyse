@@ -1083,7 +1083,6 @@ const uploadWarehouseFile = (e) => {
       )}
     </main>
   );
-}
 
 const styles = {
   page: {
