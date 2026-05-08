@@ -729,7 +729,7 @@ const uploadWarehouseFile = (e) => {
                     style={styles.equipmentCard}
                     onClick={() => setSelectedEquipment(item)}
                   >
-                    {item.image ? (
+                   {item.image ? (
   <div>
     <img
       src={getImageUrl(item.image)}
@@ -742,7 +742,7 @@ const uploadWarehouseFile = (e) => {
       }}
     />
 
-        <a
+    <a
       href={item.image}
       target="_blank"
       rel="noreferrer"
