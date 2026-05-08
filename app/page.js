@@ -1148,10 +1148,9 @@ const uploadWarehouseFile = (e) => {
             </button>
           ))}
         </div>
-      </div>
-    </section>
-  </main>
- );
+      )}
+    </main>
+  );
 }
 
 const styles = {
