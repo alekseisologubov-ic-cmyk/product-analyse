@@ -1083,17 +1083,81 @@ const uploadWarehouseFile = (e) => {
       )}
    return (
   <main style={styles.page}>
+    <header style={styles.header}>
+      <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
+      <div style={styles.headerActions}>
+        <button style={styles.backButton} onClick={() => setModule("")}>← Modules</button>
+        <div style={styles.shipBadge}>🚢 {userShip}</div>
+      </div>
+    </header>
 
-    {/* your upload section */}
+    <div style={styles.viewModeBox}>
+      <button
+        onClick={() => setViewMode("single")}
+        style={{
+          ...styles.viewModeButton,
+          ...(viewMode === "single" ? styles.viewModeButtonActive : {}),
+        }}
+      >
+        🚢 {userShip} Only
+      </button>
+
+      <button
+        onClick={() => setViewMode("all")}
+        style={{
+          ...styles.viewModeButton,
+          ...(viewMode === "all" ? styles.viewModeButtonActive : {}),
+        }}
+      >
+        🌍 All Ships Overview
+      </button>
+    </div>
+
     <section style={styles.grid}>
+      <div style={styles.card}>
+        <h2 style={styles.cardTitle}>📤 Upload Files</h2>
+
+        <label style={styles.label}>Step 1: Consumption file</label>
+        <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadConsumptionFile} style={styles.fileInput} />
+
+        <label style={styles.label}>Step 2: Recipe / location file</label>
+        <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadRecipeFile} style={styles.fileInput} />
+
+        <label style={styles.label}>Optional: Replace template file</label>
+        <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadTemplateFile} style={styles.fileInput} />
+
+        {message && <p style={styles.message}>{message}</p>}
+
+        <div style={styles.infoBox}>
+          <div>📦 Products loaded: <strong>{products.length}</strong></div>
+          <div>📘 Recipe rows loaded: <strong>{Math.max(recipeRows.length - 1, 0)}</strong></div>
+          <div>📋 Template: <strong>{templateStatus}</strong></div>
+        </div>
+      </div>
+
+      <div style={styles.card}>
+        <h2 style={styles.cardTitle}>🔍 Select Product</h2>
+
+        <input
+          placeholder="Search product..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={styles.searchInput}
+        />
+
+        <div style={styles.productList}>
+          {products.map((product, i) => (
+            <button
+              key={i}
+              onClick={() => setSelectedProduct(product)}
+              style={styles.productItem}
+            >
+              {product}
+            </button>
+          ))}
+        </div>
+      </div>
     </section>
-
-    {/* your selected product */}
-    {selectedProduct && (
-      <section style={styles.card}>
-      </section>
-    )}
-
   </main>
 );
 
