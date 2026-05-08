@@ -1031,49 +1031,7 @@ const uploadWarehouseFile = (e) => {
                   {productsInRecipe.map((product, i) => {
                     const subIngredients = getSubRecipeIngredients(product);
 
-                    return (
-                      <li key={i} style={{ marginBottom: 10 }}>
-                        <strong>{product}</strong>
-
-                        {subIngredients.length > 0 && (
-                          <ul style={styles.subRecipeList}>
-                            {subIngredients.map((subItem, j) => (
-                              <li key={j}>{subItem}</li>
-                            ))}
-                          </ul>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-
-              <h3 style={styles.sectionTitle}>⚠️ Rule-Based Allergen Warning</h3>
-              <p style={styles.warningText}>
-                This is a keyword-based warning only. Verify against official allergen data before use.
-              </p>
-
-              {allergenWarnings.length === 0 ? (
-                <p style={styles.emptyText}>No likely allergens detected by keyword rules.</p>
-              ) : (
-                <div style={styles.allergenList}>
-                  {allergenWarnings.map((item, i) => (
-                    <div key={i} style={styles.allergenCard}>
-                      <strong>{item.allergen}</strong>
-                      <ul>
-                        {item.products.map((product, j) => (
-                          <li key={j}>{product}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-      )}
-  {item.image ? (
+{item.image ? (
   <div>
     <img
       src={getImageUrl(item.image)}
@@ -1098,9 +1056,9 @@ const uploadWarehouseFile = (e) => {
 ) : (
   <div style={styles.equipmentNoImage}>No image</div>
 )}
-                    ) : (
-                      <div style={styles.equipmentNoImage}>No image</div>
-                    )
+</main>
+  );
+}
 
 const styles = {
   page: {
