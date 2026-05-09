@@ -1646,91 +1646,291 @@ export default function App() {
     return periodStart <= planningEnd && periodEnd >= planningStart;
   };
 
-  const buildCrewRotationRows = (crew, planningStart, planningEnd) => {
-    const rows = [];
+  const getCrewRoleKey = (crew) => `${getScheduleRuleKey(crew.sheetName)}|${cleanText(crew.position || "")}`;
+
+  const createScheduleRow = ({
+    crew,
+    periodType,
+    startDate,
+    endDate,
+    shipCode,
+    status,
+    notes,
+    previousShip = "",
+    replacementFor = "",
+    replacementForId = "",
+  }) => ({
+    id: `${crew.id}-${periodType}-${shipCode || crew.shipCode}-${formatDate(startDate) || "missing"}-${replacementForId || ""}`,
+    ship: shipCode || crew.shipCode,
+    shipName: getShipDisplayName(shipCode || crew.shipCode),
+    sheetName: crew.sheetName,
+    position: crew.position,
+    idNumber: crew.idNumber,
+    name: crew.name,
+    periodType,
+    startDate: formatDate(startDate),
+    endDate: formatDate(endDate),
+    rotationRule: crew.rotationRule,
+    status,
+    previousShip,
+    replacementFor,
+    notes,
+  });
+
+  const getCrewInitialContractDates = (crew) => {
+    const contractMonths = Number(crew.contractMonths || 4);
     let contractStart = parseExcelDate(crew.contractStart || crew.signOnDate);
     let contractEnd = parseExcelDate(crew.contractEnd || crew.signOffDate);
-    const contractMonths = Number(crew.contractMonths || 4);
 
-    if (!contractStart) {
-      rows.push({
-        id: `${crew.id}-missing-dates`,
-        ship: crew.shipCode,
-        shipName: crew.shipName,
-        sheetName: crew.sheetName,
-        position: crew.position,
-        idNumber: crew.idNumber,
-        name: crew.name,
-        periodType: "Missing Dates",
-        startDate: "",
-        endDate: "",
-        rotationRule: crew.rotationRule,
-        status: "Missing sign-on date",
-        notes: "Check column F or highlighted contract cells between I and IP.",
-      });
-      return rows;
-    }
+    if (!contractStart) return { contractStart: null, contractEnd: null };
 
     if (!contractEnd || contractEnd < contractStart) {
       contractEnd = addDays(addMonths(contractStart, contractMonths), -1);
     }
 
-    let guard = 0;
-    while (contractEnd < planningStart && guard < 30) {
-      const vacationStart = addDays(contractEnd, 1);
-      const vacationEnd = getVacationEndDate(vacationStart, crew);
-      contractStart = addDays(vacationEnd, 1);
-      contractEnd = addDays(addMonths(contractStart, contractMonths), -1);
-      guard += 1;
-    }
+    return { contractStart, contractEnd };
+  };
 
-    guard = 0;
-    while (contractStart <= planningEnd && guard < 30) {
-      if (periodOverlaps(contractStart, contractEnd, planningStart, planningEnd)) {
+  const getVacationPeriodAfterContract = (crew, contractEnd) => {
+    if (!contractEnd) return { vacationStart: null, vacationEnd: null, availableDate: null };
+
+    const vacationStart = addDays(contractEnd, 1);
+    const vacationEnd = getVacationEndDate(vacationStart, crew);
+
+    // The rotation sheet uses same-day handover logic: if vacation finishes on June 10,
+    // the crew member can replace someone signing off on June 10.
+    return { vacationStart, vacationEnd, availableDate: vacationEnd };
+  };
+
+  const pickReplacementCandidate = (crewStates, slot) => {
+    const slotKey = getDateKey(slot.date);
+
+    const candidates = Object.values(crewStates)
+      .filter((state) => {
+        const availableKey = getDateKey(state.availableDate);
+        return (
+          state.status === "available" &&
+          state.roleKey === slot.roleKey &&
+          state.crew.id !== slot.outgoingCrewId &&
+          availableKey &&
+          availableKey <= slotKey
+        );
+      })
+      .sort((a, b) => {
+        const aExact = getDateKey(a.availableDate) === slotKey ? 1 : 0;
+        const bExact = getDateKey(b.availableDate) === slotKey ? 1 : 0;
+        if (aExact !== bExact) return bExact - aExact;
+
+        const aDifferentShip = a.lastShip !== slot.shipCode ? 1 : 0;
+        const bDifferentShip = b.lastShip !== slot.shipCode ? 1 : 0;
+        if (aDifferentShip !== bDifferentShip) return bDifferentShip - aDifferentShip;
+
+        const aWaitingDays = Math.abs(slotKey - getDateKey(a.availableDate));
+        const bWaitingDays = Math.abs(slotKey - getDateKey(b.availableDate));
+        if (aWaitingDays !== bWaitingDays) return aWaitingDays - bWaitingDays;
+
+        return a.crew.name.localeCompare(b.crew.name);
+      });
+
+    return candidates[0] || null;
+  };
+
+  const buildReplacementProjectedScheduleRows = (crewRows, planningStart, planningEnd) => {
+    const rows = [];
+    const crewStates = {};
+    const openSlots = [];
+    const processingEnd = addMonths(planningEnd, 4);
+
+    crewRows.forEach((crew) => {
+      const { contractStart, contractEnd } = getCrewInitialContractDates(crew);
+      const roleKey = getCrewRoleKey(crew);
+
+      crewStates[crew.id] = {
+        crew,
+        roleKey,
+        status: "onboard",
+        lastShip: crew.shipCode,
+        availableDate: null,
+        assignmentCount: 0,
+      };
+
+      if (!contractStart) {
         rows.push({
-          id: `${crew.id}-contract-${formatDate(contractStart)}`,
+          id: `${crew.id}-missing-dates`,
           ship: crew.shipCode,
           shipName: crew.shipName,
           sheetName: crew.sheetName,
           position: crew.position,
           idNumber: crew.idNumber,
           name: crew.name,
-          periodType: "Contract",
-          startDate: formatDate(contractStart),
-          endDate: formatDate(contractEnd),
+          periodType: "Missing Dates",
+          startDate: "",
+          endDate: "",
           rotationRule: crew.rotationRule,
-          status: "On board",
-          notes: crew.source,
+          status: "Missing sign-on date",
+          previousShip: "",
+          replacementFor: "",
+          notes: "Check column F or highlighted contract cells between I and IP.",
         });
+        return;
       }
 
-      const vacationStart = addDays(contractEnd, 1);
-      const vacationEnd = getVacationEndDate(vacationStart, crew);
+      if (periodOverlaps(contractStart, contractEnd, planningStart, planningEnd)) {
+        rows.push(createScheduleRow({
+          crew,
+          periodType: "Contract",
+          startDate: contractStart,
+          endDate: contractEnd,
+          shipCode: crew.shipCode,
+          status: "On board",
+          previousShip: crew.shipCode,
+          notes: "Current workbook contract",
+        }));
+      }
+
+      openSlots.push({
+        date: contractEnd,
+        shipCode: crew.shipCode,
+        roleKey,
+        sheetName: crew.sheetName,
+        position: crew.position,
+        outgoingCrewId: crew.id,
+        outgoingName: crew.name,
+        outgoingIdNumber: crew.idNumber,
+      });
+
+      const { vacationStart, vacationEnd, availableDate } = getVacationPeriodAfterContract(crew, contractEnd);
 
       if (periodOverlaps(vacationStart, vacationEnd, planningStart, planningEnd)) {
-        rows.push({
-          id: `${crew.id}-vacation-${formatDate(vacationStart)}`,
-          ship: crew.shipCode,
-          shipName: crew.shipName,
-          sheetName: crew.sheetName,
-          position: crew.position,
-          idNumber: crew.idNumber,
-          name: crew.name,
+        rows.push(createScheduleRow({
+          crew,
           periodType: "Vacation",
-          startDate: formatDate(vacationStart),
-          endDate: formatDate(vacationEnd),
-          rotationRule: crew.rotationRule,
+          startDate: vacationStart,
+          endDate: vacationEnd,
+          shipCode: crew.shipCode,
           status: "Off board",
-          notes: crew.sheetName === "SEXC" ? "6 week vacation" : "2 month rotation",
-        });
+          previousShip: crew.shipCode,
+          notes: crew.sheetName === "SEXC" ? "6 week vacation before replacement assignment" : "2 month rotation before replacement assignment",
+        }));
       }
 
-      contractStart = addDays(vacationEnd, 1);
-      contractEnd = addDays(addMonths(contractStart, contractMonths), -1);
+      crewStates[crew.id].status = "available";
+      crewStates[crew.id].availableDate = availableDate;
+    });
+
+    const processedSlotKeys = new Set();
+    let guard = 0;
+
+    while (openSlots.length && guard < 2000) {
+      openSlots.sort((a, b) => {
+        const dateDiff = getDateKey(a.date) - getDateKey(b.date);
+        if (dateDiff !== 0) return dateDiff;
+        const roleDiff = a.roleKey.localeCompare(b.roleKey);
+        if (roleDiff !== 0) return roleDiff;
+        return a.shipCode.localeCompare(b.shipCode);
+      });
+
+      const slot = openSlots.shift();
+      const slotDate = parseExcelDate(slot.date);
+      const slotKey = `${formatDate(slotDate)}-${slot.shipCode}-${slot.roleKey}-${slot.outgoingCrewId}`;
+
+      if (!slotDate || slotDate > processingEnd || processedSlotKeys.has(slotKey)) {
+        guard += 1;
+        continue;
+      }
+
+      processedSlotKeys.add(slotKey);
+
+      const candidateState = pickReplacementCandidate(crewStates, slot);
+
+      if (!candidateState) {
+        if (periodOverlaps(slotDate, slotDate, planningStart, planningEnd)) {
+          rows.push({
+            id: `open-slot-${slotKey}`,
+            ship: slot.shipCode,
+            shipName: getShipDisplayName(slot.shipCode),
+            sheetName: slot.sheetName,
+            position: slot.position,
+            idNumber: "",
+            name: "Open Replacement Needed",
+            periodType: "Open Slot",
+            startDate: formatDate(slotDate),
+            endDate: formatDate(slotDate),
+            rotationRule: "Needs matching returning crew",
+            status: "No returning crew available for this date/position",
+            previousShip: "",
+            replacementFor: `${slot.outgoingName}${slot.outgoingIdNumber ? ` (${slot.outgoingIdNumber})` : ""}`,
+            notes: `Open slot on ${getShipDisplayName(slot.shipCode)} for ${slot.position}.`,
+          });
+        }
+
+        guard += 1;
+        continue;
+      }
+
+      const crew = candidateState.crew;
+      const previousShip = candidateState.lastShip;
+      const contractStart = slotDate;
+      const contractEnd = addDays(addMonths(contractStart, Number(crew.contractMonths || 4)), -1);
+      const replacementFor = `${slot.outgoingName}${slot.outgoingIdNumber ? ` (${slot.outgoingIdNumber})` : ""}`;
+
+      if (periodOverlaps(contractStart, contractEnd, planningStart, planningEnd)) {
+        rows.push(createScheduleRow({
+          crew,
+          periodType: "Contract",
+          startDate: contractStart,
+          endDate: contractEnd,
+          shipCode: slot.shipCode,
+          status: "On board - replacement assignment",
+          previousShip,
+          replacementFor,
+          replacementForId: slot.outgoingCrewId,
+          notes: `Replaces ${replacementFor} signing off ${formatDate(slotDate)}. Previous ship: ${getShipDisplayName(previousShip)}.`,
+        }));
+      }
+
+      const { vacationStart, vacationEnd, availableDate } = getVacationPeriodAfterContract(crew, contractEnd);
+
+      if (periodOverlaps(vacationStart, vacationEnd, planningStart, planningEnd)) {
+        rows.push(createScheduleRow({
+          crew,
+          periodType: "Vacation",
+          startDate: vacationStart,
+          endDate: vacationEnd,
+          shipCode: slot.shipCode,
+          status: "Off board",
+          previousShip: slot.shipCode,
+          notes: crew.sheetName === "SEXC" ? "6 week vacation before next replacement assignment" : "2 month rotation before next replacement assignment",
+        }));
+      }
+
+      candidateState.status = "available";
+      candidateState.lastShip = slot.shipCode;
+      candidateState.availableDate = availableDate;
+      candidateState.assignmentCount += 1;
+
+      openSlots.push({
+        date: contractEnd,
+        shipCode: slot.shipCode,
+        roleKey: candidateState.roleKey,
+        sheetName: crew.sheetName,
+        position: crew.position,
+        outgoingCrewId: crew.id,
+        outgoingName: crew.name,
+        outgoingIdNumber: crew.idNumber,
+      });
+
       guard += 1;
     }
 
-    return rows;
+    return rows.sort((a, b) => {
+      const dateA = parseExcelDate(a.startDate)?.getTime() || 0;
+      const dateB = parseExcelDate(b.startDate)?.getTime() || 0;
+      if (dateA !== dateB) return dateA - dateB;
+      if (a.ship !== b.ship) return String(a.ship).localeCompare(String(b.ship));
+      if (a.position !== b.position) return String(a.position).localeCompare(String(b.position));
+      return String(a.name).localeCompare(String(b.name));
+    });
   };
 
   const generateSchedule = () => {
@@ -1748,26 +1948,23 @@ export default function App() {
 
     const planningStart = getPlanningStartDate();
     const planningEnd = getPlanningEndDate();
-    const selectedCrewRows = scheduleCrewRows.filter((crew) => crew.shipCode === ship);
+    const allRows = buildReplacementProjectedScheduleRows(scheduleCrewRows, planningStart, planningEnd);
+    const rows = allRows.filter((row) => row.ship === ship || row.periodType === "Missing Dates");
 
-    if (!selectedCrewRows.length) {
+    if (!rows.length) {
       setScheduleRows([]);
-      setScheduleMessage(`No crew rows found for ${getShipDisplayName(ship)} in the uploaded workbook.`);
+      setScheduleMessage(`No projected schedule rows found for ${getShipDisplayName(ship)} in the selected planning window.`);
       return;
     }
 
-    const rows = selectedCrewRows
-      .flatMap((crew) => buildCrewRotationRows(crew, planningStart, planningEnd))
-      .sort((a, b) => {
-        const dateA = parseExcelDate(a.startDate)?.getTime() || 0;
-        const dateB = parseExcelDate(b.startDate)?.getTime() || 0;
-        if (dateA !== dateB) return dateA - dateB;
-        if (a.position !== b.position) return a.position.localeCompare(b.position);
-        return a.name.localeCompare(b.name);
-      });
+    const replacementRows = rows.filter((row) => row.replacementFor).length;
+    const openSlots = rows.filter((row) => row.periodType === "Open Slot").length;
 
     setScheduleRows(rows);
-    setScheduleMessage(`Generated ${rows.length} schedule period(s) for ${getShipDisplayName(ship)} from ${formatDate(planningStart)} to ${formatDate(planningEnd)}.`);
+    setScheduleMessage(
+      `Generated ${rows.length} projected period(s) for ${getShipDisplayName(ship)} from ${formatDate(planningStart)} to ${formatDate(planningEnd)}. ` +
+      `${replacementRows} replacement assignment(s), ${openSlots} open slot(s).`
+    );
   };
 
   const clearSchedule = () => {
@@ -1807,7 +2004,7 @@ export default function App() {
     const searchValue = scheduleSearch.toLowerCase();
 
     return scheduleRows.filter((row) =>
-      `${row.ship} ${row.shipName} ${row.position} ${row.idNumber} ${row.name} ${row.sheetName} ${row.periodType} ${row.startDate} ${row.endDate} ${row.status}`
+      `${row.ship} ${row.shipName} ${row.position} ${row.idNumber} ${row.name} ${row.sheetName} ${row.periodType} ${row.startDate} ${row.endDate} ${row.status} ${row.previousShip} ${row.replacementFor} ${row.notes}`
         .toLowerCase()
         .includes(searchValue)
     );
@@ -1827,6 +2024,8 @@ export default function App() {
       StartDate: row.startDate,
       EndDate: row.endDate,
       Status: row.status,
+      PreviousShip: getShipDisplayName(row.previousShip) || row.previousShip || "",
+      ReplacementFor: row.replacementFor || "",
       RotationRule: row.rotationRule,
       Notes: row.notes,
     }));
@@ -1878,6 +2077,8 @@ export default function App() {
                 <th>Start</th>
                 <th>End</th>
                 <th>Status</th>
+                <th>Previous Ship</th>
+                <th>Replacement For</th>
                 <th>Rule</th>
                 <th>Notes</th>
               </tr>
@@ -1896,6 +2097,8 @@ export default function App() {
                       <td>${row.startDate || ""}</td>
                       <td>${row.endDate || ""}</td>
                       <td>${row.status || ""}</td>
+                      <td>${getShipDisplayName(row.previousShip) || row.previousShip || ""}</td>
+                      <td>${row.replacementFor || ""}</td>
                       <td>${row.rotationRule || ""}</td>
                       <td>${row.notes || ""}</td>
                     </tr>
@@ -2000,6 +2203,8 @@ export default function App() {
     const planningEnd = getPlanningEndDate();
     const contractRows = scheduleRows.filter((row) => row.periodType === "Contract");
     const vacationRows = scheduleRows.filter((row) => row.periodType === "Vacation");
+    const openSlotRows = scheduleRows.filter((row) => row.periodType === "Open Slot");
+    const replacementRows = scheduleRows.filter((row) => row.replacementFor);
 
     return (
       <main style={styles.page}>
@@ -2049,6 +2254,8 @@ export default function App() {
               <div>👥 Crew for selected ship: <strong>{selectedScheduleCrewRows.length}</strong></div>
               <div>✅ Contract periods generated: <strong>{contractRows.length}</strong></div>
               <div>🌴 Vacation periods generated: <strong>{vacationRows.length}</strong></div>
+              <div>🔁 Replacement assignments: <strong>{replacementRows.length}</strong></div>
+              <div>⚠️ Open replacement slots: <strong>{openSlotRows.length}</strong></div>
               {scheduleWorkbookInfo.loadedAt && <div>Loaded: <strong>{scheduleWorkbookInfo.loadedAt}</strong></div>}
             </div>
           </div>
@@ -2063,8 +2270,9 @@ export default function App() {
               <div><strong>Ship/position:</strong> B = Ship, C = Position</div>
               <div><strong>SEXC:</strong> 3 month contract / 6 week vacation</div>
               <div><strong>EXC_EXSC + Pastry:</strong> 4 month contract / 2 month rotation</div>
+              <div><strong>Projection logic:</strong> returning crew replace matching position/sign-off slots across ships.</div>
               <div style={{ color: "#8a5a00" }}>
-                The workbook highlights I:IP with conditional formatting. The app reads D/E/F/G directly and uses the I:IP calendar window for matching/reporting.
+                Example: if someone finishes vacation on June 10, the app looks for another matching crew member signing off on June 10 and assigns the returning crew to that ship.
               </div>
             </div>
 
@@ -2127,15 +2335,18 @@ export default function App() {
                 style={{
                   ...styles.equipmentCard,
                   ...(row.periodType === "Contract" ? styles.countedCard : {}),
+                  ...(row.periodType === "Open Slot" ? styles.zeroCountCard : {}),
                   ...(row.periodType === "Missing Dates" ? styles.orderWarningCard : {}),
                 }}
               >
                 <div style={styles.recipeName}>{row.name}</div>
                 <div style={styles.recipeMeta}>ID: {row.idNumber || "N/A"}</div>
                 <div style={styles.recipeMeta}>Ship: {row.shipName || row.ship}</div>
+                {row.previousShip && <div style={styles.recipeMeta}>Previous ship: {getShipDisplayName(row.previousShip) || row.previousShip}</div>}
+                {row.replacementFor && <div style={styles.recipeMeta}>Replacing: {row.replacementFor}</div>}
                 <div style={styles.recipeMeta}>Position: {row.position || "N/A"}</div>
                 <div style={styles.recipeMeta}>Tab: {row.sheetName}</div>
-                <div style={row.periodType === "Contract" ? styles.statusGood : row.periodType === "Vacation" ? styles.statusNeutral : styles.statusBad}>
+                <div style={row.periodType === "Contract" ? styles.statusGood : row.periodType === "Vacation" ? styles.statusNeutral : row.periodType === "Open Slot" ? styles.statusWarning : styles.statusBad}>
                   {row.periodType}: {row.startDate || "N/A"} to {row.endDate || "N/A"}
                 </div>
                 <div style={styles.recipeMeta}>Status: {row.status}</div>
