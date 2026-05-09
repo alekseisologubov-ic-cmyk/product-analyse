@@ -2,8 +2,35 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+
+const supabase =
+  supabaseUrl && supabaseAnonKey
+    ? createClient(supabaseUrl, supabaseAnonKey)
+    : null;
 
 const SHIPS = ["BRL", "RL", "SC", "VL"];
+
+const STATIONS = [
+  "Galley",
+  "Restaurant",
+  "Bar",
+  "Pantry",
+  "Warehouse",
+  "Dishwash",
+  "Other",
+];
+
+const INVENTORY_USERS = [
+  "Aleksei",
+  "User 1",
+  "User 2",
+  "User 3",
+  "Other",
+];
 
 const ALLERGEN_RULES = [
   { allergen: "Tree Nuts", keywords: ["almond", "walnut", "pecan", "cashew", "hazelnut", "pistachio", "macadamia"] },
@@ -86,10 +113,16 @@ export default function App() {
   const [makeInventorySearch, setMakeInventorySearch] = useState("");
   const [makeInventoryMessage, setMakeInventoryMessage] = useState("");
   const [makeInventoryShip, setMakeInventoryShip] = useState("");
+  const [inventoryStation, setInventoryStation] = useState("");
+  const [inventoryUserName, setInventoryUserName] = useState("");
+  const [customInventoryUserName, setCustomInventoryUserName] = useState("");
   const [currentInventoryItem, setCurrentInventoryItem] = useState(null);
   const [inventoryQty, setInventoryQty] = useState("");
-  const [editingInventoryIndex, setEditingInventoryIndex] = useState(null);
+  const [editingInventoryId, setEditingInventoryId] = useState(null);
   const [inventorySummary, setInventorySummary] = useState([]);
+  const [inventoryReportMode, setInventoryReportMode] = useState("my");
+  const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [inventoryError, setInventoryError] = useState("");
   const [showVariance, setShowVariance] = useState(false);
 
   const shipColumns = { BRL: 8, RL: 11, SC: 14, VL: 17 };
@@ -103,19 +136,34 @@ export default function App() {
   }, [userShip]);
 
   useEffect(() => {
-    const saved = localStorage.getItem("vv_inventory_summary");
-    if (saved) {
-      try {
-        setInventorySummary(JSON.parse(saved));
-      } catch {
-        setInventorySummary([]);
-      }
+    if (module === "equipment" && equipmentMode === "makeinventory" && makeInventoryShip) {
+      loadInventoryRecords(makeInventoryShip);
     }
-  }, []);
+  }, [module, equipmentMode, makeInventoryShip]);
 
   useEffect(() => {
-    localStorage.setItem("vv_inventory_summary", JSON.stringify(inventorySummary));
-  }, [inventorySummary]);
+    if (!supabase || !makeInventoryShip || module !== "equipment" || equipmentMode !== "makeinventory") return;
+
+    const channel = supabase
+      .channel(`inventory-counts-${makeInventoryShip}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "inventory_counts",
+          filter: `ship=eq.${makeInventoryShip}`,
+        },
+        () => {
+          loadInventoryRecords(makeInventoryShip);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [makeInventoryShip, module, equipmentMode]);
 
   const visibleShips = viewMode === "single" ? [userShip] : SHIPS;
 
@@ -293,102 +341,144 @@ export default function App() {
     );
   };
 
-  const confirmInventoryQty = () => {
-    if (!currentInventoryItem) return;
+  const getEffectiveInventoryUserName = () => {
+    if (inventoryUserName === "Other") return customInventoryUserName.trim();
+    return inventoryUserName.trim();
+  };
 
-    const qty = Number(inventoryQty || 0);
+  const getInventoryItemKey = (item) => cleanText(item?.code || item?.name);
+
+  const normalizeInventoryRecord = (record) => ({
+    id: record.id,
+    ship: record.ship,
+    station: record.station,
+    userName: record.user_name,
+    itemKey: record.item_key,
+    code: record.code || "",
+    name: record.item_name || "",
+    category: record.category || "",
+    sheetName: record.sheet_name || "",
+    image: record.image || "",
+    qty: Number(record.qty || 0),
+    confirmedAt: record.updated_at ? new Date(record.updated_at).toLocaleString() : "",
+    updatedAt: record.updated_at || "",
+  });
+
+  const loadInventoryRecords = async (shipOverride) => {
+    const ship = shipOverride || makeInventoryShip || userShip;
+
+    if (!ship) {
+      setInventorySummary([]);
+      return;
+    }
+
+    if (!supabase) {
+      setInventoryError("Supabase is not connected. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+      return;
+    }
+
+    setInventoryLoading(true);
+    setInventoryError("");
+
+    const { data, error } = await supabase
+      .from("inventory_counts")
+      .select("*")
+      .eq("ship", ship)
+      .order("updated_at", { ascending: false });
+
+    if (error) {
+      setInventoryError(error.message);
+      setInventoryLoading(false);
+      return;
+    }
+
+    setInventorySummary((data || []).map(normalizeInventoryRecord));
+    setInventoryLoading(false);
+  };
+
+  const getMyInventoryRows = () => {
     const ship = makeInventoryShip || userShip;
-    const itemKey = cleanText(currentInventoryItem.code || currentInventoryItem.name);
+    const userName = getEffectiveInventoryUserName();
 
-    setInventorySummary((prev) => {
-      const next = [...prev];
-
-      if (editingInventoryIndex !== null) {
-        next[editingInventoryIndex] = {
-          ...next[editingInventoryIndex],
-          ...currentInventoryItem,
-          ship,
-          qty,
-          confirmedAt: new Date().toLocaleString(),
-        };
-        return next;
-      }
-
-      const existingIndex = next.findIndex(
-        (item) => item.ship === ship && cleanText(item.code || item.name) === itemKey
-      );
-
-      if (existingIndex >= 0) {
-        next[existingIndex] = {
-          ...next[existingIndex],
-          ...currentInventoryItem,
-          ship,
-          qty,
-          confirmedAt: new Date().toLocaleString(),
-        };
-        return next;
-      }
-
-      return [
-        ...next,
-        {
-          ...currentInventoryItem,
-          ship,
-          qty,
-          confirmedAt: new Date().toLocaleString(),
-        },
-      ];
-    });
-
-    setCurrentInventoryItem(null);
-    setInventoryQty("");
-    setEditingInventoryIndex(null);
+    return inventorySummary
+      .filter(
+        (item) =>
+          item.ship === ship &&
+          item.station === inventoryStation &&
+          item.userName === userName
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
   };
 
-  const editInventoryItem = (item, index) => {
-    setCurrentInventoryItem(item);
-    setInventoryQty(String(item.qty ?? ""));
-    setEditingInventoryIndex(index);
-  };
-
-  const deleteInventoryItem = (indexToDelete) => {
-    setInventorySummary((prev) => prev.filter((_, index) => index !== indexToDelete));
-  };
-
-  const clearInventoryForShip = () => {
+  const getShipSummaryRows = () => {
     const ship = makeInventoryShip || userShip;
-    if (!ship) return;
+    const grouped = {};
 
-    const confirmed = window.confirm(`Clear all inventory records for ${ship}?`);
-    if (!confirmed) return;
-
-    setInventorySummary((prev) => prev.filter((item) => item.ship !== ship));
-    setCurrentInventoryItem(null);
-    setInventoryQty("");
-    setEditingInventoryIndex(null);
-  };
-
-  const getVarianceReport = () => {
-    const ship = makeInventoryShip || userShip;
-
-    const countedMap = {};
     inventorySummary
       .filter((item) => item.ship === ship)
       .forEach((item) => {
-        const key = cleanText(item.code || item.name);
-        countedMap[key] = item;
+        const key = item.itemKey || cleanText(item.code || item.name);
+
+        if (!grouped[key]) {
+          grouped[key] = {
+            itemKey: key,
+            ship: item.ship,
+            code: item.code,
+            name: item.name,
+            category: item.category,
+            sheetName: item.sheetName,
+            totalQty: 0,
+            stations: new Set(),
+            users: new Set(),
+            recordCount: 0,
+            lastUpdated: "",
+          };
+        }
+
+        grouped[key].totalQty += Number(item.qty || 0);
+        grouped[key].recordCount += 1;
+
+        if (item.station) grouped[key].stations.add(item.station);
+        if (item.userName) grouped[key].users.add(item.userName);
+
+        if (!grouped[key].lastUpdated || item.updatedAt > grouped[key].lastUpdated) {
+          grouped[key].lastUpdated = item.updatedAt;
+        }
       });
+
+    return Object.values(grouped)
+      .map((item) => ({
+        ...item,
+        stations: [...item.stations].sort(),
+        users: [...item.users].sort(),
+        confirmedAt: item.lastUpdated ? new Date(item.lastUpdated).toLocaleString() : "",
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  };
+
+  const getVisibleInventoryReportRows = () => {
+    return inventoryReportMode === "summary" ? getShipSummaryRows() : getMyInventoryRows();
+  };
+
+  const getMyInventoryStatusRows = () => {
+    const countedMap = {};
+
+    getMyInventoryRows().forEach((item) => {
+      const key = item.itemKey || cleanText(item.code || item.name);
+      countedMap[key] = item;
+    });
 
     return makeInventoryItems
       .map((item) => {
-        const key = cleanText(item.code || item.name);
+        const key = getInventoryItemKey(item);
         const counted = countedMap[key];
 
         return {
           ...item,
+          itemKey: key,
           countedQty: counted ? Number(counted.qty || 0) : 0,
           countedAt: counted?.confirmedAt || "",
-          status: counted ? "Counted" : "Not Counted",
+          status: counted ? "Counted" : "Pending Count",
         };
       })
       .filter((item) =>
@@ -398,31 +488,218 @@ export default function App() {
       );
   };
 
+  const confirmInventoryQty = async () => {
+    if (!currentInventoryItem) return;
+
+    const ship = makeInventoryShip || userShip;
+    const station = inventoryStation;
+    const userName = getEffectiveInventoryUserName();
+
+    if (!supabase) {
+      setMakeInventoryMessage("Supabase is not connected. Check your environment variables.");
+      return;
+    }
+
+    if (!ship || !station || !userName) {
+      setMakeInventoryMessage("Choose ship, station, and user name before confirming inventory.");
+      return;
+    }
+
+    const qty = Number(inventoryQty || 0);
+    const itemKey = getInventoryItemKey(currentInventoryItem);
+
+    const payload = {
+      ship,
+      station,
+      user_name: userName,
+      item_key: itemKey,
+      code: currentInventoryItem.code || "",
+      item_name: currentInventoryItem.name || "",
+      category: currentInventoryItem.category || "",
+      sheet_name: currentInventoryItem.sheetName || "",
+      image: currentInventoryItem.image || "",
+      qty,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+      .from("inventory_counts")
+      .upsert(payload, {
+        onConflict: "ship,station,user_name,item_key",
+      });
+
+    if (error) {
+      setMakeInventoryMessage(`Could not save inventory: ${error.message}`);
+      return;
+    }
+
+    await loadInventoryRecords(ship);
+
+    setCurrentInventoryItem(null);
+    setInventoryQty("");
+    setEditingInventoryId(null);
+    setMakeInventoryMessage("Inventory quantity saved.");
+  };
+
+  const editInventoryItem = (item) => {
+    setCurrentInventoryItem({
+      code: item.code,
+      name: item.name,
+      category: item.category,
+      sheetName: item.sheetName,
+      image: item.image,
+    });
+
+    setInventoryQty(String(item.qty ?? ""));
+    setEditingInventoryId(item.id || null);
+
+    if (item.station) setInventoryStation(item.station);
+
+    if (item.userName) {
+      if (INVENTORY_USERS.includes(item.userName)) {
+        setInventoryUserName(item.userName);
+        setCustomInventoryUserName("");
+      } else {
+        setInventoryUserName("Other");
+        setCustomInventoryUserName(item.userName);
+      }
+    }
+  };
+
+  const deleteInventoryItem = async (itemToDelete) => {
+    if (!supabase || !itemToDelete?.id) return;
+
+    const confirmed = window.confirm(`Delete ${itemToDelete.name}?`);
+    if (!confirmed) return;
+
+    const { error } = await supabase
+      .from("inventory_counts")
+      .delete()
+      .eq("id", itemToDelete.id);
+
+    if (error) {
+      setMakeInventoryMessage(`Could not delete item: ${error.message}`);
+      return;
+    }
+
+    await loadInventoryRecords(makeInventoryShip || userShip);
+  };
+
+  const clearMyInventory = async () => {
+    const ship = makeInventoryShip || userShip;
+    const userName = getEffectiveInventoryUserName();
+
+    if (!supabase || !ship || !inventoryStation || !userName) return;
+
+    const confirmed = window.confirm(
+      `Clear inventory for ${ship} / ${inventoryStation} / ${userName}?`
+    );
+
+    if (!confirmed) return;
+
+    const { error } = await supabase
+      .from("inventory_counts")
+      .delete()
+      .eq("ship", ship)
+      .eq("station", inventoryStation)
+      .eq("user_name", userName);
+
+    if (error) {
+      setMakeInventoryMessage(`Could not clear inventory: ${error.message}`);
+      return;
+    }
+
+    await loadInventoryRecords(ship);
+
+    setCurrentInventoryItem(null);
+    setInventoryQty("");
+    setEditingInventoryId(null);
+  };
+
+  const clearShipInventory = async () => {
+    const ship = makeInventoryShip || userShip;
+
+    if (!supabase || !ship) return;
+
+    const confirmed = window.confirm(
+      `Clear ALL inventory records for ${ship} from ALL users and ALL stations?`
+    );
+
+    if (!confirmed) return;
+
+    const secondConfirm = window.confirm(
+      `This cannot be undone. Confirm again to clear all ${ship} records.`
+    );
+
+    if (!secondConfirm) return;
+
+    const { error } = await supabase
+      .from("inventory_counts")
+      .delete()
+      .eq("ship", ship);
+
+    if (error) {
+      setMakeInventoryMessage(`Could not clear ship inventory: ${error.message}`);
+      return;
+    }
+
+    await loadInventoryRecords(ship);
+
+    setCurrentInventoryItem(null);
+    setInventoryQty("");
+    setEditingInventoryId(null);
+  };
+
   const exportInventorySummaryToExcel = () => {
-    const rows = inventorySummary
-      .filter((item) => item.ship === makeInventoryShip)
-      .map((item) => ({
-        Ship: item.ship,
-        Code: item.code || "",
-        Name: item.name || "",
-        Category: item.category || "",
-        Sheet: item.sheetName || "",
-        Quantity: item.qty,
-        Confirmed: item.confirmedAt,
-      }));
+    const ship = makeInventoryShip || userShip;
+    const rows = getVisibleInventoryReportRows();
 
     if (!rows.length) return;
 
-    const ws = XLSX.utils.json_to_sheet(rows);
+    const exportRows =
+      inventoryReportMode === "summary"
+        ? rows.map((item) => ({
+            Ship: ship,
+            Code: item.code || "",
+            Name: item.name || "",
+            Category: item.category || "",
+            Sheet: item.sheetName || "",
+            TotalQuantity: item.totalQty,
+            Stations: item.stations.join(", "),
+            Users: item.users.join(", "),
+            Records: item.recordCount,
+            LastUpdated: item.confirmedAt,
+          }))
+        : rows.map((item) => ({
+            Ship: item.ship,
+            Station: item.station,
+            User: item.userName,
+            Code: item.code || "",
+            Name: item.name || "",
+            Category: item.category || "",
+            Sheet: item.sheetName || "",
+            Quantity: item.qty,
+            Confirmed: item.confirmedAt,
+          }));
+
+    const ws = XLSX.utils.json_to_sheet(exportRows);
     const wb = XLSX.utils.book_new();
 
-    XLSX.utils.book_append_sheet(wb, ws, "Inventory Summary");
-    XLSX.writeFile(wb, `inventory-summary-${makeInventoryShip || "ship"}.xlsx`);
+    XLSX.utils.book_append_sheet(
+      wb,
+      ws,
+      inventoryReportMode === "summary" ? "Ship Summary" : "My Report"
+    );
+
+    XLSX.writeFile(wb, `inventory-${inventoryReportMode}-${ship || "ship"}.xlsx`);
   };
 
-  const exportVarianceReportToExcel = () => {
-    const rows = getVarianceReport().map((item) => ({
-      Ship: makeInventoryShip || userShip,
+  const exportInventoryStatusToExcel = () => {
+    const ship = makeInventoryShip || userShip;
+    const rows = getMyInventoryStatusRows().map((item) => ({
+      Ship: ship,
+      Station: inventoryStation,
+      User: getEffectiveInventoryUserName(),
       Code: item.code || "",
       Name: item.name || "",
       Category: item.category || "",
@@ -437,18 +714,89 @@ export default function App() {
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
 
-    XLSX.utils.book_append_sheet(wb, ws, "Variance Report");
-    XLSX.writeFile(wb, `inventory-variance-${makeInventoryShip || "ship"}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Inventory Status");
+    XLSX.writeFile(wb, `inventory-status-${ship || "ship"}.xlsx`);
   };
 
   const printInventorySummary = () => {
-    const rows = inventorySummary.filter((item) => item.ship === makeInventoryShip);
+    const ship = makeInventoryShip || userShip;
+    const rows = getVisibleInventoryReportRows();
+
     if (!rows.length) return;
+
+    const title =
+      inventoryReportMode === "summary"
+        ? "Ship Inventory Summary Report"
+        : "My Inventory Report";
+
+    const tableRows =
+      inventoryReportMode === "summary"
+        ? rows
+            .map(
+              (item) => `
+                <tr>
+                  <td>${item.code || ""}</td>
+                  <td>${item.name || ""}</td>
+                  <td>${item.category || ""}</td>
+                  <td>${item.sheetName || ""}</td>
+                  <td>${formatQty(item.totalQty)}</td>
+                  <td>${item.stations.join(", ")}</td>
+                  <td>${item.users.join(", ")}</td>
+                  <td>${item.recordCount}</td>
+                  <td>${item.confirmedAt}</td>
+                </tr>
+              `
+            )
+            .join("")
+        : rows
+            .map(
+              (item) => `
+                <tr>
+                  <td>${item.station || ""}</td>
+                  <td>${item.userName || ""}</td>
+                  <td>${item.code || ""}</td>
+                  <td>${item.name || ""}</td>
+                  <td>${item.category || ""}</td>
+                  <td>${item.sheetName || ""}</td>
+                  <td>${formatQty(item.qty)}</td>
+                  <td>${item.confirmedAt}</td>
+                </tr>
+              `
+            )
+            .join("");
+
+    const tableHeader =
+      inventoryReportMode === "summary"
+        ? `
+          <tr>
+            <th>Code</th>
+            <th>Name</th>
+            <th>Category</th>
+            <th>Sheet</th>
+            <th>Total Qty</th>
+            <th>Stations</th>
+            <th>Users</th>
+            <th>Records</th>
+            <th>Last Updated</th>
+          </tr>
+        `
+        : `
+          <tr>
+            <th>Station</th>
+            <th>User</th>
+            <th>Code</th>
+            <th>Name</th>
+            <th>Category</th>
+            <th>Sheet</th>
+            <th>Quantity</th>
+            <th>Confirmed</th>
+          </tr>
+        `;
 
     const html = `
       <html>
         <head>
-          <title>Inventory Summary</title>
+          <title>${title}</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 24px; }
             h1 { margin-bottom: 4px; }
@@ -458,37 +806,19 @@ export default function App() {
           </style>
         </head>
         <body>
-          <h1>Inventory Summary</h1>
-          <div><strong>Ship:</strong> ${makeInventoryShip}</div>
+          <h1>${title}</h1>
+          <div><strong>Ship:</strong> ${ship}</div>
+          ${
+            inventoryReportMode === "my"
+              ? `<div><strong>Station:</strong> ${inventoryStation}</div>
+                 <div><strong>User:</strong> ${getEffectiveInventoryUserName()}</div>`
+              : `<div><strong>Report:</strong> All users and all stations for this ship</div>`
+          }
           <div><strong>Printed:</strong> ${new Date().toLocaleString()}</div>
 
           <table>
-            <thead>
-              <tr>
-                <th>Code</th>
-                <th>Name</th>
-                <th>Category</th>
-                <th>Sheet</th>
-                <th>Quantity</th>
-                <th>Confirmed</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows
-                .map(
-                  (item) => `
-                    <tr>
-                      <td>${item.code || ""}</td>
-                      <td>${item.name || ""}</td>
-                      <td>${item.category || ""}</td>
-                      <td>${item.sheetName || ""}</td>
-                      <td>${item.qty}</td>
-                      <td>${item.confirmedAt}</td>
-                    </tr>
-                  `
-                )
-                .join("")}
-            </tbody>
+            <thead>${tableHeader}</thead>
+            <tbody>${tableRows}</tbody>
           </table>
         </body>
       </html>
@@ -501,27 +831,30 @@ export default function App() {
     printWindow.print();
   };
 
-  const printVarianceReport = () => {
-    const rows = getVarianceReport();
+  const printInventoryStatus = () => {
+    const ship = makeInventoryShip || userShip;
+    const rows = getMyInventoryStatusRows();
     if (!rows.length) return;
 
     const html = `
       <html>
         <head>
-          <title>Inventory Variance Report</title>
+          <title>Inventory Status</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 24px; }
             h1 { margin-bottom: 4px; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
             th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
             th { background: #f2f2f2; }
-            .missing { color: #b00020; font-weight: bold; }
             .counted { color: #2e7d32; font-weight: bold; }
+            .pending { color: #555; font-weight: bold; }
           </style>
         </head>
         <body>
-          <h1>Inventory Variance Report</h1>
-          <div><strong>Ship:</strong> ${makeInventoryShip || userShip}</div>
+          <h1>Inventory Status</h1>
+          <div><strong>Ship:</strong> ${ship}</div>
+          <div><strong>Station:</strong> ${inventoryStation}</div>
+          <div><strong>User:</strong> ${getEffectiveInventoryUserName()}</div>
           <div><strong>Printed:</strong> ${new Date().toLocaleString()}</div>
 
           <table>
@@ -545,8 +878,8 @@ export default function App() {
                       <td>${item.name || ""}</td>
                       <td>${item.category || ""}</td>
                       <td>${item.sheetName || ""}</td>
-                      <td class="${item.status === "Counted" ? "counted" : "missing"}">${item.status}</td>
-                      <td>${item.countedQty}</td>
+                      <td class="${item.status === "Counted" ? "counted" : "pending"}">${item.status}</td>
+                      <td>${formatQty(item.countedQty)}</td>
                       <td>${item.countedAt}</td>
                     </tr>
                   `
@@ -641,7 +974,8 @@ export default function App() {
       setMakeInventoryItems(items);
       setCurrentInventoryItem(null);
       setInventoryQty("");
-      setEditingInventoryIndex(null);
+      setEditingInventoryId(null);
+      setShowVariance(false);
       setMakeInventoryMessage(`Master inventory loaded from ${workbook.SheetNames.length} sheet(s).`);
     });
   };
@@ -1018,7 +1352,7 @@ export default function App() {
             <button style={styles.moduleCard} onClick={() => setEquipmentMode("makeinventory")}>
               <div style={styles.moduleIcon}>📝</div>
               <strong>Make Inventory</strong>
-              <span>Confirm product, enter quantity, export and variance report</span>
+              <span>Multi-user counts, my report and ship summary</span>
             </button>
           </div>
         </section>
@@ -1026,12 +1360,17 @@ export default function App() {
     );
   }
 
-  if (module === "equipment" && equipmentMode === "makeinventory") {
+ if (module === "equipment" && equipmentMode === "makeinventory") {
     const filteredMakeInventoryItems = getFilteredMakeInventoryItems();
-    const summaryForShip = inventorySummary.filter((item) => item.ship === makeInventoryShip);
-    const varianceReport = getVarianceReport();
-    const notCountedItems = varianceReport.filter((item) => item.status === "Not Counted");
-    const countedItems = varianceReport.filter((item) => item.status === "Counted");
+    const myReportRows = getMyInventoryRows();
+    const summaryReportRows = getShipSummaryRows();
+    const visibleReportRows = getVisibleInventoryReportRows();
+    const inventoryStatusRows = getMyInventoryStatusRows();
+    const statusCountedItems = inventoryStatusRows.filter((item) => item.status === "Counted");
+    const statusPendingItems = inventoryStatusRows.filter((item) => item.status !== "Counted");
+    const userName = getEffectiveInventoryUserName();
+    const inventoryReady = Boolean(makeInventoryShip && inventoryStation && userName && supabase);
+    const countedKeysForMe = new Set(myReportRows.map((item) => item.itemKey || cleanText(item.code || item.name)));
 
     return (
       <main style={styles.page}>
@@ -1059,6 +1398,42 @@ export default function App() {
               ))}
             </select>
 
+            <label style={styles.label}>Choose station</label>
+            <select
+              value={inventoryStation}
+              onChange={(e) => setInventoryStation(e.target.value)}
+              style={styles.select}
+            >
+              <option value="">Choose station</option>
+              {STATIONS.map((station) => (
+                <option key={station} value={station}>{station}</option>
+              ))}
+            </select>
+
+            <label style={styles.label}>Choose user</label>
+            <select
+              value={inventoryUserName}
+              onChange={(e) => setInventoryUserName(e.target.value)}
+              style={styles.select}
+            >
+              <option value="">Choose user</option>
+              {INVENTORY_USERS.map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+
+            {inventoryUserName === "Other" && (
+              <>
+                <label style={styles.label}>Enter your name</label>
+                <input
+                  placeholder="Enter your name..."
+                  value={customInventoryUserName}
+                  onChange={(e) => setCustomInventoryUserName(e.target.value)}
+                  style={styles.searchInput}
+                />
+              </>
+            )}
+
             <label style={styles.label}>Upload Master Inventory / Muster List</label>
             <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadMakeInventoryFile} style={styles.fileInput} />
 
@@ -1066,13 +1441,14 @@ export default function App() {
 
             <div style={styles.infoBox}>
               <div>🚢 Inventory ship: <strong>{makeInventoryShip || "Not selected"}</strong></div>
+              <div>📍 Station: <strong>{inventoryStation || "Not selected"}</strong></div>
+              <div>👤 User: <strong>{userName || "Not selected"}</strong></div>
               <div>📋 Master items loaded: <strong>{makeInventoryItems.length}</strong></div>
-              <div>✅ Confirmed for this ship: <strong>{summaryForShip.length}</strong></div>
-              <div>📋 Remaining to count: <strong>{notCountedItems.length}</strong></div>
+              <div>✅ My counted items: <strong>{myReportRows.length}</strong></div>
+              <div>🌍 Ship summary records: <strong>{summaryReportRows.length}</strong></div>
               <div>Duplicate entries are automatically updated instead of added twice.</div>
-              <div style={{ color: "#8a5a00" }}>
-                Records are saved in this browser. For true multi-user shared records, add database later.
-              </div>
+              {inventoryLoading && <div>Loading shared inventory records...</div>}
+              {inventoryError && <div style={{ color: "#b00020" }}>{inventoryError}</div>}
             </div>
           </div>
 
@@ -1080,14 +1456,20 @@ export default function App() {
             <h2 style={styles.cardTitle}>🔍 Search Product</h2>
 
             <input
-              placeholder="Search code, name, category, sheet or status..."
+              placeholder="Search code, name, category or sheet..."
               value={makeInventorySearch}
               onChange={(e) => setMakeInventorySearch(e.target.value)}
               style={styles.searchInput}
             />
 
+            {!inventoryReady && (
+              <p style={styles.warningText}>
+                Choose ship, station and user before counting. Supabase must be connected.
+              </p>
+            )}
+
             <p style={styles.emptyText}>
-              Select the correct product from the master list. Already counted products will update the existing entry.
+              Select the correct product from the master list. Green means already counted by this user for this station.
             </p>
           </div>
         </section>
@@ -1101,18 +1483,22 @@ export default function App() {
 
           <div style={styles.equipmentGrid}>
             {filteredMakeInventoryItems.map((item, index) => {
-              const alreadyCounted = summaryForShip.some(
-                (summaryItem) => cleanText(summaryItem.code || summaryItem.name) === cleanText(item.code || item.name)
-              );
+              const itemKey = getInventoryItemKey(item);
+              const alreadyCounted = countedKeysForMe.has(itemKey);
 
               return (
                 <button
                   key={`${item.sheetName}-${item.code}-${index}`}
                   style={{ ...styles.equipmentCard, ...(alreadyCounted ? styles.countedCard : {}) }}
                   onClick={() => {
+                    if (!inventoryReady) {
+                      setMakeInventoryMessage("Choose ship, station and user before counting.");
+                      return;
+                    }
+
                     setCurrentInventoryItem(item);
                     setInventoryQty("");
-                    setEditingInventoryIndex(null);
+                    setEditingInventoryId(null);
                   }}
                 >
                   {item.image ? (
@@ -1139,7 +1525,7 @@ export default function App() {
                   <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
                   <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
                   <div style={styles.recipeMeta}>Category: {item.category}</div>
-                  {alreadyCounted && <div style={styles.statusGood}>Already Counted</div>}
+                  {alreadyCounted && <div style={styles.statusGood}>Already Counted By Me</div>}
                 </button>
               );
             })}
@@ -1149,7 +1535,7 @@ export default function App() {
         {currentInventoryItem && (
           <section style={styles.card}>
             <h2 style={styles.productTitle}>
-              {editingInventoryIndex !== null ? "✏️ Edit Counted Product" : "✅ Confirm Product"}
+              {editingInventoryId ? "✏️ Edit Counted Product" : "✅ Confirm Product"}
             </h2>
 
             <div style={styles.grid}>
@@ -1178,6 +1564,8 @@ export default function App() {
               <div>
                 <h3>{currentInventoryItem.name}</h3>
                 <p><strong>Ship:</strong> {makeInventoryShip || userShip}</p>
+                <p><strong>Station:</strong> {inventoryStation || "N/A"}</p>
+                <p><strong>User:</strong> {userName || "N/A"}</p>
                 <p><strong>Code:</strong> {currentInventoryItem.code || "N/A"}</p>
                 <p><strong>Sheet:</strong> {currentInventoryItem.sheetName}</p>
                 <p><strong>Category:</strong> {currentInventoryItem.category}</p>
@@ -1200,7 +1588,7 @@ export default function App() {
                     onClick={() => {
                       setCurrentInventoryItem(null);
                       setInventoryQty("");
-                      setEditingInventoryIndex(null);
+                      setEditingInventoryId(null);
                     }}
                   >
                     No / Back
@@ -1209,9 +1597,9 @@ export default function App() {
                   <button
                     style={styles.primaryButton}
                     onClick={confirmInventoryQty}
-                    disabled={!makeInventoryShip}
+                    disabled={!inventoryReady}
                   >
-                    {editingInventoryIndex !== null ? "Update Quantity" : "Confirm Quantity"}
+                    {editingInventoryId ? "Update Quantity" : "Confirm Quantity"}
                   </button>
                 </div>
               </div>
@@ -1221,16 +1609,48 @@ export default function App() {
 
         <section style={styles.card}>
           <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 20 }}>
-            <h2 style={styles.productTitle}>📄 Inventory Summary</h2>
+            <h2 style={styles.productTitle}>📄 Inventory Report</h2>
 
             <div style={styles.headerActions}>
+              <button
+                style={{
+                  ...styles.viewModeButton,
+                  ...(inventoryReportMode === "my" ? styles.viewModeButtonActive : {}),
+                }}
+                onClick={() => setInventoryReportMode("my")}
+              >
+                👤 My Report
+              </button>
+
+              <button
+                style={{
+                  ...styles.viewModeButton,
+                  ...(inventoryReportMode === "summary" ? styles.viewModeButtonActive : {}),
+                }}
+                onClick={() => setInventoryReportMode("summary")}
+              >
+                🌍 Summary Report
+              </button>
+
+              <button style={styles.backButton} onClick={() => loadInventoryRecords(makeInventoryShip || userShip)}>
+                🔄 Refresh
+              </button>
+
               <button style={styles.backButton} onClick={printInventorySummary}>
                 🖨️ Print
               </button>
 
-              <button style={styles.deleteButton} onClick={clearInventoryForShip}>
-                🧹 Clear Inventory
-              </button>
+              {inventoryReportMode === "my" && (
+                <button style={styles.deleteButton} onClick={clearMyInventory}>
+                  🧹 Clear My Report
+                </button>
+              )}
+
+              {inventoryReportMode === "summary" && (
+                <button style={styles.deleteButton} onClick={clearShipInventory}>
+                  🧹 Clear Ship Records
+                </button>
+              )}
 
               <button style={styles.primaryButton} onClick={exportInventorySummaryToExcel}>
                 📥 Export Excel
@@ -1238,54 +1658,91 @@ export default function App() {
             </div>
           </div>
 
-          {summaryForShip.length === 0 && (
-            <p style={styles.emptyText}>Confirmed quantities for this ship will appear here.</p>
+          <div style={styles.infoBox}>
+            <div>🚢 Ship: <strong>{makeInventoryShip || userShip}</strong></div>
+            {inventoryReportMode === "my" ? (
+              <>
+                <div>📍 Station: <strong>{inventoryStation || "Not selected"}</strong></div>
+                <div>👤 User: <strong>{userName || "Not selected"}</strong></div>
+                <div>✅ My records: <strong>{myReportRows.length}</strong></div>
+              </>
+            ) : (
+              <>
+                <div>🌍 Report: <strong>All users and all stations for selected ship</strong></div>
+                <div>📦 Summary items: <strong>{summaryReportRows.length}</strong></div>
+              </>
+            )}
+          </div>
+
+          {visibleReportRows.length === 0 && (
+            <p style={styles.emptyText}>
+              {inventoryReportMode === "summary"
+                ? "No ship summary records yet."
+                : "Your confirmed quantities will appear here."}
+            </p>
           )}
 
           <div style={styles.equipmentGrid}>
-            {summaryForShip.map((item, index) => (
-              <div key={`${item.code}-${index}`} style={styles.equipmentCard}>
-                <div style={styles.recipeName}>{item.name}</div>
-                <div style={styles.recipeMeta}>Ship: {item.ship}</div>
-                <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                <div style={styles.recipeMeta}>Category: {item.category}</div>
-                <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
-                <div style={styles.statusGood}>Quantity: {formatQty(item.qty)}</div>
-                <div style={styles.recipeMeta}>Confirmed: {item.confirmedAt}</div>
+            {inventoryReportMode === "summary"
+              ? visibleReportRows.map((item, index) => (
+                  <div key={`${item.itemKey}-summary-${index}`} style={styles.equipmentCard}>
+                    <div style={styles.recipeName}>{item.name}</div>
+                    <div style={styles.recipeMeta}>Ship: {item.ship}</div>
+                    <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
+                    <div style={styles.recipeMeta}>Category: {item.category}</div>
+                    <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
+                    <div style={styles.statusGood}>Total Quantity: {formatQty(item.totalQty)}</div>
+                    <div style={styles.recipeMeta}>Stations: {item.stations.join(", ") || "N/A"}</div>
+                    <div style={styles.recipeMeta}>Users: {item.users.join(", ") || "N/A"}</div>
+                    <div style={styles.recipeMeta}>Records: {item.recordCount}</div>
+                    <div style={styles.recipeMeta}>Last Updated: {item.confirmedAt}</div>
+                  </div>
+                ))
+              : visibleReportRows.map((item) => (
+                  <div key={item.id} style={styles.equipmentCard}>
+                    <div style={styles.recipeName}>{item.name}</div>
+                    <div style={styles.recipeMeta}>Ship: {item.ship}</div>
+                    <div style={styles.recipeMeta}>Station: {item.station}</div>
+                    <div style={styles.recipeMeta}>User: {item.userName}</div>
+                    <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
+                    <div style={styles.recipeMeta}>Category: {item.category}</div>
+                    <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
+                    <div style={styles.statusGood}>Quantity: {formatQty(item.qty)}</div>
+                    <div style={styles.recipeMeta}>Confirmed: {item.confirmedAt}</div>
 
-                <div style={styles.headerActions}>
-                  <button style={styles.backButton} onClick={() => editInventoryItem(item, index)}>
-                    ✏️ Edit
-                  </button>
+                    <div style={styles.headerActions}>
+                      <button style={styles.backButton} onClick={() => editInventoryItem(item)}>
+                        ✏️ Edit
+                      </button>
 
-                  <button style={styles.deleteButton} onClick={() => deleteInventoryItem(index)}>
-                    🗑️ Delete
-                  </button>
-                </div>
-              </div>
-            ))}
+                      <button style={styles.deleteButton} onClick={() => deleteInventoryItem(item)}>
+                        🗑️ Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
           </div>
         </section>
 
         <section style={styles.card}>
-          <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 0 }}>
-            <h2 style={styles.productTitle}>📊 Variance Report</h2>
+          <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: showVariance ? 20 : 0 }}>
+            <h2 style={styles.productTitle}>📊 Count Status</h2>
 
             <div style={styles.headerActions}>
               <button
                 style={styles.backButton}
                 onClick={() => setShowVariance((value) => !value)}
               >
-                {showVariance ? "Hide Report" : "Open Report"}
+                {showVariance ? "Hide Status" : "Open Status"}
               </button>
 
               {showVariance && (
                 <>
-                  <button style={styles.backButton} onClick={printVarianceReport}>
+                  <button style={styles.backButton} onClick={printInventoryStatus}>
                     🖨️ Print
                   </button>
 
-                  <button style={styles.primaryButton} onClick={exportVarianceReportToExcel}>
+                  <button style={styles.primaryButton} onClick={exportInventoryStatusToExcel}>
                     📥 Export Excel
                   </button>
                 </>
@@ -1297,18 +1754,18 @@ export default function App() {
             <>
               <div style={styles.infoBox}>
                 <div>📋 Master items: <strong>{makeInventoryItems.length}</strong></div>
-                <div>✅ Counted: <strong>{countedItems.length}</strong></div>
-                <div>📋 Remaining to count: <strong>{notCountedItems.length}</strong></div>
+                <div>✅ Counted by me: <strong>{statusCountedItems.length}</strong></div>
+                <div>📋 Remaining for me: <strong>{statusPendingItems.length}</strong></div>
               </div>
 
               {makeInventoryItems.length === 0 && (
-                <p style={styles.emptyText}>Upload the master inventory file to see inventory status.</p>
+                <p style={styles.emptyText}>Upload the master inventory file to see count status.</p>
               )}
 
-              <h3 style={styles.sectionTitle}>📋 Master Inventory Status</h3>
+              <h3 style={styles.sectionTitle}>📋 My Master Inventory Status</h3>
 
               <div style={styles.equipmentGrid}>
-                {varianceReport.map((item, index) => (
+                {inventoryStatusRows.map((item, index) => (
                   <div
                     key={`${item.code}-status-${index}`}
                     style={{ ...styles.equipmentCard, ...(item.status === "Counted" ? styles.countedCard : {}) }}
@@ -1842,7 +2299,7 @@ const styles = {
   title: { margin: 0, fontSize: 28 },
   subtitle: { margin: 0, color: "#666" },
   label: { fontWeight: "bold", marginTop: 8 },
-  select: { padding: 10, borderRadius: 8, border: "1px solid #ccc" },
+  select: { padding: 10, borderRadius: 8, border: "1px solid #ccc", width: "100%" },
   primaryButton: { marginTop: 10, padding: 12, borderRadius: 10, border: 0, background: "#111", color: "#fff", fontWeight: "bold", cursor: "pointer" },
   shipBadge: { padding: "10px 14px", borderRadius: 999, background: "#111", color: "#fff", fontWeight: "bold" },
   moduleGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 },
