@@ -1360,7 +1360,7 @@ export default function App() {
     );
   }
 
- if (module === "equipment" && equipmentMode === "makeinventory") {
+  if (module === "equipment" && equipmentMode === "makeinventory") {
     const filteredMakeInventoryItems = getFilteredMakeInventoryItems();
     const myReportRows = getMyInventoryRows();
     const summaryReportRows = getShipSummaryRows();
