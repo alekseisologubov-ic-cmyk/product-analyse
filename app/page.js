@@ -85,6 +85,7 @@ export default function App() {
   const [makeInventoryItems, setMakeInventoryItems] = useState([]);
   const [makeInventorySearch, setMakeInventorySearch] = useState("");
   const [makeInventoryMessage, setMakeInventoryMessage] = useState("");
+  const [makeInventoryShip, setMakeInventoryShip] = useState("");
   const [currentInventoryItem, setCurrentInventoryItem] = useState(null);
   const [inventoryQty, setInventoryQty] = useState("");
   const [inventorySummary, setInventorySummary] = useState([]);
@@ -94,6 +95,25 @@ export default function App() {
   useEffect(() => {
     loadDefaultTemplate();
   }, []);
+
+  useEffect(() => {
+    setMakeInventoryShip(userShip);
+  }, [userShip]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("vv_inventory_summary");
+    if (saved) {
+      try {
+        setInventorySummary(JSON.parse(saved));
+      } catch {
+        setInventorySummary([]);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("vv_inventory_summary", JSON.stringify(inventorySummary));
+  }, [inventorySummary]);
 
   const visibleShips = viewMode === "single" ? [userShip] : SHIPS;
 
@@ -275,11 +295,13 @@ export default function App() {
     if (!currentInventoryItem) return;
 
     const qty = Number(inventoryQty || 0);
+    const ship = makeInventoryShip || userShip;
 
     setInventorySummary((prev) => [
       ...prev,
       {
         ...currentInventoryItem,
+        ship,
         qty,
         confirmedAt: new Date().toLocaleString(),
       },
@@ -287,6 +309,88 @@ export default function App() {
 
     setCurrentInventoryItem(null);
     setInventoryQty("");
+  };
+
+  const exportInventorySummaryToExcel = () => {
+    const rows = inventorySummary
+      .filter((item) => item.ship === makeInventoryShip)
+      .map((item) => ({
+        Ship: item.ship,
+        Code: item.code || "",
+        Name: item.name || "",
+        Category: item.category || "",
+        Sheet: item.sheetName || "",
+        Quantity: item.qty,
+        Confirmed: item.confirmedAt,
+      }));
+
+    if (!rows.length) return;
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(wb, ws, "Inventory Summary");
+    XLSX.writeFile(wb, `inventory-summary-${makeInventoryShip || "ship"}.xlsx`);
+  };
+
+  const printInventorySummary = () => {
+    const rows = inventorySummary.filter((item) => item.ship === makeInventoryShip);
+    if (!rows.length) return;
+
+    const html = `
+      <html>
+        <head>
+          <title>Inventory Summary</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; }
+            h1 { margin-bottom: 4px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+            th { background: #f2f2f2; }
+          </style>
+        </head>
+        <body>
+          <h1>Inventory Summary</h1>
+          <div><strong>Ship:</strong> ${makeInventoryShip}</div>
+          <div><strong>Printed:</strong> ${new Date().toLocaleString()}</div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Category</th>
+                <th>Sheet</th>
+                <th>Quantity</th>
+                <th>Confirmed</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows
+                .map(
+                  (item) => `
+                    <tr>
+                      <td>${item.code || ""}</td>
+                      <td>${item.name || ""}</td>
+                      <td>${item.category || ""}</td>
+                      <td>${item.sheetName || ""}</td>
+                      <td>${item.qty}</td>
+                      <td>${item.confirmedAt}</td>
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open("", "_blank");
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
   };
 
   const uploadConsumptionFile = (e) => {
@@ -365,7 +469,6 @@ export default function App() {
       setMakeInventoryItems(items);
       setCurrentInventoryItem(null);
       setInventoryQty("");
-      setInventorySummary([]);
       setMakeInventoryMessage(`Master inventory loaded from ${workbook.SheetNames.length} sheet(s).`);
     });
   };
@@ -741,7 +844,7 @@ export default function App() {
             <button style={styles.moduleCard} onClick={() => setEquipmentMode("makeinventory")}>
               <div style={styles.moduleIcon}>📝</div>
               <strong>Make Inventory</strong>
-              <span>Open master list, confirm product, enter quantity and create summary</span>
+              <span>Confirm product, enter quantity, export and print summary</span>
             </button>
           </div>
         </section>
@@ -751,6 +854,7 @@ export default function App() {
 
   if (module === "equipment" && equipmentMode === "makeinventory") {
     const filteredMakeInventoryItems = getFilteredMakeInventoryItems();
+    const summaryForShip = inventorySummary.filter((item) => item.ship === makeInventoryShip);
 
     return (
       <main style={styles.page}>
@@ -758,7 +862,7 @@ export default function App() {
           <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
           <div style={styles.headerActions}>
             <button style={styles.backButton} onClick={() => setEquipmentMode("inventory")}>← Back</button>
-            <div style={styles.shipBadge}>🚢 {userShip}</div>
+            <div style={styles.shipBadge}>🚢 {makeInventoryShip || userShip}</div>
           </div>
         </header>
 
@@ -766,15 +870,31 @@ export default function App() {
           <div style={styles.card}>
             <h2 style={styles.cardTitle}>📝 Make Inventory</h2>
 
+            <label style={styles.label}>Choose ship for this inventory</label>
+            <select
+              value={makeInventoryShip}
+              onChange={(e) => setMakeInventoryShip(e.target.value)}
+              style={styles.select}
+            >
+              <option value="">Choose ship</option>
+              {SHIPS.map((ship) => (
+                <option key={ship} value={ship}>{ship}</option>
+              ))}
+            </select>
+
             <label style={styles.label}>Upload Master Inventory / Muster List</label>
             <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadMakeInventoryFile} style={styles.fileInput} />
 
             {makeInventoryMessage && <p style={styles.message}>{makeInventoryMessage}</p>}
 
             <div style={styles.infoBox}>
+              <div>🚢 Inventory ship: <strong>{makeInventoryShip || "Not selected"}</strong></div>
               <div>📋 Master items loaded: <strong>{makeInventoryItems.length}</strong></div>
-              <div>✅ Confirmed items: <strong>{inventorySummary.length}</strong></div>
+              <div>✅ Confirmed for this ship: <strong>{summaryForShip.length}</strong></div>
               <div>Click item → confirm picture/product → enter quantity → Confirm.</div>
+              <div style={{ color: "#8a5a00" }}>
+                Records are saved in this browser. For true multi-user shared records, add database later.
+              </div>
             </div>
           </div>
 
@@ -869,6 +989,7 @@ export default function App() {
 
               <div>
                 <h3>{currentInventoryItem.name}</h3>
+                <p><strong>Ship:</strong> {makeInventoryShip || userShip}</p>
                 <p><strong>Code:</strong> {currentInventoryItem.code || "N/A"}</p>
                 <p><strong>Sheet:</strong> {currentInventoryItem.sheetName}</p>
                 <p><strong>Category:</strong> {currentInventoryItem.category}</p>
@@ -890,7 +1011,11 @@ export default function App() {
                     No / Back
                   </button>
 
-                  <button style={styles.primaryButton} onClick={confirmInventoryQty}>
+                  <button
+                    style={styles.primaryButton}
+                    onClick={confirmInventoryQty}
+                    disabled={!makeInventoryShip}
+                  >
                     Confirm Quantity
                   </button>
                 </div>
@@ -900,16 +1025,29 @@ export default function App() {
         )}
 
         <section style={styles.card}>
-          <h2 style={styles.productTitle}>📄 Inventory Summary</h2>
+          <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 20 }}>
+            <h2 style={styles.productTitle}>📄 Inventory Summary</h2>
 
-          {inventorySummary.length === 0 && (
-            <p style={styles.emptyText}>Confirmed quantities will appear here.</p>
+            <div style={styles.headerActions}>
+              <button style={styles.backButton} onClick={printInventorySummary}>
+                🖨️ Print
+              </button>
+
+              <button style={styles.primaryButton} onClick={exportInventorySummaryToExcel}>
+                📥 Export Excel
+              </button>
+            </div>
+          </div>
+
+          {summaryForShip.length === 0 && (
+            <p style={styles.emptyText}>Confirmed quantities for this ship will appear here.</p>
           )}
 
           <div style={styles.equipmentGrid}>
-            {inventorySummary.map((item, index) => (
+            {summaryForShip.map((item, index) => (
               <div key={`${item.code}-${index}`} style={styles.equipmentCard}>
                 <div style={styles.recipeName}>{item.name}</div>
+                <div style={styles.recipeMeta}>Ship: {item.ship}</div>
                 <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
                 <div style={styles.recipeMeta}>Category: {item.category}</div>
                 <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
