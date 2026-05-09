@@ -34,6 +34,7 @@ const normalizeShipCode = (value) => {
 };
 
 const SCHEDULE_ALL_SHIPS = "ALL";
+const MASTER_INVENTORY_SCOPE = "GLOBAL";
 
 const getShipDisplayName = (shipCode) => SHIP_DISPLAY_NAMES[shipCode] || shipCode || "";
 
@@ -271,58 +272,60 @@ export default function App() {
   useEffect(() => {
     if (module !== "equipment") return;
 
-    const ship = makeInventoryShip || userShip;
-    if (!ship) return;
-
-    if (equipmentMode === "makeinventory") {
-      refreshMakeInventoryData(ship);
+    if (equipmentMode === "muster" || equipmentMode === "makeinventory") {
+      loadMasterInventoryItems(makeInventoryShip || userShip);
     }
 
-    if (equipmentMode === "muster") {
-      loadMasterInventoryItems(ship);
+    if (equipmentMode === "makeinventory" && makeInventoryShip) {
+      loadInventoryRecords(makeInventoryShip);
     }
   }, [module, equipmentMode, makeInventoryShip, userShip]);
 
   useEffect(() => {
-    const ship = makeInventoryShip || userShip;
-    if (!supabase || !ship || module !== "equipment") return;
-    if (!["makeinventory", "muster"].includes(equipmentMode)) return;
+    if (!supabase || module !== "equipment" || (equipmentMode !== "makeinventory" && equipmentMode !== "muster")) return;
 
-    const countsChannel = supabase
-      .channel(`inventory-counts-${ship}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "inventory_counts",
-          filter: `ship=eq.${ship}`,
-        },
-        () => {
-          loadInventoryRecords(ship);
-        }
-      )
-      .subscribe();
+    const channels = [];
 
     const masterChannel = supabase
-      .channel(`inventory-master-${ship}`)
+      .channel("inventory-master-global")
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "inventory_master_items",
-          filter: `ship=eq.${ship}`,
+          filter: `ship=eq.${MASTER_INVENTORY_SCOPE}`,
         },
         () => {
-          loadMasterInventoryItems(ship);
+          loadMasterInventoryItems(makeInventoryShip || userShip);
         }
       )
       .subscribe();
 
+    channels.push(masterChannel);
+
+    if (equipmentMode === "makeinventory" && makeInventoryShip) {
+      const countsChannel = supabase
+        .channel(`inventory-counts-${makeInventoryShip}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "inventory_counts",
+            filter: `ship=eq.${makeInventoryShip}`,
+          },
+          () => {
+            loadInventoryRecords(makeInventoryShip);
+          }
+        )
+        .subscribe();
+
+      channels.push(countsChannel);
+    }
+
     return () => {
-      supabase.removeChannel(countsChannel);
-      supabase.removeChannel(masterChannel);
+      channels.forEach((channel) => supabase.removeChannel(channel));
     };
   }, [makeInventoryShip, userShip, module, equipmentMode]);
 
@@ -419,18 +422,65 @@ export default function App() {
   const parseMusterWorkbook = (workbook) => {
     const items = [];
 
+    const findHeaderIndexes = (rows) => {
+      let headerRowIndex = 0;
+      let headerRow = rows[0] || [];
+
+      rows.slice(0, 12).some((row, index) => {
+        const cleanRow = row.map((cell) => cleanText(cell));
+        const hasCode = cleanRow.some((cell) => cell.includes("CODE"));
+        const hasName = cleanRow.some(
+          (cell) =>
+            cell.includes("FINAL DESCRIPTION") ||
+            cell.includes("DESCRIPTION") ||
+            cell.includes("ITEM NAME") ||
+            cell === "NAME"
+        );
+
+        if (hasCode && hasName) {
+          headerRowIndex = index;
+          headerRow = row;
+          return true;
+        }
+
+        return false;
+      });
+
+      const cleanHeaders = headerRow.map((cell) => cleanText(cell));
+      const findIndex = (patterns, fallback) => {
+        const found = cleanHeaders.findIndex((header) =>
+          patterns.some((pattern) => header.includes(pattern))
+        );
+        return found >= 0 ? found : fallback;
+      };
+
+      return {
+        headerRowIndex,
+        categoryIndex: findIndex(["SUB CATEG", "SUB CATEGORY", "CATEGORY"], 2),
+        codeIndex: findIndex(["CODE", "APOLLO", "VV"], 3),
+        nameIndex: findIndex(["FINAL DESCRIPTION", "DESCRIPTION", "ITEM NAME", "NAME"], 4),
+        imageIndex: findIndex(["PHOTO", "PICTURE", "IMAGE", "LINK"], 7),
+      };
+    };
+
     workbook.SheetNames.forEach((sheetName) => {
-      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: "" });
+      if (!rows.length) return;
 
-      rows.slice(1).forEach((row) => {
-        const category = String(row[2] || "").trim();
-        const code = String(row[3] || "").trim();
-        const name = String(row[4] || "").trim();
-        const image = String(row[7] || "").trim();
+      const indexes = findHeaderIndexes(rows);
 
-        if (!category || !name) return;
+      rows.slice(indexes.headerRowIndex + 1).forEach((row, dataIndex) => {
+        const sourceRow = indexes.headerRowIndex + 2 + dataIndex;
+        const category = String(row[indexes.categoryIndex] || "").trim();
+        const code = String(row[indexes.codeIndex] || "").trim();
+        const name = String(row[indexes.nameIndex] || "").replace(/\s+/g, " ").trim();
+        const image = String(row[indexes.imageIndex] || "").trim();
 
-        items.push({ sheetName, category, code, name, image });
+        if (!name) return;
+        if (cleanText(name).includes("FINAL DESCRIPTION")) return;
+        if (cleanText(code) === "CODE" || cleanText(code).includes("APOLLO")) return;
+
+        items.push({ sheetName, category, code, name, image, sourceRow });
       });
     });
 
@@ -508,7 +558,7 @@ export default function App() {
   };
 
   const getInventoryItemKey = (item) =>
-    cleanText(`${item?.sheetName || ""}||${item?.category || ""}||${item?.code || ""}||${item?.name || ""}`);
+    cleanText(`${item?.sheetName || ""}|${item?.category || ""}|${item?.code || ""}|${item?.name || ""}|${item?.sourceRow || ""}`);
 
   const normalizeInventoryRecord = (record) => ({
     id: record.id,
@@ -535,19 +585,12 @@ export default function App() {
     category: record.category || "",
     sheetName: record.sheet_name || "",
     image: record.image || "",
+    sourceRow: Number(record.source_row || 0),
     sortOrder: Number(record.sort_order || 0),
     updatedAt: record.updated_at || "",
   });
 
   const loadMasterInventoryItems = async (shipOverride) => {
-    const ship = shipOverride || makeInventoryShip || userShip;
-
-    if (!ship) {
-      setMakeInventoryItems([]);
-      setMasterInventorySource("");
-      return;
-    }
-
     if (!supabase) {
       setMakeInventoryMessage("Supabase is not connected. Shared master inventory cannot load.");
       return;
@@ -555,11 +598,23 @@ export default function App() {
 
     setMasterInventoryLoading(true);
 
-    const { data, error } = await supabase
-      .from("inventory_master_items")
-      .select("*")
-      .eq("ship", ship)
-      .order("sort_order", { ascending: true });
+    const loadForScope = async (scope) =>
+      supabase
+        .from("inventory_master_items")
+        .select("*")
+        .eq("ship", scope)
+        .order("sort_order", { ascending: true });
+
+    let { data, error } = await loadForScope(MASTER_INVENTORY_SCOPE);
+    let sourceText = "Shared MEL master list loaded for all users.";
+
+    if (!error && (!data || data.length === 0) && shipOverride) {
+      const legacyResult = await loadForScope(shipOverride);
+      if (!legacyResult.error && legacyResult.data?.length) {
+        data = legacyResult.data;
+        sourceText = `Legacy shared master list loaded for ${shipOverride}. Upload MEL again to make it global for all users.`;
+      }
+    }
 
     if (error) {
       setMasterInventoryLoading(false);
@@ -570,25 +625,14 @@ export default function App() {
     const items = (data || []).map(normalizeMasterInventoryRecord);
     setMakeInventoryItems(items);
     setMusterItems(items);
-    setMasterInventorySource(items.length ? `Shared master list loaded for ${ship}` : "No shared master list uploaded for this ship yet.");
-    if (items.length) {
-      setMusterMessage(`Shared Equipment Master List loaded for ${ship}: ${items.length} item(s) from all sheet tabs.`);
-    }
+    setMasterInventorySource(items.length ? sourceText : "No shared MEL master list uploaded yet.");
+    setMusterMessage(items.length ? `${sourceText} ${items.length} item(s) available from all tabs.` : "No shared MEL master list uploaded yet.");
     setMasterInventoryLoading(false);
   };
 
-  const saveMasterInventoryItems = async (shipOverride, items) => {
-    const ship = shipOverride || makeInventoryShip || userShip;
-
+  const saveMasterInventoryItems = async (_shipOverride, items) => {
     if (!supabase) {
       const text = "Supabase is not connected. Cannot share the master inventory file.";
-      setMakeInventoryMessage(text);
-      window.alert(text);
-      return false;
-    }
-
-    if (!ship) {
-      const text = "Choose ship before uploading the master inventory file.";
       setMakeInventoryMessage(text);
       window.alert(text);
       return false;
@@ -602,17 +646,19 @@ export default function App() {
     }
 
     setMasterInventoryLoading(true);
-    setMakeInventoryMessage(`Sharing master inventory list for ${ship}...`);
+    setMakeInventoryMessage("Sharing MEL master inventory list for all users...");
+    setMusterMessage("Sharing MEL master inventory list for all users...");
 
     const deleteResult = await supabase
       .from("inventory_master_items")
       .delete()
-      .eq("ship", ship);
+      .eq("ship", MASTER_INVENTORY_SCOPE);
 
     if (deleteResult.error) {
       const text = `Could not replace shared master inventory: ${deleteResult.error.message}`;
       setMasterInventoryLoading(false);
       setMakeInventoryMessage(text);
+      setMusterMessage(text);
       window.alert(text);
       return false;
     }
@@ -624,42 +670,50 @@ export default function App() {
       if (!itemKey || rowMap.has(itemKey)) return;
 
       rowMap.set(itemKey, {
-        ship,
+        ship: MASTER_INVENTORY_SCOPE,
         item_key: itemKey,
         code: item.code || "",
         item_name: item.name || "",
         category: item.category || "",
         sheet_name: item.sheetName || "",
         image: item.image || "",
+        source_row: Number(item.sourceRow || index + 1),
         sort_order: index,
         updated_at: new Date().toISOString(),
       });
     });
 
     const rows = [...rowMap.values()];
+    const batchSize = 500;
 
-    const insertResult = await supabase
-      .from("inventory_master_items")
-      .insert(rows);
+    for (let i = 0; i < rows.length; i += batchSize) {
+      const insertResult = await supabase
+        .from("inventory_master_items")
+        .insert(rows.slice(i, i + batchSize));
 
-    if (insertResult.error) {
-      const text = `Could not save shared master inventory: ${insertResult.error.message}`;
-      setMasterInventoryLoading(false);
-      setMakeInventoryMessage(text);
-      window.alert(text);
-      return false;
+      if (insertResult.error) {
+        const text = `Could not save shared master inventory: ${insertResult.error.message}`;
+        setMasterInventoryLoading(false);
+        setMakeInventoryMessage(text);
+        setMusterMessage(text);
+        window.alert(text);
+        return false;
+      }
     }
 
-    await loadMasterInventoryItems(ship);
+    setMakeInventoryItems(items);
+    setMusterItems(items);
+    setMasterInventorySource(`Shared MEL master list saved for all users. ${rows.length} item(s) from all tabs.`);
     setMasterInventoryLoading(false);
-    setMakeInventoryMessage(`Shared master inventory saved for ${ship}. Users can refresh and see ${rows.length} item(s) from all sheet tabs.`);
+    setMakeInventoryMessage(`Shared MEL master list saved for all users. ${rows.length} item(s) from all tabs.`);
+    setMusterMessage(`Shared MEL master list saved for all users. ${rows.length} item(s) from all tabs.`);
     return true;
   };
 
   const refreshMakeInventoryData = async (shipOverride) => {
     const ship = shipOverride || makeInventoryShip || userShip;
     await Promise.all([
-      loadInventoryRecords(ship),
+      ship ? loadInventoryRecords(ship) : Promise.resolve(),
       loadMasterInventoryItems(ship),
     ]);
   };
@@ -1407,20 +1461,13 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const ship = makeInventoryShip || userShip;
-
     readExcelFile(file, async (workbook) => {
       const items = parseMusterWorkbook(workbook);
       setMusterItems(items);
       setMakeInventoryItems(items);
       setSelectedEquipment(null);
-      setMusterMessage(`Equipment Master List loaded from ${workbook.SheetNames.length} sheet(s): ${items.length} item(s).`);
-
-      if (ship) {
-        await saveMasterInventoryItems(ship, items);
-        setMusterMessage(`Shared Equipment Master List saved for ${ship}: ${items.length} item(s) from all sheet tabs.`);
-      }
-
+      setMusterMessage(`Equipment Muster List loaded from ${workbook.SheetNames.length} sheet(s). Saving shared MEL list...`);
+      await saveMasterInventoryItems(null, items);
       e.target.value = "";
     });
   };
@@ -1449,27 +1496,18 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const ship = makeInventoryShip || userShip;
-
-    if (!ship) {
-      const text = "Choose ship before uploading the master inventory file.";
-      setMakeInventoryMessage(text);
-      window.alert(text);
-      e.target.value = "";
-      return;
-    }
-
     readExcelFile(file, async (workbook) => {
       const items = parseMusterWorkbook(workbook);
       setMakeInventoryItems(items);
+      setMusterItems(items);
       setCurrentInventoryItem(null);
       setInventoryQty("");
       setEditingInventoryId(null);
       setShowVariance(false);
       setMasterInventorySource(`Uploaded from ${file.name}`);
-      setMakeInventoryMessage(`Master inventory loaded from ${workbook.SheetNames.length} sheet(s). Saving shared list...`);
+      setMakeInventoryMessage(`Master inventory loaded from ${workbook.SheetNames.length} sheet(s). Saving shared MEL list for all users...`);
 
-      await saveMasterInventoryItems(ship, items);
+      await saveMasterInventoryItems(null, items);
       e.target.value = "";
     });
   };
@@ -3584,6 +3622,10 @@ export default function App() {
             <h2 style={styles.cardTitle}>📤 Upload Equipment File</h2>
             <label style={styles.label}>Equipment Muster List file</label>
             <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadMusterFile} style={styles.fileInput} />
+
+            <button style={styles.backButton} onClick={() => loadMasterInventoryItems(makeInventoryShip || userShip)}>
+              🔄 Refresh Shared Master List
+            </button>
 
             {musterMessage && <p style={styles.message}>{musterMessage}</p>}
 
