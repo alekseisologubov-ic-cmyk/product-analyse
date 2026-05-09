@@ -33,7 +33,12 @@ const normalizeShipCode = (value) => {
   return "";
 };
 
+const SCHEDULE_ALL_SHIPS = "ALL";
+
 const getShipDisplayName = (shipCode) => SHIP_DISPLAY_NAMES[shipCode] || shipCode || "";
+
+const getScheduleShipDisplayName = (shipCode) =>
+  shipCode === SCHEDULE_ALL_SHIPS ? "All Ships" : getShipDisplayName(shipCode);
 
 const STATIONS = [
   "Galley",
@@ -134,6 +139,11 @@ const getImageUrl = (url) => {
   return value;
 };
 
+const getDefaultNextYearStartDate = () => {
+  const nextYear = new Date().getFullYear() + 1;
+  return `${nextYear}-01-01`;
+};
+
 export default function App() {
   const [consumptionRows, setConsumptionRows] = useState([]);
   const [recipeRows, setRecipeRows] = useState([]);
@@ -180,8 +190,8 @@ export default function App() {
   const [inventoryError, setInventoryError] = useState("");
   const [showVariance, setShowVariance] = useState(false);
 
-  const [scheduleShip, setScheduleShip] = useState("");
-  const [scheduleDate, setScheduleDate] = useState("");
+  const [scheduleShip, setScheduleShip] = useState(SCHEDULE_ALL_SHIPS);
+  const [scheduleDate, setScheduleDate] = useState(getDefaultNextYearStartDate());
   const [scheduleStation, setScheduleStation] = useState("");
   const [scheduleRole, setScheduleRole] = useState("");
   const [scheduleShiftName, setScheduleShiftName] = useState("Breakfast");
@@ -192,6 +202,7 @@ export default function App() {
   const [scheduleMessage, setScheduleMessage] = useState("");
   const [schedulePeople, setSchedulePeople] = useState([]);
   const [scheduleRows, setScheduleRows] = useState([]);
+  const [scheduleViewMode, setScheduleViewMode] = useState("timeline");
   const [scheduleCrewRows, setScheduleCrewRows] = useState([]);
   const [scheduleWorkbookInfo, setScheduleWorkbookInfo] = useState({ sheets: [], loadedAt: "" });
   const [personName, setPersonName] = useState("");
@@ -210,7 +221,7 @@ export default function App() {
 
   useEffect(() => {
     setMakeInventoryShip(userShip);
-    setScheduleShip(userShip);
+    setScheduleShip((currentShip) => currentShip || SCHEDULE_ALL_SHIPS);
     setPersonShip(userShip);
   }, [userShip]);
 
@@ -246,8 +257,14 @@ export default function App() {
   }, [scheduleCrewRows]);
 
   useEffect(() => {
-    localStorage.setItem("vv_schedule_workbook_info", JSON.stringify(scheduleWorkbookInfo));
-  }, [scheduleWorkbookInfo]);
+    if (module !== "people" || !scheduleCrewRows.length) return;
+
+    const timer = window.setTimeout(() => {
+      generateSchedule();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [module, scheduleShip, scheduleDate, scheduleCrewRows.length]);
 
   useEffect(() => {
     if (module === "equipment" && equipmentMode === "makeinventory" && makeInventoryShip) {
@@ -1554,7 +1571,6 @@ export default function App() {
         if (rowIndex < 6) return;
         if (isScheduleMetadataRow(idNumber, name)) return;
         if (!name || !currentShipCode) return;
-        if (!signOnDate && !signOffDate) return;
 
         const highlightedRange = getHighlightedContractRange(worksheet, rows, rowIndex);
         const inferredCalendarRange = inferCalendarRangeFromSignDates(rows, signOnDate, signOffDate);
@@ -1582,9 +1598,11 @@ export default function App() {
           vacationWeeks: rule.vacationWeeks || 0,
           vacationMonths: rule.vacationMonths || 0,
           rotationRule: rule.label,
-          source: highlightedRange.count > 0
-            ? "Highlighted cells I:IP"
-            : "Columns F/G + I:IP calendar dates",
+          source: !contractStart
+            ? "Needs date review"
+            : highlightedRange.count > 0
+              ? "Highlighted cells I:IP"
+              : "Columns F/G + I:IP calendar dates",
         });
       });
     });
@@ -1597,6 +1615,26 @@ export default function App() {
         a.name.localeCompare(b.name)
       ),
       selectedSheets,
+    };
+  };
+
+  const generateScheduleRowsFromCrewRows = (crewRowsOverride, shipOverride = scheduleShip || SCHEDULE_ALL_SHIPS) => {
+    const selectedShip = shipOverride || SCHEDULE_ALL_SHIPS;
+    const planningStart = getPlanningStartDate();
+    const planningEnd = getPlanningEndDate();
+    const allRows = buildReplacementProjectedScheduleRows(crewRowsOverride, planningStart, planningEnd);
+    const rows = selectedShip === SCHEDULE_ALL_SHIPS
+      ? allRows
+      : allRows.filter((row) => row.ship === selectedShip);
+
+    return {
+      rows,
+      planningStart,
+      planningEnd,
+      selectedShip,
+      replacementRows: rows.filter((row) => row.replacementFor).length,
+      openSlots: rows.filter((row) => row.periodType === "Open Slot").length,
+      missingDateRows: rows.filter((row) => row.periodType === "Missing Dates").length,
     };
   };
 
@@ -1616,15 +1654,23 @@ export default function App() {
         const { crewRows, selectedSheets } = parseScheduleWorkbook(workbook);
 
         setScheduleCrewRows(crewRows);
-        setScheduleRows([]);
         setScheduleWorkbookInfo({ sheets: selectedSheets, loadedAt: new Date().toLocaleString() });
 
         if (!selectedSheets.length) {
+          setScheduleRows([]);
           setScheduleMessage("No matching tabs found. Expected tabs: SEXC, EXC_EXSC, Pastry.");
           return;
         }
 
-        setScheduleMessage(`Schedule file loaded. ${crewRows.length} crew row(s) found from ${selectedSheets.join(", ")}.`);
+        const generated = generateScheduleRowsFromCrewRows(crewRows, scheduleShip || SCHEDULE_ALL_SHIPS);
+        setScheduleRows(generated.rows);
+
+        setScheduleMessage(
+          `Schedule file loaded and next-year schedule generated automatically. ` +
+          `${crewRows.length} crew row(s) found from ${selectedSheets.join(", ")}. ` +
+          `${generated.rows.length} projected period(s) for ${getScheduleShipDisplayName(generated.selectedShip)} from ${formatDate(generated.planningStart)} to ${formatDate(generated.planningEnd)}. ` +
+          `${generated.replacementRows} replacement assignment(s), ${generated.openSlots} open slot(s), ${generated.missingDateRows} needs-date review row(s).`
+        );
       } catch (error) {
         setScheduleMessage(`Could not read schedule file: ${error.message}`);
       }
@@ -1934,36 +1980,23 @@ export default function App() {
   };
 
   const generateSchedule = () => {
-    const ship = scheduleShip || userShip;
-
-    if (!ship) {
-      setScheduleMessage("Choose ship before generating schedule.");
-      return;
-    }
-
     if (!scheduleCrewRows.length) {
       setScheduleMessage("Upload the schedule workbook first. Expected tabs: SEXC, EXC_EXSC, Pastry.");
       return;
     }
 
-    const planningStart = getPlanningStartDate();
-    const planningEnd = getPlanningEndDate();
-    const allRows = buildReplacementProjectedScheduleRows(scheduleCrewRows, planningStart, planningEnd);
-    const rows = allRows.filter((row) => row.ship === ship || row.periodType === "Missing Dates");
+    const generated = generateScheduleRowsFromCrewRows(scheduleCrewRows, scheduleShip || SCHEDULE_ALL_SHIPS);
 
-    if (!rows.length) {
+    if (!generated.rows.length) {
       setScheduleRows([]);
-      setScheduleMessage(`No projected schedule rows found for ${getShipDisplayName(ship)} in the selected planning window.`);
+      setScheduleMessage(`No projected schedule rows found for ${getScheduleShipDisplayName(generated.selectedShip)} in the selected planning window.`);
       return;
     }
 
-    const replacementRows = rows.filter((row) => row.replacementFor).length;
-    const openSlots = rows.filter((row) => row.periodType === "Open Slot").length;
-
-    setScheduleRows(rows);
+    setScheduleRows(generated.rows);
     setScheduleMessage(
-      `Generated ${rows.length} projected period(s) for ${getShipDisplayName(ship)} from ${formatDate(planningStart)} to ${formatDate(planningEnd)}. ` +
-      `${replacementRows} replacement assignment(s), ${openSlots} open slot(s).`
+      `Generated ${generated.rows.length} projected period(s) for ${getScheduleShipDisplayName(generated.selectedShip)} from ${formatDate(generated.planningStart)} to ${formatDate(generated.planningEnd)}. ` +
+      `${generated.replacementRows} replacement assignment(s), ${generated.openSlots} open slot(s), ${generated.missingDateRows} needs-date review row(s).`
     );
   };
 
@@ -1986,8 +2019,9 @@ export default function App() {
   };
 
   const getScheduleCrewRowsForSelectedShip = () => {
-    const ship = scheduleShip || userShip;
-    return scheduleCrewRows.filter((crew) => !ship || crew.shipCode === ship);
+    const ship = scheduleShip || SCHEDULE_ALL_SHIPS;
+    if (ship === SCHEDULE_ALL_SHIPS) return scheduleCrewRows;
+    return scheduleCrewRows.filter((crew) => crew.shipCode === ship);
   };
 
   const getFilteredScheduleCrewRows = () => {
@@ -2008,6 +2042,53 @@ export default function App() {
         .toLowerCase()
         .includes(searchValue)
     );
+  };
+
+  const getScheduleTimelineMonths = () => {
+    const start = getPlanningStartDate();
+    const firstMonth = new Date(start.getFullYear(), start.getMonth(), 1);
+
+    return Array.from({ length: 12 }, (_, index) => {
+      const monthStart = addMonths(firstMonth, index);
+      const monthEnd = addDays(addMonths(monthStart, 1), -1);
+
+      return {
+        start: monthStart,
+        end: monthEnd,
+        label: monthStart.toLocaleString("en-US", { month: "short", year: "2-digit" }),
+      };
+    });
+  };
+
+  const getScheduleDurationDays = (row) => {
+    const start = parseExcelDate(row.startDate);
+    const end = parseExcelDate(row.endDate);
+    return getInclusiveDayCount(start, end);
+  };
+
+  const getScheduleDurationMonths = (row) => {
+    const days = getScheduleDurationDays(row);
+    return days ? (days / 30).toFixed(1) : "";
+  };
+
+  const scheduleRowOverlapsMonth = (row, month) => {
+    const start = parseExcelDate(row.startDate);
+    const end = parseExcelDate(row.endDate);
+    if (!start || !end) return false;
+    return start <= month.end && end >= month.start;
+  };
+
+  const getScheduleTimelineRows = () => {
+    return getFilteredScheduleRows()
+      .filter((row) => row.periodType !== "Vacation")
+      .sort((a, b) => {
+        const dateA = parseExcelDate(a.startDate)?.getTime() || 0;
+        const dateB = parseExcelDate(b.startDate)?.getTime() || 0;
+        if (String(a.ship) !== String(b.ship)) return String(a.ship).localeCompare(String(b.ship));
+        if (String(a.position) !== String(b.position)) return String(a.position).localeCompare(String(b.position));
+        if (dateA !== dateB) return dateA - dateB;
+        return String(a.name).localeCompare(String(b.name));
+      });
   };
 
   const exportScheduleToExcel = () => {
@@ -2034,7 +2115,7 @@ export default function App() {
     const wb = XLSX.utils.book_new();
 
     XLSX.utils.book_append_sheet(wb, ws, "Year Schedule");
-    XLSX.writeFile(wb, `people-schedule-${scheduleShip || userShip || "ship"}-${formatDate(getPlanningStartDate()) || "year"}.xlsx`);
+    XLSX.writeFile(wb, `people-schedule-${scheduleShip || SCHEDULE_ALL_SHIPS}-${formatDate(getPlanningStartDate()) || "year"}.xlsx`);
   };
 
   const printSchedule = () => {
@@ -2060,7 +2141,7 @@ export default function App() {
         </head>
         <body>
           <h1>People Rotation Schedule</h1>
-          <div><strong>Ship:</strong> ${getShipDisplayName(scheduleShip || userShip)}</div>
+          <div><strong>Ship:</strong> ${getScheduleShipDisplayName(scheduleShip || SCHEDULE_ALL_SHIPS)}</div>
           <div><strong>Planning window:</strong> ${formatDate(planningStart)} to ${formatDate(planningEnd)}</div>
           <div><strong>Source tabs:</strong> ${scheduleWorkbookInfo.sheets.join(", ") || "N/A"}</div>
           <div><strong>Printed:</strong> ${new Date().toLocaleString()}</div>
@@ -2199,6 +2280,8 @@ export default function App() {
     const selectedScheduleCrewRows = getScheduleCrewRowsForSelectedShip();
     const filteredScheduleCrewRows = getFilteredScheduleCrewRows();
     const filteredScheduleRows = getFilteredScheduleRows();
+    const scheduleTimelineRows = getScheduleTimelineRows();
+    const scheduleTimelineMonths = getScheduleTimelineMonths();
     const planningStart = getPlanningStartDate();
     const planningEnd = getPlanningEndDate();
     const contractRows = scheduleRows.filter((row) => row.periodType === "Contract");
@@ -2212,7 +2295,7 @@ export default function App() {
           <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
           <div style={styles.headerActions}>
             <button style={styles.backButton} onClick={() => setModule("")}>← Modules</button>
-            <div style={styles.shipBadge}>🚢 {getShipDisplayName(scheduleShip || userShip)}</div>
+            <div style={styles.shipBadge}>🚢 {getScheduleShipDisplayName(scheduleShip || SCHEDULE_ALL_SHIPS)}</div>
           </div>
         </header>
 
@@ -2222,19 +2305,20 @@ export default function App() {
 
             <label style={styles.label}>Choose ship</label>
             <select value={scheduleShip} onChange={(e) => setScheduleShip(e.target.value)} style={styles.select}>
-              <option value="">Choose ship</option>
+              <option value={SCHEDULE_ALL_SHIPS}>All Ships</option>
               {SHIPS.map((ship) => <option key={ship} value={ship}>{ship} - {getShipDisplayName(ship)}</option>)}
             </select>
 
             <label style={styles.label}>Upload schedule workbook</label>
             <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadScheduleFile} style={styles.fileInput} />
+            <p style={styles.emptyText}>Schedule is generated automatically after upload.</p>
 
             <label style={styles.label}>Planning start date</label>
             <input type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)} style={styles.searchInput} />
 
             <div style={styles.headerActions}>
               <button style={styles.primaryButton} onClick={generateSchedule}>
-                ✨ Generate Next Year Schedule
+                ✨ Regenerate Schedule
               </button>
               <button style={styles.backButton} onClick={clearSchedule}>
                 Clear Schedule
@@ -2247,7 +2331,7 @@ export default function App() {
             {scheduleMessage && <p style={styles.message}>{scheduleMessage}</p>}
 
             <div style={styles.infoBox}>
-              <div>🚢 Ship: <strong>{getShipDisplayName(scheduleShip || userShip) || "Not selected"}</strong></div>
+              <div>🚢 Schedule scope: <strong>{getScheduleShipDisplayName(scheduleShip || SCHEDULE_ALL_SHIPS)}</strong></div>
               <div>📅 Planning window: <strong>{formatDate(planningStart)} to {formatDate(planningEnd)}</strong></div>
               <div>📄 Tabs loaded: <strong>{scheduleWorkbookInfo.sheets.join(", ") || "None"}</strong></div>
               <div>👥 Total crew loaded: <strong>{scheduleCrewRows.length}</strong></div>
@@ -2319,6 +2403,18 @@ export default function App() {
           <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 20 }}>
             <h2 style={styles.productTitle}>📅 Next Year Generated Schedule</h2>
             <div style={styles.headerActions}>
+              <button
+                style={{ ...styles.viewModeButton, ...(scheduleViewMode === "timeline" ? styles.viewModeButtonActive : {}) }}
+                onClick={() => setScheduleViewMode("timeline")}
+              >
+                📊 Timeline
+              </button>
+              <button
+                style={{ ...styles.viewModeButton, ...(scheduleViewMode === "cards" ? styles.viewModeButtonActive : {}) }}
+                onClick={() => setScheduleViewMode("cards")}
+              >
+                🧾 Cards
+              </button>
               <button style={styles.backButton} onClick={printSchedule}>🖨️ Print</button>
               <button style={styles.primaryButton} onClick={exportScheduleToExcel}>📥 Export Excel</button>
             </div>
@@ -2328,33 +2424,94 @@ export default function App() {
             <p style={styles.emptyText}>Generated yearly rotation schedule will appear here.</p>
           )}
 
-          <div style={styles.equipmentGrid}>
-            {filteredScheduleRows.map((row) => (
-              <div
-                key={row.id}
-                style={{
-                  ...styles.equipmentCard,
-                  ...(row.periodType === "Contract" ? styles.countedCard : {}),
-                  ...(row.periodType === "Open Slot" ? styles.zeroCountCard : {}),
-                  ...(row.periodType === "Missing Dates" ? styles.orderWarningCard : {}),
-                }}
-              >
-                <div style={styles.recipeName}>{row.name}</div>
-                <div style={styles.recipeMeta}>ID: {row.idNumber || "N/A"}</div>
-                <div style={styles.recipeMeta}>Ship: {row.shipName || row.ship}</div>
-                {row.previousShip && <div style={styles.recipeMeta}>Previous ship: {getShipDisplayName(row.previousShip) || row.previousShip}</div>}
-                {row.replacementFor && <div style={styles.recipeMeta}>Replacing: {row.replacementFor}</div>}
-                <div style={styles.recipeMeta}>Position: {row.position || "N/A"}</div>
-                <div style={styles.recipeMeta}>Tab: {row.sheetName}</div>
-                <div style={row.periodType === "Contract" ? styles.statusGood : row.periodType === "Vacation" ? styles.statusNeutral : row.periodType === "Open Slot" ? styles.statusWarning : styles.statusBad}>
-                  {row.periodType}: {row.startDate || "N/A"} to {row.endDate || "N/A"}
+          {scheduleViewMode === "timeline" ? (
+            <div style={styles.timelineScroll}>
+              {scheduleTimelineRows.length === 0 ? (
+                <p style={styles.emptyText}>No timeline rows found for the selected search/filter.</p>
+              ) : (
+                <div
+                  style={{
+                    ...styles.timelineGrid,
+                    gridTemplateColumns: `150px 180px 90px 230px 90px 90px 70px 70px repeat(${scheduleTimelineMonths.length}, minmax(68px, 1fr))`,
+                  }}
+                >
+                  <div style={styles.timelineHeaderCell}>Ship</div>
+                  <div style={styles.timelineHeaderCell}>Position</div>
+                  <div style={styles.timelineHeaderCell}>ID</div>
+                  <div style={styles.timelineHeaderCell}>Name</div>
+                  <div style={styles.timelineHeaderCell}>Sign On</div>
+                  <div style={styles.timelineHeaderCell}>Sign Off</div>
+                  <div style={styles.timelineHeaderCell}>Days</div>
+                  <div style={styles.timelineHeaderCell}>Months</div>
+
+                  {scheduleTimelineMonths.map((month) => (
+                    <div key={month.label} style={styles.timelineHeaderCell}>{month.label}</div>
+                  ))}
+
+                  {scheduleTimelineRows.map((row) => (
+                    <React.Fragment key={row.id}>
+                      <div style={styles.timelineFixedCell}>{row.shipName || row.ship}</div>
+                      <div style={styles.timelineFixedCell}>{row.position || "N/A"}</div>
+                      <div style={styles.timelineFixedCell}>{row.idNumber || "N/A"}</div>
+                      <div style={styles.timelineNameCell}>
+                        <strong>{row.name}</strong>
+                        {row.replacementFor && <span>Replacing: {row.replacementFor}</span>}
+                      </div>
+                      <div style={styles.timelineFixedCell}>{row.startDate || "N/A"}</div>
+                      <div style={styles.timelineFixedCell}>{row.endDate || "N/A"}</div>
+                      <div style={styles.timelineFixedCell}>{getScheduleDurationDays(row) || ""}</div>
+                      <div style={styles.timelineFixedCell}>{getScheduleDurationMonths(row) || ""}</div>
+
+                      {scheduleTimelineMonths.map((month) => {
+                        const active = scheduleRowOverlapsMonth(row, month);
+                        const activeStyle = row.periodType === "Open Slot"
+                          ? styles.timelineCellOpen
+                          : row.periodType === "Missing Dates"
+                            ? styles.timelineCellMissing
+                            : styles.timelineCellContract;
+
+                        return (
+                          <div
+                            key={`${row.id}-${month.label}`}
+                            style={{ ...styles.timelineCell, ...(active ? activeStyle : {}) }}
+                            title={active ? `${row.periodType}: ${row.startDate} to ${row.endDate}` : ""}
+                          />
+                        );
+                      })}
+                    </React.Fragment>
+                  ))}
                 </div>
-                <div style={styles.recipeMeta}>Status: {row.status}</div>
-                <div style={styles.recipeMeta}>Rule: {row.rotationRule}</div>
-                {row.notes && <div style={styles.recipeMeta}>Notes: {row.notes}</div>}
-              </div>
-            ))}
-          </div>
+              )}
+            </div>
+          ) : (
+            <div style={styles.equipmentGrid}>
+              {filteredScheduleRows.map((row) => (
+                <div
+                  key={row.id}
+                  style={{
+                    ...styles.equipmentCard,
+                    ...(row.periodType === "Contract" ? styles.countedCard : {}),
+                    ...(row.periodType === "Open Slot" ? styles.zeroCountCard : {}),
+                    ...(row.periodType === "Missing Dates" ? styles.orderWarningCard : {}),
+                  }}
+                >
+                  <div style={styles.recipeName}>{row.name}</div>
+                  <div style={styles.recipeMeta}>ID: {row.idNumber || "N/A"}</div>
+                  <div style={styles.recipeMeta}>Ship: {row.shipName || row.ship}</div>
+                  {row.previousShip && <div style={styles.recipeMeta}>Previous ship: {getShipDisplayName(row.previousShip) || row.previousShip}</div>}
+                  {row.replacementFor && <div style={styles.recipeMeta}>Replacing: {row.replacementFor}</div>}
+                  <div style={styles.recipeMeta}>Position: {row.position || "N/A"}</div>
+                  <div style={styles.recipeMeta}>Tab: {row.sheetName}</div>
+                  <div style={row.periodType === "Contract" ? styles.statusGood : row.periodType === "Vacation" ? styles.statusNeutral : row.periodType === "Open Slot" ? styles.statusWarning : styles.statusBad}>
+                    {row.periodType}: {row.startDate || "N/A"} to {row.endDate || "N/A"}
+                  </div>
+                  <div style={styles.recipeMeta}>Status: {row.status}</div>
+                  <div style={styles.recipeMeta}>Rule: {row.rotationRule}</div>
+                  {row.notes && <div style={styles.recipeMeta}>Notes: {row.notes}</div>}
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       </main>
     );
@@ -3442,4 +3599,13 @@ const styles = {
   statusWarning: { marginTop: 8, padding: 8, borderRadius: 10, background: "#fff4d6", color: "#8a5a00", fontWeight: "bold", textAlign: "center" },
   statusNeutral: { marginTop: 8, padding: 8, borderRadius: 10, background: "#f2f2f2", color: "#555", fontWeight: "bold", textAlign: "center" },
   statusBad: { marginTop: 8, padding: 8, borderRadius: 10, background: "#b00020", color: "#fff", fontWeight: "bold", textAlign: "center" },
+  timelineScroll: { width: "100%", overflowX: "auto", border: "1px solid #ddd", borderRadius: 14, background: "#fff" },
+  timelineGrid: { display: "grid", minWidth: 1280, alignItems: "stretch" },
+  timelineHeaderCell: { position: "sticky", top: 0, zIndex: 2, padding: "10px 8px", background: "#111", color: "#fff", fontSize: 12, fontWeight: "bold", borderRight: "1px solid #333", borderBottom: "1px solid #333", textAlign: "center" },
+  timelineFixedCell: { padding: "9px 8px", borderRight: "1px solid #ddd", borderBottom: "1px solid #eee", background: "#fafafa", fontSize: 12, display: "flex", alignItems: "center" },
+  timelineNameCell: { padding: "9px 8px", borderRight: "1px solid #ddd", borderBottom: "1px solid #eee", background: "#fafafa", fontSize: 12, display: "grid", gap: 4 },
+  timelineCell: { minHeight: 38, borderRight: "1px solid #e5e5e5", borderBottom: "1px solid #eee", background: "#fff" },
+  timelineCellContract: { background: "#8a8a8a" },
+  timelineCellOpen: { background: "#fff4d6" },
+  timelineCellMissing: { background: "#fff0f0" },
 };
