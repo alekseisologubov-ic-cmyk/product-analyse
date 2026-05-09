@@ -175,6 +175,8 @@ export default function App() {
   const [inUseMessage, setInUseMessage] = useState("");
 
   const [makeInventoryItems, setMakeInventoryItems] = useState([]);
+  const [masterInventorySource, setMasterInventorySource] = useState("");
+  const [masterInventoryLoading, setMasterInventoryLoading] = useState(false);
   const [makeInventorySearch, setMakeInventorySearch] = useState("");
   const [makeInventoryMessage, setMakeInventoryMessage] = useState("");
   const [makeInventoryShip, setMakeInventoryShip] = useState("");
@@ -268,14 +270,14 @@ export default function App() {
 
   useEffect(() => {
     if (module === "equipment" && equipmentMode === "makeinventory" && makeInventoryShip) {
-      loadInventoryRecords(makeInventoryShip);
+      refreshMakeInventoryData(makeInventoryShip);
     }
   }, [module, equipmentMode, makeInventoryShip]);
 
   useEffect(() => {
     if (!supabase || !makeInventoryShip || module !== "equipment" || equipmentMode !== "makeinventory") return;
 
-    const channel = supabase
+    const countsChannel = supabase
       .channel(`inventory-counts-${makeInventoryShip}`)
       .on(
         "postgres_changes",
@@ -291,8 +293,25 @@ export default function App() {
       )
       .subscribe();
 
+    const masterChannel = supabase
+      .channel(`inventory-master-${makeInventoryShip}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "inventory_master_items",
+          filter: `ship=eq.${makeInventoryShip}`,
+        },
+        () => {
+          loadMasterInventoryItems(makeInventoryShip);
+        }
+      )
+      .subscribe();
+
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(countsChannel);
+      supabase.removeChannel(masterChannel);
     };
   }, [makeInventoryShip, module, equipmentMode]);
 
@@ -494,6 +513,140 @@ export default function App() {
     confirmedAt: record.updated_at ? new Date(record.updated_at).toLocaleString() : "",
     updatedAt: record.updated_at || "",
   });
+
+  const normalizeMasterInventoryRecord = (record) => ({
+    id: record.id,
+    ship: record.ship,
+    itemKey: record.item_key,
+    code: record.code || "",
+    name: record.item_name || "",
+    category: record.category || "",
+    sheetName: record.sheet_name || "",
+    image: record.image || "",
+    sortOrder: Number(record.sort_order || 0),
+    updatedAt: record.updated_at || "",
+  });
+
+  const loadMasterInventoryItems = async (shipOverride) => {
+    const ship = shipOverride || makeInventoryShip || userShip;
+
+    if (!ship) {
+      setMakeInventoryItems([]);
+      setMasterInventorySource("");
+      return;
+    }
+
+    if (!supabase) {
+      setMakeInventoryMessage("Supabase is not connected. Shared master inventory cannot load.");
+      return;
+    }
+
+    setMasterInventoryLoading(true);
+
+    const { data, error } = await supabase
+      .from("inventory_master_items")
+      .select("*")
+      .eq("ship", ship)
+      .order("sort_order", { ascending: true });
+
+    if (error) {
+      setMasterInventoryLoading(false);
+      setMakeInventoryMessage(`Could not load shared master inventory: ${error.message}`);
+      return;
+    }
+
+    const items = (data || []).map(normalizeMasterInventoryRecord);
+    setMakeInventoryItems(items);
+    setMasterInventorySource(items.length ? `Shared master list loaded for ${ship}` : "No shared master list uploaded for this ship yet.");
+    setMasterInventoryLoading(false);
+  };
+
+  const saveMasterInventoryItems = async (shipOverride, items) => {
+    const ship = shipOverride || makeInventoryShip || userShip;
+
+    if (!supabase) {
+      const text = "Supabase is not connected. Cannot share the master inventory file.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return false;
+    }
+
+    if (!ship) {
+      const text = "Choose ship before uploading the master inventory file.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return false;
+    }
+
+    if (!items.length) {
+      const text = "No inventory items were found in the uploaded file.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return false;
+    }
+
+    setMasterInventoryLoading(true);
+    setMakeInventoryMessage(`Sharing master inventory list for ${ship}...`);
+
+    const deleteResult = await supabase
+      .from("inventory_master_items")
+      .delete()
+      .eq("ship", ship);
+
+    if (deleteResult.error) {
+      const text = `Could not replace shared master inventory: ${deleteResult.error.message}`;
+      setMasterInventoryLoading(false);
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return false;
+    }
+
+    const rowMap = new Map();
+
+    items.forEach((item, index) => {
+      const itemKey = getInventoryItemKey(item);
+      if (!itemKey || rowMap.has(itemKey)) return;
+
+      rowMap.set(itemKey, {
+        ship,
+        item_key: itemKey,
+        code: item.code || "",
+        item_name: item.name || "",
+        category: item.category || "",
+        sheet_name: item.sheetName || "",
+        image: item.image || "",
+        sort_order: index,
+        updated_at: new Date().toISOString(),
+      });
+    });
+
+    const rows = [...rowMap.values()];
+
+    const insertResult = await supabase
+      .from("inventory_master_items")
+      .insert(rows);
+
+    if (insertResult.error) {
+      const text = `Could not save shared master inventory: ${insertResult.error.message}`;
+      setMasterInventoryLoading(false);
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return false;
+    }
+
+    await loadMasterInventoryItems(ship);
+    setMasterInventoryLoading(false);
+    setMakeInventoryMessage(`Shared master inventory saved for ${ship}. Users can refresh and see ${items.length} item(s).`);
+    return true;
+  };
+
+  const refreshMakeInventoryData = async (shipOverride) => {
+    const ship = shipOverride || makeInventoryShip || userShip;
+    await Promise.all([
+      loadInventoryRecords(ship),
+      loadMasterInventoryItems(ship),
+    ]);
+  };
 
   const loadInventoryRecords = async (shipOverride) => {
     const ship = shipOverride || makeInventoryShip || userShip;
@@ -1270,14 +1423,28 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    readExcelFile(file, (workbook) => {
+    const ship = makeInventoryShip || userShip;
+
+    if (!ship) {
+      const text = "Choose ship before uploading the master inventory file.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      e.target.value = "";
+      return;
+    }
+
+    readExcelFile(file, async (workbook) => {
       const items = parseMusterWorkbook(workbook);
       setMakeInventoryItems(items);
       setCurrentInventoryItem(null);
       setInventoryQty("");
       setEditingInventoryId(null);
       setShowVariance(false);
-      setMakeInventoryMessage(`Master inventory loaded from ${workbook.SheetNames.length} sheet(s).`);
+      setMasterInventorySource(`Uploaded from ${file.name}`);
+      setMakeInventoryMessage(`Master inventory loaded from ${workbook.SheetNames.length} sheet(s). Saving shared list...`);
+
+      await saveMasterInventoryItems(ship, items);
+      e.target.value = "";
     });
   };
 
@@ -2831,7 +2998,7 @@ export default function App() {
               </>
             )}
 
-            <label style={styles.label}>Upload Master Inventory / Muster List</label>
+            <label style={styles.label}>Upload / Replace Shared Master Inventory List</label>
             <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadMakeInventoryFile} style={styles.fileInput} />
 
             {makeInventoryMessage && <p style={styles.message}>{makeInventoryMessage}</p>}
@@ -2840,7 +3007,9 @@ export default function App() {
               <div>🚢 Inventory ship: <strong>{makeInventoryShip || "Not selected"}</strong></div>
               <div>📍 Station: <strong>{inventoryStation || "Not selected"}</strong></div>
               <div>👤 User: <strong>{userName || "Not selected"}</strong></div>
-              <div>📋 Master items loaded: <strong>{makeInventoryItems.length}</strong></div>
+              <div>📋 Shared master items: <strong>{makeInventoryItems.length}</strong></div>
+              <div>📂 Master source: <strong>{masterInventorySource || "Not loaded"}</strong></div>
+              {masterInventoryLoading && <div>Loading shared master inventory...</div>}
               <div>✅ My counted items: <strong>{myReportRows.length}</strong></div>
               <div>🌍 Ship summary records: <strong>{summaryReportRows.length}</strong></div>
               <div>Duplicate entries are automatically updated instead of added twice.</div>
@@ -2875,7 +3044,7 @@ export default function App() {
           <h2 style={styles.productTitle}>📦 Select Product for Inventory</h2>
 
           {makeInventoryItems.length === 0 && (
-            <p style={styles.emptyText}>Upload the master inventory file to begin.</p>
+            <p style={styles.emptyText}>Upload the shared master inventory file once for this ship, or click Refresh if another user already uploaded it.</p>
           )}
 
           <div style={styles.equipmentGrid}>
@@ -3029,7 +3198,7 @@ export default function App() {
                 🌍 Summary Report
               </button>
 
-              <button style={styles.backButton} onClick={() => loadInventoryRecords(makeInventoryShip || userShip)}>
+              <button style={styles.backButton} onClick={() => refreshMakeInventoryData(makeInventoryShip || userShip)}>
                 🔄 Refresh
               </button>
 
