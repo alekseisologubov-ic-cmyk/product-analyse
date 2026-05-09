@@ -14,6 +14,27 @@ const supabase =
 
 const SHIPS = ["BRL", "RL", "SC", "VL"];
 
+const SHIP_DISPLAY_NAMES = {
+  BRL: "Brilliant Lady",
+  RL: "Resilient Lady",
+  SC: "Scarlet Lady",
+  VL: "Valiant Lady",
+};
+
+const normalizeShipCode = (value) => {
+  const text = cleanText(value).replace(/RESILIANT/g, "RESILIENT");
+
+  if (!text) return "";
+  if (text === "BRL" || text.includes("BRILLIANT")) return "BRL";
+  if (text === "RL" || text.includes("RESILIENT")) return "RL";
+  if (text === "SC" || text.includes("SCARLET")) return "SC";
+  if (text === "VL" || text.includes("VALIANT")) return "VL";
+
+  return "";
+};
+
+const getShipDisplayName = (shipCode) => SHIP_DISPLAY_NAMES[shipCode] || shipCode || "";
+
 const STATIONS = [
   "Galley",
   "Restaurant",
@@ -57,6 +78,14 @@ const AVAILABILITY_OPTIONS = [
   "Emergency Only",
   "Unavailable",
 ];
+
+const SCHEDULE_TARGET_SHEETS = ["SEXC", "EXC_EXSC", "Pastry"];
+
+const SCHEDULE_ROTATION_RULES = {
+  SEXC: { contractMonths: 3, vacationWeeks: 6, label: "3 month contract / 6 week vacation" },
+  EXC_EXSC: { contractMonths: 4, vacationMonths: 2, label: "4 month contract / 2 month rotation" },
+  PASTRY: { contractMonths: 4, vacationMonths: 2, label: "4 month contract / 2 month rotation" },
+};
 
 const ALLERGEN_RULES = [
   { allergen: "Tree Nuts", keywords: ["almond", "walnut", "pecan", "cashew", "hazelnut", "pistachio", "macadamia"] },
@@ -163,6 +192,8 @@ export default function App() {
   const [scheduleMessage, setScheduleMessage] = useState("");
   const [schedulePeople, setSchedulePeople] = useState([]);
   const [scheduleRows, setScheduleRows] = useState([]);
+  const [scheduleCrewRows, setScheduleCrewRows] = useState([]);
+  const [scheduleWorkbookInfo, setScheduleWorkbookInfo] = useState({ sheets: [], loadedAt: "" });
   const [personName, setPersonName] = useState("");
   const [personRole, setPersonRole] = useState("");
   const [personStation, setPersonStation] = useState("");
@@ -187,12 +218,18 @@ export default function App() {
     try {
       const savedPeople = localStorage.getItem("vv_schedule_people");
       const savedRows = localStorage.getItem("vv_schedule_rows");
+      const savedCrewRows = localStorage.getItem("vv_schedule_crew_rows");
+      const savedWorkbookInfo = localStorage.getItem("vv_schedule_workbook_info");
 
       if (savedPeople) setSchedulePeople(JSON.parse(savedPeople));
       if (savedRows) setScheduleRows(JSON.parse(savedRows));
+      if (savedCrewRows) setScheduleCrewRows(JSON.parse(savedCrewRows));
+      if (savedWorkbookInfo) setScheduleWorkbookInfo(JSON.parse(savedWorkbookInfo));
     } catch {
       setSchedulePeople([]);
       setScheduleRows([]);
+      setScheduleCrewRows([]);
+      setScheduleWorkbookInfo({ sheets: [], loadedAt: "" });
     }
   }, []);
 
@@ -203,6 +240,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("vv_schedule_rows", JSON.stringify(scheduleRows));
   }, [scheduleRows]);
+
+  useEffect(() => {
+    localStorage.setItem("vv_schedule_crew_rows", JSON.stringify(scheduleCrewRows));
+  }, [scheduleCrewRows]);
+
+  useEffect(() => {
+    localStorage.setItem("vv_schedule_workbook_info", JSON.stringify(scheduleWorkbookInfo));
+  }, [scheduleWorkbookInfo]);
 
   useEffect(() => {
     if (module === "equipment" && equipmentMode === "makeinventory" && makeInventoryShip) {
@@ -1288,129 +1333,441 @@ export default function App() {
     return grouped;
   };
 
-  const getShiftHours = () => {
-    if (!scheduleStartTime || !scheduleEndTime) return 0;
+  const getScheduleRuleKey = (sheetName) => {
+    const key = cleanText(sheetName).replace(/[^A-Z0-9]/g, "_");
 
-    const [startHour, startMinute] = scheduleStartTime.split(":").map(Number);
-    const [endHour, endMinute] = scheduleEndTime.split(":").map(Number);
+    if (key === "SEXC") return "SEXC";
+    if (key === "EXC_EXSC") return "EXC_EXSC";
+    if (key === "PASTRY") return "PASTRY";
 
-    let start = startHour + startMinute / 60;
-    let end = endHour + endMinute / 60;
-
-    if (end <= start) end += 24;
-
-    return Number((end - start).toFixed(2));
+    return "EXC_EXSC";
   };
 
-  const resetPersonForm = () => {
-    setPersonName("");
-    setPersonRole("");
-    setPersonStation("");
-    setPersonShip(scheduleShip || userShip);
-    setPersonAvailability("Available");
-    setPersonMaxHours("8");
-    setPersonNotes("");
+  const getScheduleRuleForSheet = (sheetName) => {
+    const key = getScheduleRuleKey(sheetName);
+    return SCHEDULE_ROTATION_RULES[key] || SCHEDULE_ROTATION_RULES.EXC_EXSC;
   };
 
-  const addSchedulePerson = () => {
-    const name = personName.trim();
+  const parseExcelDate = (value) => {
+    if (!value) return null;
 
-    if (!name || !personRole || !personStation || !personShip) {
-      setScheduleMessage("Enter name, role, station and ship before adding a person.");
-      return;
+    if (value instanceof Date && !isNaN(value.getTime())) {
+      return new Date(value.getFullYear(), value.getMonth(), value.getDate());
     }
 
-    const person = {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      name,
-      role: personRole,
-      station: personStation,
-      ship: personShip,
-      availability: personAvailability,
-      maxHours: Number(personMaxHours || 0),
-      notes: personNotes.trim(),
+    if (typeof value === "number") {
+      const parsed = XLSX.SSF.parse_date_code(value);
+      if (parsed) return new Date(parsed.y, parsed.m - 1, parsed.d);
+    }
+
+    const valueText = String(value || "").trim();
+    if (!valueText) return null;
+
+    const parsedDate = new Date(valueText);
+    if (!isNaN(parsedDate.getTime())) {
+      return new Date(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate());
+    }
+
+    return null;
+  };
+
+  const formatDate = (date) => {
+    const parsed = parseExcelDate(date);
+    if (!parsed) return "";
+
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, "0");
+    const day = String(parsed.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  };
+
+  const addDays = (date, days) => {
+    const result = new Date(date);
+    result.setDate(result.getDate() + days);
+    return result;
+  };
+
+  const addWeeks = (date, weeks) => addDays(date, weeks * 7);
+
+  const addMonths = (date, months) => {
+    const result = new Date(date);
+    const originalDay = result.getDate();
+
+    result.setDate(1);
+    result.setMonth(result.getMonth() + months);
+
+    const lastDayOfTargetMonth = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
+    result.setDate(Math.min(originalDay, lastDayOfTargetMonth));
+
+    return result;
+  };
+
+  const getDateKey = (date) => {
+    const parsed = parseExcelDate(date);
+    if (!parsed) return 0;
+    return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()).getTime();
+  };
+
+  const getInclusiveDayCount = (startDate, endDate) => {
+    const startKey = getDateKey(startDate);
+    const endKey = getDateKey(endDate);
+    if (!startKey || !endKey || endKey < startKey) return 0;
+    return Math.round((endKey - startKey) / (24 * 60 * 60 * 1000)) + 1;
+  };
+
+  const isScheduleMetadataRow = (idNumber, name) => {
+    const text = cleanText(`${idNumber || ""} ${name || ""}`);
+
+    return (
+      !cleanText(name) ||
+      text.includes("TODAY DATE") ||
+      text.includes("UPDATED / DATE") ||
+      text.includes("UPDATED DATE") ||
+      text.includes("CONTRACT START") ||
+      text.includes("CONTRACT END") ||
+      text.includes("TOTAL MONTHS") ||
+      text === "ID NAMES" ||
+      text === "ID NAME"
+    );
+  };
+
+  const isFilledCell = (cell) => {
+    const fill = cell?.s?.fill;
+    if (!fill) return false;
+
+    const colors = [fill.fgColor?.rgb, fill.bgColor?.rgb]
+      .filter(Boolean)
+      .map((color) => String(color).replace(/^FF/i, "").toUpperCase());
+
+    if (!colors.length && fill.patternType) return fill.patternType !== "none";
+
+    return colors.some((color) => color && color !== "FFFFFF" && color !== "000000" && color !== "FFFFFF00");
+  };
+
+  const findHeaderDateForColumn = (rows, rowIndex, colIndex) => {
+    for (let r = rowIndex - 1; r >= 0; r -= 1) {
+      const possibleDate = parseExcelDate(rows[r]?.[colIndex]);
+      if (possibleDate) return possibleDate;
+    }
+
+    return null;
+  };
+
+  const getHighlightedContractRange = (worksheet, rows, rowIndex) => {
+    const startCol = XLSX.utils.decode_col("I");
+    const endCol = XLSX.utils.decode_col("IP");
+    const dates = [];
+
+    for (let colIndex = startCol; colIndex <= endCol; colIndex += 1) {
+      const address = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
+      const cell = worksheet[address];
+
+      if (!isFilledCell(cell)) continue;
+
+      const headerDate = findHeaderDateForColumn(rows, rowIndex, colIndex);
+      const cellDate = parseExcelDate(cell?.v);
+      const dateValue = headerDate || cellDate;
+
+      if (dateValue) dates.push(dateValue);
+    }
+
+    if (!dates.length) return { start: null, end: null, count: 0 };
+
+    dates.sort((a, b) => a.getTime() - b.getTime());
+
+    return {
+      start: dates[0],
+      end: dates[dates.length - 1],
+      count: dates.length,
+    };
+  };
+
+  const inferCalendarRangeFromSignDates = (rows, signOnDate, signOffDate) => {
+    if (!signOnDate || !signOffDate) return { start: null, end: null, count: 0 };
+
+    const startCol = XLSX.utils.decode_col("I");
+    const endCol = XLSX.utils.decode_col("IP");
+    const signOnKey = getDateKey(signOnDate);
+    const signOffKey = getDateKey(signOffDate);
+    const dates = [];
+
+    for (let colIndex = startCol; colIndex <= endCol; colIndex += 1) {
+      const headerDate = findHeaderDateForColumn(rows, 6, colIndex) || parseExcelDate(rows[4]?.[colIndex]);
+      if (!headerDate) continue;
+
+      const headerKey = getDateKey(headerDate);
+      if (headerKey >= signOnKey && headerKey <= signOffKey) dates.push(headerDate);
+    }
+
+    if (!dates.length) {
+      return {
+        start: signOnDate,
+        end: signOffDate,
+        count: getInclusiveDayCount(signOnDate, signOffDate),
+      };
+    }
+
+    dates.sort((a, b) => a.getTime() - b.getTime());
+
+    return {
+      start: dates[0],
+      end: dates[dates.length - 1],
+      count: dates.length,
+    };
+  };
+
+  const parseScheduleWorkbook = (workbook) => {
+    const targetSheetKeys = new Set(SCHEDULE_TARGET_SHEETS.map((sheet) => cleanText(sheet)));
+    const selectedSheets = workbook.SheetNames.filter((sheetName) => targetSheetKeys.has(cleanText(sheetName)));
+    const crewRows = [];
+
+    selectedSheets.forEach((sheetName) => {
+      const worksheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true });
+      const rule = getScheduleRuleForSheet(sheetName);
+
+      let currentShipCode = "";
+      let currentShipName = "";
+      let currentPosition = "";
+
+      rows.forEach((row, rowIndex) => {
+        const shipText = String(row[1] || "").trim();
+        const positionText = String(row[2] || "").trim();
+        const idNumberRaw = row[3];
+        const idNumber = String(idNumberRaw || "").replace(/\.0$/, "").trim();
+        const name = String(row[4] || "").trim();
+        const signOnDate = parseExcelDate(row[5]);
+        const signOffDate = parseExcelDate(row[6]);
+
+        const detectedShipCode = normalizeShipCode(shipText);
+        if (detectedShipCode) {
+          currentShipCode = detectedShipCode;
+          currentShipName = getShipDisplayName(detectedShipCode);
+        }
+
+        if (positionText && !cleanText(positionText).includes("POSITION")) {
+          currentPosition = positionText;
+        }
+
+        // Excel rows 1-6 are title/header rows. Crew rows start after the D/E/F/G header.
+        if (rowIndex < 6) return;
+        if (isScheduleMetadataRow(idNumber, name)) return;
+        if (!name || !currentShipCode) return;
+        if (!signOnDate && !signOffDate) return;
+
+        const highlightedRange = getHighlightedContractRange(worksheet, rows, rowIndex);
+        const inferredCalendarRange = inferCalendarRangeFromSignDates(rows, signOnDate, signOffDate);
+        const calendarRange = highlightedRange.count > 0 ? highlightedRange : inferredCalendarRange;
+        const contractStart = signOnDate || calendarRange.start;
+        const calculatedEnd = contractStart ? addDays(addMonths(contractStart, rule.contractMonths), -1) : null;
+        const contractEnd = signOffDate || calendarRange.end || calculatedEnd;
+
+        crewRows.push({
+          id: `${sheetName}-${currentShipCode}-${currentPosition || "position"}-${idNumber || name}-${rowIndex}`,
+          sheetName,
+          shipCode: currentShipCode,
+          shipName: currentShipName,
+          position: currentPosition || "N/A",
+          idNumber,
+          name,
+          signOnDate: formatDate(signOnDate),
+          signOffDate: formatDate(signOffDate),
+          highlightedStart: formatDate(calendarRange.start),
+          highlightedEnd: formatDate(calendarRange.end),
+          highlightedDays: calendarRange.count,
+          contractStart: formatDate(contractStart),
+          contractEnd: formatDate(contractEnd),
+          contractMonths: rule.contractMonths,
+          vacationWeeks: rule.vacationWeeks || 0,
+          vacationMonths: rule.vacationMonths || 0,
+          rotationRule: rule.label,
+          source: highlightedRange.count > 0
+            ? "Highlighted cells I:IP"
+            : "Columns F/G + I:IP calendar dates",
+        });
+      });
+    });
+
+    return {
+      crewRows: crewRows.sort((a, b) =>
+        a.shipCode.localeCompare(b.shipCode) ||
+        a.sheetName.localeCompare(b.sheetName) ||
+        a.position.localeCompare(b.position) ||
+        a.name.localeCompare(b.name)
+      ),
+      selectedSheets,
+    };
+  };
+
+  const uploadScheduleFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const workbook = XLSX.read(evt.target.result, {
+          type: "array",
+          cellDates: true,
+          cellStyles: true,
+        });
+
+        const { crewRows, selectedSheets } = parseScheduleWorkbook(workbook);
+
+        setScheduleCrewRows(crewRows);
+        setScheduleRows([]);
+        setScheduleWorkbookInfo({ sheets: selectedSheets, loadedAt: new Date().toLocaleString() });
+
+        if (!selectedSheets.length) {
+          setScheduleMessage("No matching tabs found. Expected tabs: SEXC, EXC_EXSC, Pastry.");
+          return;
+        }
+
+        setScheduleMessage(`Schedule file loaded. ${crewRows.length} crew row(s) found from ${selectedSheets.join(", ")}.`);
+      } catch (error) {
+        setScheduleMessage(`Could not read schedule file: ${error.message}`);
+      }
     };
 
-    setSchedulePeople((prev) => [...prev, person].sort((a, b) => a.name.localeCompare(b.name)));
-    setScheduleMessage(`${name} added to People list.`);
-    resetPersonForm();
+    reader.readAsArrayBuffer(file);
   };
 
-  const deleteSchedulePerson = (personId) => {
-    setSchedulePeople((prev) => prev.filter((person) => person.id !== personId));
+  const getPlanningStartDate = () => parseExcelDate(scheduleDate) || new Date();
+
+  const getPlanningEndDate = () => addDays(addMonths(getPlanningStartDate(), 12), -1);
+
+  const getVacationEndDate = (vacationStart, crew) => {
+    if (crew.vacationWeeks) return addDays(addWeeks(vacationStart, Number(crew.vacationWeeks || 0)), -1);
+    return addDays(addMonths(vacationStart, Number(crew.vacationMonths || 0)), -1);
   };
 
-  const getFilteredSchedulePeople = () => {
-    const ship = scheduleShip || userShip;
-    const searchValue = scheduleSearch.toLowerCase();
-
-    return schedulePeople
-      .filter((person) => !ship || person.ship === ship || person.ship === "All Ships")
-      .filter((person) =>
-        `${person.name} ${person.role} ${person.station} ${person.ship} ${person.availability} ${person.notes}`
-          .toLowerCase()
-          .includes(searchValue)
-      )
-      .sort((a, b) => a.name.localeCompare(b.name));
+  const periodOverlaps = (periodStart, periodEnd, planningStart, planningEnd) => {
+    return periodStart <= planningEnd && periodEnd >= planningStart;
   };
 
-  const getScheduleCandidates = () => {
-    const ship = scheduleShip || userShip;
+  const buildCrewRotationRows = (crew, planningStart, planningEnd) => {
+    const rows = [];
+    let contractStart = parseExcelDate(crew.contractStart || crew.signOnDate);
+    let contractEnd = parseExcelDate(crew.contractEnd || crew.signOffDate);
+    const contractMonths = Number(crew.contractMonths || 4);
 
-    return schedulePeople
-      .filter((person) => person.availability !== "Unavailable")
-      .filter((person) => !ship || person.ship === ship || person.ship === "All Ships")
-      .filter((person) => !scheduleStation || person.station === scheduleStation)
-      .filter((person) => !scheduleRole || person.role === scheduleRole)
-      .sort((a, b) => {
-        const availabilityScore = { Preferred: 0, Available: 1, "Emergency Only": 2 };
-        const scoreA = availabilityScore[a.availability] ?? 9;
-        const scoreB = availabilityScore[b.availability] ?? 9;
-
-        if (scoreA !== scoreB) return scoreA - scoreB;
-        return Number(b.maxHours || 0) - Number(a.maxHours || 0);
+    if (!contractStart) {
+      rows.push({
+        id: `${crew.id}-missing-dates`,
+        ship: crew.shipCode,
+        shipName: crew.shipName,
+        sheetName: crew.sheetName,
+        position: crew.position,
+        idNumber: crew.idNumber,
+        name: crew.name,
+        periodType: "Missing Dates",
+        startDate: "",
+        endDate: "",
+        rotationRule: crew.rotationRule,
+        status: "Missing sign-on date",
+        notes: "Check column F or highlighted contract cells between I and IP.",
       });
+      return rows;
+    }
+
+    if (!contractEnd || contractEnd < contractStart) {
+      contractEnd = addDays(addMonths(contractStart, contractMonths), -1);
+    }
+
+    let guard = 0;
+    while (contractEnd < planningStart && guard < 30) {
+      const vacationStart = addDays(contractEnd, 1);
+      const vacationEnd = getVacationEndDate(vacationStart, crew);
+      contractStart = addDays(vacationEnd, 1);
+      contractEnd = addDays(addMonths(contractStart, contractMonths), -1);
+      guard += 1;
+    }
+
+    guard = 0;
+    while (contractStart <= planningEnd && guard < 30) {
+      if (periodOverlaps(contractStart, contractEnd, planningStart, planningEnd)) {
+        rows.push({
+          id: `${crew.id}-contract-${formatDate(contractStart)}`,
+          ship: crew.shipCode,
+          shipName: crew.shipName,
+          sheetName: crew.sheetName,
+          position: crew.position,
+          idNumber: crew.idNumber,
+          name: crew.name,
+          periodType: "Contract",
+          startDate: formatDate(contractStart),
+          endDate: formatDate(contractEnd),
+          rotationRule: crew.rotationRule,
+          status: "On board",
+          notes: crew.source,
+        });
+      }
+
+      const vacationStart = addDays(contractEnd, 1);
+      const vacationEnd = getVacationEndDate(vacationStart, crew);
+
+      if (periodOverlaps(vacationStart, vacationEnd, planningStart, planningEnd)) {
+        rows.push({
+          id: `${crew.id}-vacation-${formatDate(vacationStart)}`,
+          ship: crew.shipCode,
+          shipName: crew.shipName,
+          sheetName: crew.sheetName,
+          position: crew.position,
+          idNumber: crew.idNumber,
+          name: crew.name,
+          periodType: "Vacation",
+          startDate: formatDate(vacationStart),
+          endDate: formatDate(vacationEnd),
+          rotationRule: crew.rotationRule,
+          status: "Off board",
+          notes: crew.sheetName === "SEXC" ? "6 week vacation" : "2 month rotation",
+        });
+      }
+
+      contractStart = addDays(vacationEnd, 1);
+      contractEnd = addDays(addMonths(contractStart, contractMonths), -1);
+      guard += 1;
+    }
+
+    return rows;
   };
 
   const generateSchedule = () => {
     const ship = scheduleShip || userShip;
-    const requiredPeople = Math.max(Number(scheduleRequiredPeople || 0), 0);
-    const shiftHours = getShiftHours();
 
-    if (!ship || !scheduleDate || !scheduleStation || !scheduleShiftName || !scheduleStartTime || !scheduleEndTime || requiredPeople <= 0) {
-      setScheduleMessage("Choose ship, date, station, shift, start/end time and required people.");
+    if (!ship) {
+      setScheduleMessage("Choose ship before generating schedule.");
       return;
     }
 
-    const candidates = getScheduleCandidates().filter((person) => Number(person.maxHours || 0) >= shiftHours);
-    const selected = candidates.slice(0, requiredPeople);
+    if (!scheduleCrewRows.length) {
+      setScheduleMessage("Upload the schedule workbook first. Expected tabs: SEXC, EXC_EXSC, Pastry.");
+      return;
+    }
 
-    const rows = selected.map((person, index) => ({
-      id: `${Date.now()}-${index}`,
-      ship,
-      date: scheduleDate,
-      station: scheduleStation,
-      role: scheduleRole || person.role,
-      shiftName: scheduleShiftName,
-      startTime: scheduleStartTime,
-      endTime: scheduleEndTime,
-      shiftHours,
-      personName: person.name,
-      personRole: person.role,
-      personStation: person.station,
-      availability: person.availability,
-      maxHours: person.maxHours,
-      notes: person.notes,
-      status: "Scheduled",
-    }));
+    const planningStart = getPlanningStartDate();
+    const planningEnd = getPlanningEndDate();
+    const selectedCrewRows = scheduleCrewRows.filter((crew) => crew.shipCode === ship);
+
+    if (!selectedCrewRows.length) {
+      setScheduleRows([]);
+      setScheduleMessage(`No crew rows found for ${getShipDisplayName(ship)} in the uploaded workbook.`);
+      return;
+    }
+
+    const rows = selectedCrewRows
+      .flatMap((crew) => buildCrewRotationRows(crew, planningStart, planningEnd))
+      .sort((a, b) => {
+        const dateA = parseExcelDate(a.startDate)?.getTime() || 0;
+        const dateB = parseExcelDate(b.startDate)?.getTime() || 0;
+        if (dateA !== dateB) return dateA - dateB;
+        if (a.position !== b.position) return a.position.localeCompare(b.position);
+        return a.name.localeCompare(b.name);
+      });
 
     setScheduleRows(rows);
-
-    if (selected.length < requiredPeople) {
-      setScheduleMessage(`Only ${selected.length} available person(s) matched the criteria. Required: ${requiredPeople}.`);
-    } else {
-      setScheduleMessage(`Schedule created with ${selected.length} person(s).`);
-    }
+    setScheduleMessage(`Generated ${rows.length} schedule period(s) for ${getShipDisplayName(ship)} from ${formatDate(planningStart)} to ${formatDate(planningEnd)}.`);
   };
 
   const clearSchedule = () => {
@@ -1421,67 +1778,107 @@ export default function App() {
     setScheduleMessage("Schedule cleared.");
   };
 
+  const clearScheduleWorkbook = () => {
+    const confirmed = window.confirm("Clear uploaded schedule workbook data and generated schedule?");
+    if (!confirmed) return;
+
+    setScheduleCrewRows([]);
+    setScheduleRows([]);
+    setScheduleWorkbookInfo({ sheets: [], loadedAt: "" });
+    setScheduleMessage("Schedule workbook data cleared.");
+  };
+
+  const getScheduleCrewRowsForSelectedShip = () => {
+    const ship = scheduleShip || userShip;
+    return scheduleCrewRows.filter((crew) => !ship || crew.shipCode === ship);
+  };
+
+  const getFilteredScheduleCrewRows = () => {
+    const searchValue = scheduleSearch.toLowerCase();
+
+    return getScheduleCrewRowsForSelectedShip().filter((crew) =>
+      `${crew.shipCode} ${crew.shipName} ${crew.position} ${crew.idNumber} ${crew.name} ${crew.sheetName} ${crew.signOnDate} ${crew.signOffDate} ${crew.rotationRule}`
+        .toLowerCase()
+        .includes(searchValue)
+    );
+  };
+
+  const getFilteredScheduleRows = () => {
+    const searchValue = scheduleSearch.toLowerCase();
+
+    return scheduleRows.filter((row) =>
+      `${row.ship} ${row.shipName} ${row.position} ${row.idNumber} ${row.name} ${row.sheetName} ${row.periodType} ${row.startDate} ${row.endDate} ${row.status}`
+        .toLowerCase()
+        .includes(searchValue)
+    );
+  };
+
   const exportScheduleToExcel = () => {
     if (!scheduleRows.length) return;
 
     const rows = scheduleRows.map((row) => ({
-      Ship: row.ship,
-      Date: row.date,
-      Station: row.station,
-      Role: row.role,
-      Shift: row.shiftName,
-      Start: row.startTime,
-      End: row.endTime,
-      Hours: row.shiftHours,
-      Person: row.personName,
-      PersonRole: row.personRole,
-      Availability: row.availability,
-      MaxHours: row.maxHours,
-      Notes: row.notes,
+      ShipCode: row.ship,
+      Ship: row.shipName,
+      Position: row.position,
+      Sheet: row.sheetName,
+      IdNumber: row.idNumber,
+      Name: row.name,
+      PeriodType: row.periodType,
+      StartDate: row.startDate,
+      EndDate: row.endDate,
       Status: row.status,
+      RotationRule: row.rotationRule,
+      Notes: row.notes,
     }));
 
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
 
-    XLSX.utils.book_append_sheet(wb, ws, "Schedule");
-    XLSX.writeFile(wb, `schedule-${scheduleShip || userShip || "ship"}-${scheduleDate || "date"}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Year Schedule");
+    XLSX.writeFile(wb, `people-schedule-${scheduleShip || userShip || "ship"}-${formatDate(getPlanningStartDate()) || "year"}.xlsx`);
   };
 
   const printSchedule = () => {
     if (!scheduleRows.length) return;
 
+    const planningStart = getPlanningStartDate();
+    const planningEnd = getPlanningEndDate();
+
     const html = `
       <html>
         <head>
-          <title>People Schedule</title>
+          <title>People Rotation Schedule</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 24px; }
             h1 { margin-bottom: 4px; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
             th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
             th { background: #f2f2f2; }
+            .contract { color: #2e7d32; font-weight: bold; }
+            .vacation { color: #555; font-weight: bold; }
+            .missing { color: #b00020; font-weight: bold; }
           </style>
         </head>
         <body>
-          <h1>People Schedule</h1>
-          <div><strong>Ship:</strong> ${scheduleShip || userShip}</div>
-          <div><strong>Date:</strong> ${scheduleDate}</div>
-          <div><strong>Station:</strong> ${scheduleStation}</div>
-          <div><strong>Shift:</strong> ${scheduleShiftName} / ${scheduleStartTime} - ${scheduleEndTime}</div>
+          <h1>People Rotation Schedule</h1>
+          <div><strong>Ship:</strong> ${getShipDisplayName(scheduleShip || userShip)}</div>
+          <div><strong>Planning window:</strong> ${formatDate(planningStart)} to ${formatDate(planningEnd)}</div>
+          <div><strong>Source tabs:</strong> ${scheduleWorkbookInfo.sheets.join(", ") || "N/A"}</div>
           <div><strong>Printed:</strong> ${new Date().toLocaleString()}</div>
 
           <table>
             <thead>
               <tr>
-                <th>Person</th>
-                <th>Role</th>
-                <th>Station</th>
-                <th>Shift</th>
+                <th>Ship</th>
+                <th>Position</th>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Sheet</th>
+                <th>Period</th>
                 <th>Start</th>
                 <th>End</th>
-                <th>Hours</th>
                 <th>Status</th>
+                <th>Rule</th>
                 <th>Notes</th>
               </tr>
             </thead>
@@ -1490,14 +1887,16 @@ export default function App() {
                 .map(
                   (row) => `
                     <tr>
-                      <td>${row.personName}</td>
-                      <td>${row.personRole}</td>
-                      <td>${row.station}</td>
-                      <td>${row.shiftName}</td>
-                      <td>${row.startTime}</td>
-                      <td>${row.endTime}</td>
-                      <td>${row.shiftHours}</td>
-                      <td>${row.status}</td>
+                      <td>${row.shipName || row.ship || ""}</td>
+                      <td>${row.position || ""}</td>
+                      <td>${row.idNumber || ""}</td>
+                      <td>${row.name || ""}</td>
+                      <td>${row.sheetName || ""}</td>
+                      <td class="${row.periodType === "Contract" ? "contract" : row.periodType === "Vacation" ? "vacation" : "missing"}">${row.periodType}</td>
+                      <td>${row.startDate || ""}</td>
+                      <td>${row.endDate || ""}</td>
+                      <td>${row.status || ""}</td>
+                      <td>${row.rotationRule || ""}</td>
                       <td>${row.notes || ""}</td>
                     </tr>
                   `
@@ -1585,7 +1984,7 @@ export default function App() {
             <button style={styles.moduleCard} onClick={() => setModule("people")}> 
               <div style={styles.moduleIcon}>👥</div>
               <strong>People & Schedule</strong>
-              <span>Create crew schedules based on ship, station, role and availability</span>
+              <span>Upload crew workbook and generate yearly contract rotations</span>
             </button>
           </div>
         </section>
@@ -1594,10 +1993,13 @@ export default function App() {
   }
 
   if (module === "people") {
-    const filteredSchedulePeople = getFilteredSchedulePeople();
-    const scheduleCandidates = getScheduleCandidates();
-    const requiredPeople = Math.max(Number(scheduleRequiredPeople || 0), 0);
-    const shiftHours = getShiftHours();
+    const selectedScheduleCrewRows = getScheduleCrewRowsForSelectedShip();
+    const filteredScheduleCrewRows = getFilteredScheduleCrewRows();
+    const filteredScheduleRows = getFilteredScheduleRows();
+    const planningStart = getPlanningStartDate();
+    const planningEnd = getPlanningEndDate();
+    const contractRows = scheduleRows.filter((row) => row.periodType === "Contract");
+    const vacationRows = scheduleRows.filter((row) => row.periodType === "Vacation");
 
     return (
       <main style={styles.page}>
@@ -1605,7 +2007,7 @@ export default function App() {
           <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
           <div style={styles.headerActions}>
             <button style={styles.backButton} onClick={() => setModule("")}>← Modules</button>
-            <div style={styles.shipBadge}>🚢 {scheduleShip || userShip}</div>
+            <div style={styles.shipBadge}>🚢 {getShipDisplayName(scheduleShip || userShip)}</div>
           </div>
         </header>
 
@@ -1616,144 +2018,90 @@ export default function App() {
             <label style={styles.label}>Choose ship</label>
             <select value={scheduleShip} onChange={(e) => setScheduleShip(e.target.value)} style={styles.select}>
               <option value="">Choose ship</option>
-              {SHIPS.map((ship) => <option key={ship} value={ship}>{ship}</option>)}
+              {SHIPS.map((ship) => <option key={ship} value={ship}>{ship} - {getShipDisplayName(ship)}</option>)}
             </select>
 
-            <label style={styles.label}>Schedule date</label>
+            <label style={styles.label}>Upload schedule workbook</label>
+            <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadScheduleFile} style={styles.fileInput} />
+
+            <label style={styles.label}>Planning start date</label>
             <input type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)} style={styles.searchInput} />
-
-            <label style={styles.label}>Station</label>
-            <select value={scheduleStation} onChange={(e) => setScheduleStation(e.target.value)} style={styles.select}>
-              <option value="">Choose station</option>
-              {STATIONS.map((station) => <option key={station} value={station}>{station}</option>)}
-            </select>
-
-            <label style={styles.label}>Role / criteria</label>
-            <select value={scheduleRole} onChange={(e) => setScheduleRole(e.target.value)} style={styles.select}>
-              <option value="">Any role</option>
-              {SCHEDULE_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
-            </select>
-
-            <label style={styles.label}>Shift</label>
-            <select value={scheduleShiftName} onChange={(e) => setScheduleShiftName(e.target.value)} style={styles.select}>
-              {SCHEDULE_SHIFTS.map((shift) => <option key={shift} value={shift}>{shift}</option>)}
-            </select>
-
-            <div style={styles.formRow}>
-              <div>
-                <label style={styles.label}>Start</label>
-                <input type="time" value={scheduleStartTime} onChange={(e) => setScheduleStartTime(e.target.value)} style={styles.searchInput} />
-              </div>
-              <div>
-                <label style={styles.label}>End</label>
-                <input type="time" value={scheduleEndTime} onChange={(e) => setScheduleEndTime(e.target.value)} style={styles.searchInput} />
-              </div>
-            </div>
-
-            <label style={styles.label}>Required people</label>
-            <input
-              type="number"
-              min="1"
-              value={scheduleRequiredPeople}
-              onChange={(e) => setScheduleRequiredPeople(e.target.value)}
-              style={styles.searchInput}
-            />
 
             <div style={styles.headerActions}>
               <button style={styles.primaryButton} onClick={generateSchedule}>
-                ✨ Generate Schedule
+                ✨ Generate Next Year Schedule
               </button>
               <button style={styles.backButton} onClick={clearSchedule}>
                 Clear Schedule
+              </button>
+              <button style={styles.deleteButton} onClick={clearScheduleWorkbook}>
+                Clear File Data
               </button>
             </div>
 
             {scheduleMessage && <p style={styles.message}>{scheduleMessage}</p>}
 
             <div style={styles.infoBox}>
-              <div>🚢 Ship: <strong>{scheduleShip || "Not selected"}</strong></div>
-              <div>📍 Station: <strong>{scheduleStation || "Not selected"}</strong></div>
-              <div>🧑‍🍳 Role: <strong>{scheduleRole || "Any role"}</strong></div>
-              <div>⏱️ Shift hours: <strong>{formatQty(shiftHours)}</strong></div>
-              <div>👥 Matching people: <strong>{scheduleCandidates.length}</strong></div>
-              <div>✅ Scheduled: <strong>{scheduleRows.length}</strong> / {requiredPeople}</div>
+              <div>🚢 Ship: <strong>{getShipDisplayName(scheduleShip || userShip) || "Not selected"}</strong></div>
+              <div>📅 Planning window: <strong>{formatDate(planningStart)} to {formatDate(planningEnd)}</strong></div>
+              <div>📄 Tabs loaded: <strong>{scheduleWorkbookInfo.sheets.join(", ") || "None"}</strong></div>
+              <div>👥 Total crew loaded: <strong>{scheduleCrewRows.length}</strong></div>
+              <div>👥 Crew for selected ship: <strong>{selectedScheduleCrewRows.length}</strong></div>
+              <div>✅ Contract periods generated: <strong>{contractRows.length}</strong></div>
+              <div>🌴 Vacation periods generated: <strong>{vacationRows.length}</strong></div>
+              {scheduleWorkbookInfo.loadedAt && <div>Loaded: <strong>{scheduleWorkbookInfo.loadedAt}</strong></div>}
             </div>
           </div>
 
           <div style={styles.card}>
-            <h2 style={styles.cardTitle}>➕ Add Person</h2>
+            <h2 style={styles.cardTitle}>📌 Rotation Rules</h2>
 
-            <label style={styles.label}>Name</label>
-            <input value={personName} onChange={(e) => setPersonName(e.target.value)} placeholder="Enter crew member name..." style={styles.searchInput} />
+            <div style={styles.infoBox}>
+              <div><strong>Tabs used:</strong> SEXC, EXC_EXSC, Pastry</div>
+              <div><strong>Columns:</strong> D = ID, E = Name, F = Sign on, G = Sign off</div>
+              <div><strong>Calendar area:</strong> I to IP highlighted contract dates</div>
+              <div><strong>Ship/position:</strong> B = Ship, C = Position</div>
+              <div><strong>SEXC:</strong> 3 month contract / 6 week vacation</div>
+              <div><strong>EXC_EXSC + Pastry:</strong> 4 month contract / 2 month rotation</div>
+              <div style={{ color: "#8a5a00" }}>
+                The workbook highlights I:IP with conditional formatting. The app reads D/E/F/G directly and uses the I:IP calendar window for matching/reporting.
+              </div>
+            </div>
 
-            <label style={styles.label}>Role</label>
-            <select value={personRole} onChange={(e) => setPersonRole(e.target.value)} style={styles.select}>
-              <option value="">Choose role</option>
-              {SCHEDULE_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
-            </select>
-
-            <label style={styles.label}>Station</label>
-            <select value={personStation} onChange={(e) => setPersonStation(e.target.value)} style={styles.select}>
-              <option value="">Choose station</option>
-              {STATIONS.map((station) => <option key={station} value={station}>{station}</option>)}
-            </select>
-
-            <label style={styles.label}>Ship</label>
-            <select value={personShip} onChange={(e) => setPersonShip(e.target.value)} style={styles.select}>
-              <option value="">Choose ship</option>
-              <option value="All Ships">All Ships</option>
-              {SHIPS.map((ship) => <option key={ship} value={ship}>{ship}</option>)}
-            </select>
-
-            <label style={styles.label}>Availability</label>
-            <select value={personAvailability} onChange={(e) => setPersonAvailability(e.target.value)} style={styles.select}>
-              {AVAILABILITY_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
-
-            <label style={styles.label}>Max shift hours</label>
-            <input type="number" min="1" value={personMaxHours} onChange={(e) => setPersonMaxHours(e.target.value)} style={styles.searchInput} />
-
-            <label style={styles.label}>Notes / criteria</label>
-            <input value={personNotes} onChange={(e) => setPersonNotes(e.target.value)} placeholder="Example: AM only, training, strong station..." style={styles.searchInput} />
-
-            <button style={styles.primaryButton} onClick={addSchedulePerson}>
-              Add Person
-            </button>
+            <label style={styles.label}>Search crew or schedule</label>
+            <input
+              placeholder="Search ship, position, ID, name, tab, date, contract, vacation..."
+              value={scheduleSearch}
+              onChange={(e) => setScheduleSearch(e.target.value)}
+              style={styles.searchInput}
+            />
           </div>
         </section>
 
         <section style={styles.card}>
           <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 20 }}>
-            <h2 style={styles.productTitle}>👥 People List</h2>
-            <div style={styles.headerActions}>
-              <input
-                placeholder="Search people, role, station, availability..."
-                value={scheduleSearch}
-                onChange={(e) => setScheduleSearch(e.target.value)}
-                style={{ ...styles.searchInput, marginBottom: 0, minWidth: 260 }}
-              />
-            </div>
+            <h2 style={styles.productTitle}>👥 Crew From Workbook</h2>
           </div>
 
-          {schedulePeople.length === 0 && (
-            <p style={styles.emptyText}>Add people first, then generate a schedule based on your criteria.</p>
+          {scheduleCrewRows.length === 0 && (
+            <p style={styles.emptyText}>Upload the workbook with tabs SEXC, EXC_EXSC and Pastry to load crew information.</p>
           )}
 
           <div style={styles.equipmentGrid}>
-            {filteredSchedulePeople.map((person) => (
-              <div key={person.id} style={styles.equipmentCard}>
-                <div style={styles.recipeName}>{person.name}</div>
-                <div style={styles.recipeMeta}>Ship: {person.ship}</div>
-                <div style={styles.recipeMeta}>Station: {person.station}</div>
-                <div style={styles.recipeMeta}>Role: {person.role}</div>
-                <div style={person.availability === "Unavailable" ? styles.statusBad : person.availability === "Preferred" ? styles.statusGood : styles.statusNeutral}>
-                  {person.availability}
-                </div>
-                <div style={styles.recipeMeta}>Max hours: {formatQty(person.maxHours)}</div>
-                {person.notes && <div style={styles.recipeMeta}>Notes: {person.notes}</div>}
-                <button style={styles.deleteButton} onClick={() => deleteSchedulePerson(person.id)}>
-                  🗑️ Delete
-                </button>
+            {filteredScheduleCrewRows.map((crew) => (
+              <div key={crew.id} style={styles.equipmentCard}>
+                <div style={styles.recipeName}>{crew.name}</div>
+                <div style={styles.recipeMeta}>Ship: {crew.shipName || crew.shipCode || "N/A"}</div>
+                <div style={styles.recipeMeta}>Position: {crew.position || "N/A"}</div>
+                <div style={styles.recipeMeta}>ID: {crew.idNumber || "N/A"}</div>
+                <div style={styles.recipeMeta}>Tab: {crew.sheetName}</div>
+                <div style={styles.recipeMeta}>Sign on: {crew.signOnDate || "N/A"}</div>
+                <div style={styles.recipeMeta}>Sign off: {crew.signOffDate || "N/A"}</div>
+                {crew.highlightedStart && (
+                  <div style={styles.recipeMeta}>Highlighted: {crew.highlightedStart} to {crew.highlightedEnd}</div>
+                )}
+                <div style={styles.statusNeutral}>{crew.source}</div>
+                <div style={styles.statusGood}>{crew.rotationRule}</div>
               </div>
             ))}
           </div>
@@ -1761,7 +2109,7 @@ export default function App() {
 
         <section style={styles.card}>
           <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 20 }}>
-            <h2 style={styles.productTitle}>📅 Generated Schedule</h2>
+            <h2 style={styles.productTitle}>📅 Next Year Generated Schedule</h2>
             <div style={styles.headerActions}>
               <button style={styles.backButton} onClick={printSchedule}>🖨️ Print</button>
               <button style={styles.primaryButton} onClick={exportScheduleToExcel}>📥 Export Excel</button>
@@ -1769,20 +2117,29 @@ export default function App() {
           </div>
 
           {scheduleRows.length === 0 && (
-            <p style={styles.emptyText}>Generated schedule will appear here.</p>
+            <p style={styles.emptyText}>Generated yearly rotation schedule will appear here.</p>
           )}
 
           <div style={styles.equipmentGrid}>
-            {scheduleRows.map((row) => (
-              <div key={row.id} style={styles.equipmentCard}>
-                <div style={styles.recipeName}>{row.personName}</div>
-                <div style={styles.recipeMeta}>Ship: {row.ship}</div>
-                <div style={styles.recipeMeta}>Date: {row.date}</div>
-                <div style={styles.recipeMeta}>Station: {row.station}</div>
-                <div style={styles.recipeMeta}>Role: {row.personRole}</div>
-                <div style={styles.recipeMeta}>Shift: {row.shiftName}</div>
-                <div style={styles.statusGood}>{row.startTime} - {row.endTime} / {formatQty(row.shiftHours)} hrs</div>
-                <div style={styles.recipeMeta}>Availability: {row.availability}</div>
+            {filteredScheduleRows.map((row) => (
+              <div
+                key={row.id}
+                style={{
+                  ...styles.equipmentCard,
+                  ...(row.periodType === "Contract" ? styles.countedCard : {}),
+                  ...(row.periodType === "Missing Dates" ? styles.orderWarningCard : {}),
+                }}
+              >
+                <div style={styles.recipeName}>{row.name}</div>
+                <div style={styles.recipeMeta}>ID: {row.idNumber || "N/A"}</div>
+                <div style={styles.recipeMeta}>Ship: {row.shipName || row.ship}</div>
+                <div style={styles.recipeMeta}>Position: {row.position || "N/A"}</div>
+                <div style={styles.recipeMeta}>Tab: {row.sheetName}</div>
+                <div style={row.periodType === "Contract" ? styles.statusGood : row.periodType === "Vacation" ? styles.statusNeutral : styles.statusBad}>
+                  {row.periodType}: {row.startDate || "N/A"} to {row.endDate || "N/A"}
+                </div>
+                <div style={styles.recipeMeta}>Status: {row.status}</div>
+                <div style={styles.recipeMeta}>Rule: {row.rotationRule}</div>
                 {row.notes && <div style={styles.recipeMeta}>Notes: {row.notes}</div>}
               </div>
             ))}
