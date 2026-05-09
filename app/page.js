@@ -88,6 +88,7 @@ export default function App() {
   const [makeInventoryShip, setMakeInventoryShip] = useState("");
   const [currentInventoryItem, setCurrentInventoryItem] = useState(null);
   const [inventoryQty, setInventoryQty] = useState("");
+  const [editingInventoryIndex, setEditingInventoryIndex] = useState(null);
   const [inventorySummary, setInventorySummary] = useState([]);
 
   const shipColumns = { BRL: 8, RL: 11, SC: 14, VL: 17 };
@@ -296,19 +297,91 @@ export default function App() {
 
     const qty = Number(inventoryQty || 0);
     const ship = makeInventoryShip || userShip;
+    const itemKey = cleanText(currentInventoryItem.code || currentInventoryItem.name);
 
-    setInventorySummary((prev) => [
-      ...prev,
-      {
-        ...currentInventoryItem,
-        ship,
-        qty,
-        confirmedAt: new Date().toLocaleString(),
-      },
-    ]);
+    setInventorySummary((prev) => {
+      const next = [...prev];
+
+      if (editingInventoryIndex !== null) {
+        next[editingInventoryIndex] = {
+          ...next[editingInventoryIndex],
+          ...currentInventoryItem,
+          ship,
+          qty,
+          confirmedAt: new Date().toLocaleString(),
+        };
+        return next;
+      }
+
+      const existingIndex = next.findIndex(
+        (item) => item.ship === ship && cleanText(item.code || item.name) === itemKey
+      );
+
+      if (existingIndex >= 0) {
+        next[existingIndex] = {
+          ...next[existingIndex],
+          ...currentInventoryItem,
+          ship,
+          qty,
+          confirmedAt: new Date().toLocaleString(),
+        };
+        return next;
+      }
+
+      return [
+        ...next,
+        {
+          ...currentInventoryItem,
+          ship,
+          qty,
+          confirmedAt: new Date().toLocaleString(),
+        },
+      ];
+    });
 
     setCurrentInventoryItem(null);
     setInventoryQty("");
+    setEditingInventoryIndex(null);
+  };
+
+  const editInventoryItem = (item, index) => {
+    setCurrentInventoryItem(item);
+    setInventoryQty(String(item.qty ?? ""));
+    setEditingInventoryIndex(index);
+  };
+
+  const deleteInventoryItem = (indexToDelete) => {
+    setInventorySummary((prev) => prev.filter((_, index) => index !== indexToDelete));
+  };
+
+  const getVarianceReport = () => {
+    const ship = makeInventoryShip || userShip;
+
+    const countedMap = {};
+    inventorySummary
+      .filter((item) => item.ship === ship)
+      .forEach((item) => {
+        const key = cleanText(item.code || item.name);
+        countedMap[key] = item;
+      });
+
+    return makeInventoryItems
+      .map((item) => {
+        const key = cleanText(item.code || item.name);
+        const counted = countedMap[key];
+
+        return {
+          ...item,
+          countedQty: counted ? Number(counted.qty || 0) : 0,
+          countedAt: counted?.confirmedAt || "",
+          status: counted ? "Counted" : "Not Counted",
+        };
+      })
+      .filter((item) =>
+        `${item.sheetName} ${item.category} ${item.code} ${item.name} ${item.status}`
+          .toLowerCase()
+          .includes(makeInventorySearch.toLowerCase())
+      );
   };
 
   const exportInventorySummaryToExcel = () => {
@@ -331,6 +404,27 @@ export default function App() {
 
     XLSX.utils.book_append_sheet(wb, ws, "Inventory Summary");
     XLSX.writeFile(wb, `inventory-summary-${makeInventoryShip || "ship"}.xlsx`);
+  };
+
+  const exportVarianceReportToExcel = () => {
+    const rows = getVarianceReport().map((item) => ({
+      Ship: makeInventoryShip || userShip,
+      Code: item.code || "",
+      Name: item.name || "",
+      Category: item.category || "",
+      Sheet: item.sheetName || "",
+      Status: item.status,
+      CountedQty: item.countedQty,
+      CountedAt: item.countedAt,
+    }));
+
+    if (!rows.length) return;
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(wb, ws, "Variance Report");
+    XLSX.writeFile(wb, `inventory-variance-${makeInventoryShip || "ship"}.xlsx`);
   };
 
   const printInventorySummary = () => {
@@ -376,6 +470,70 @@ export default function App() {
                       <td>${item.sheetName || ""}</td>
                       <td>${item.qty}</td>
                       <td>${item.confirmedAt}</td>
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open("", "_blank");
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
+  const printVarianceReport = () => {
+    const rows = getVarianceReport();
+    if (!rows.length) return;
+
+    const html = `
+      <html>
+        <head>
+          <title>Inventory Variance Report</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; }
+            h1 { margin-bottom: 4px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+            th { background: #f2f2f2; }
+            .missing { color: #b00020; font-weight: bold; }
+            .counted { color: #2e7d32; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h1>Inventory Variance Report</h1>
+          <div><strong>Ship:</strong> ${makeInventoryShip || userShip}</div>
+          <div><strong>Printed:</strong> ${new Date().toLocaleString()}</div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Category</th>
+                <th>Sheet</th>
+                <th>Status</th>
+                <th>Counted Qty</th>
+                <th>Counted At</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows
+                .map(
+                  (item) => `
+                    <tr>
+                      <td>${item.code || ""}</td>
+                      <td>${item.name || ""}</td>
+                      <td>${item.category || ""}</td>
+                      <td>${item.sheetName || ""}</td>
+                      <td class="${item.status === "Counted" ? "counted" : "missing"}">${item.status}</td>
+                      <td>${item.countedQty}</td>
+                      <td>${item.countedAt}</td>
                     </tr>
                   `
                 )
@@ -469,6 +627,7 @@ export default function App() {
       setMakeInventoryItems(items);
       setCurrentInventoryItem(null);
       setInventoryQty("");
+      setEditingInventoryIndex(null);
       setMakeInventoryMessage(`Master inventory loaded from ${workbook.SheetNames.length} sheet(s).`);
     });
   };
@@ -566,7 +725,8 @@ export default function App() {
 
     return result;
   };
-    const getCombinedVenueBreakdown = (product) => {
+
+  const getCombinedVenueBreakdown = (product) => {
     const actual = getConsumptionBreakdown(product);
     const required = getRequiredVenuesForProduct(product);
     const allVenueKeys = Array.from(new Set([...Object.keys(actual), ...Object.keys(required)])).sort();
@@ -844,7 +1004,7 @@ export default function App() {
             <button style={styles.moduleCard} onClick={() => setEquipmentMode("makeinventory")}>
               <div style={styles.moduleIcon}>📝</div>
               <strong>Make Inventory</strong>
-              <span>Confirm product, enter quantity, export and print summary</span>
+              <span>Confirm product, enter quantity, export and variance report</span>
             </button>
           </div>
         </section>
@@ -855,6 +1015,9 @@ export default function App() {
   if (module === "equipment" && equipmentMode === "makeinventory") {
     const filteredMakeInventoryItems = getFilteredMakeInventoryItems();
     const summaryForShip = inventorySummary.filter((item) => item.ship === makeInventoryShip);
+    const varianceReport = getVarianceReport();
+    const notCountedItems = varianceReport.filter((item) => item.status === "Not Counted");
+    const countedItems = varianceReport.filter((item) => item.status === "Counted");
 
     return (
       <main style={styles.page}>
@@ -891,7 +1054,8 @@ export default function App() {
               <div>🚢 Inventory ship: <strong>{makeInventoryShip || "Not selected"}</strong></div>
               <div>📋 Master items loaded: <strong>{makeInventoryItems.length}</strong></div>
               <div>✅ Confirmed for this ship: <strong>{summaryForShip.length}</strong></div>
-              <div>Click item → confirm picture/product → enter quantity → Confirm.</div>
+              <div>❌ Not counted: <strong>{notCountedItems.length}</strong></div>
+              <div>Duplicate entries are automatically updated instead of added twice.</div>
               <div style={{ color: "#8a5a00" }}>
                 Records are saved in this browser. For true multi-user shared records, add database later.
               </div>
@@ -902,14 +1066,14 @@ export default function App() {
             <h2 style={styles.cardTitle}>🔍 Search Product</h2>
 
             <input
-              placeholder="Search code, name, category or sheet..."
+              placeholder="Search code, name, category, sheet or status..."
               value={makeInventorySearch}
               onChange={(e) => setMakeInventorySearch(e.target.value)}
               style={styles.searchInput}
             />
 
             <p style={styles.emptyText}>
-              Select the correct product from the master list.
+              Select the correct product from the master list. Already counted products will update the existing entry.
             </p>
           </div>
         </section>
@@ -922,47 +1086,57 @@ export default function App() {
           )}
 
           <div style={styles.equipmentGrid}>
-            {filteredMakeInventoryItems.map((item, index) => (
-              <button
-                key={`${item.sheetName}-${item.code}-${index}`}
-                style={styles.equipmentCard}
-                onClick={() => {
-                  setCurrentInventoryItem(item);
-                  setInventoryQty("");
-                }}
-              >
-                {item.image ? (
-                  <div>
-                    <img
-                      src={getImageUrl(item.image)}
-                      alt={item.name}
-                      style={styles.equipmentImage}
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                        const link = e.currentTarget.nextElementSibling;
-                        if (link) link.style.display = "block";
-                      }}
-                    />
-                    <a href={item.image} target="_blank" rel="noreferrer" style={styles.imageLink}>
-                      Open Picture
-                    </a>
-                  </div>
-                ) : (
-                  <div style={styles.equipmentNoImage}>No image</div>
-                )}
+            {filteredMakeInventoryItems.map((item, index) => {
+              const alreadyCounted = summaryForShip.some(
+                (summaryItem) => cleanText(summaryItem.code || summaryItem.name) === cleanText(item.code || item.name)
+              );
 
-                <div style={styles.recipeName}>{item.name}</div>
-                <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
-                <div style={styles.recipeMeta}>Category: {item.category}</div>
-              </button>
-            ))}
+              return (
+                <button
+                  key={`${item.sheetName}-${item.code}-${index}`}
+                  style={{ ...styles.equipmentCard, ...(alreadyCounted ? styles.countedCard : {}) }}
+                  onClick={() => {
+                    setCurrentInventoryItem(item);
+                    setInventoryQty("");
+                    setEditingInventoryIndex(null);
+                  }}
+                >
+                  {item.image ? (
+                    <div>
+                      <img
+                        src={getImageUrl(item.image)}
+                        alt={item.name}
+                        style={styles.equipmentImage}
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                          const link = e.currentTarget.nextElementSibling;
+                          if (link) link.style.display = "block";
+                        }}
+                      />
+                      <a href={item.image} target="_blank" rel="noreferrer" style={styles.imageLink}>
+                        Open Picture
+                      </a>
+                    </div>
+                  ) : (
+                    <div style={styles.equipmentNoImage}>No image</div>
+                  )}
+
+                  <div style={styles.recipeName}>{item.name}</div>
+                  <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
+                  <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
+                  <div style={styles.recipeMeta}>Category: {item.category}</div>
+                  {alreadyCounted && <div style={styles.statusGood}>Already Counted</div>}
+                </button>
+              );
+            })}
           </div>
         </section>
 
         {currentInventoryItem && (
           <section style={styles.card}>
-            <h2 style={styles.productTitle}>✅ Confirm Product</h2>
+            <h2 style={styles.productTitle}>
+              {editingInventoryIndex !== null ? "✏️ Edit Counted Product" : "✅ Confirm Product"}
+            </h2>
 
             <div style={styles.grid}>
               <div>
@@ -1007,7 +1181,14 @@ export default function App() {
                 />
 
                 <div style={styles.headerActions}>
-                  <button style={styles.backButton} onClick={() => setCurrentInventoryItem(null)}>
+                  <button
+                    style={styles.backButton}
+                    onClick={() => {
+                      setCurrentInventoryItem(null);
+                      setInventoryQty("");
+                      setEditingInventoryIndex(null);
+                    }}
+                  >
                     No / Back
                   </button>
 
@@ -1016,7 +1197,7 @@ export default function App() {
                     onClick={confirmInventoryQty}
                     disabled={!makeInventoryShip}
                   >
-                    Confirm Quantity
+                    {editingInventoryIndex !== null ? "Update Quantity" : "Confirm Quantity"}
                   </button>
                 </div>
               </div>
@@ -1053,6 +1234,75 @@ export default function App() {
                 <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
                 <div style={styles.statusGood}>Quantity: {formatQty(item.qty)}</div>
                 <div style={styles.recipeMeta}>Confirmed: {item.confirmedAt}</div>
+
+                <div style={styles.headerActions}>
+                  <button style={styles.backButton} onClick={() => editInventoryItem(item, index)}>
+                    ✏️ Edit
+                  </button>
+
+                  <button style={styles.deleteButton} onClick={() => deleteInventoryItem(index)}>
+                    🗑️ Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section style={styles.card}>
+          <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 20 }}>
+            <h2 style={styles.productTitle}>📊 Variance Report</h2>
+
+            <div style={styles.headerActions}>
+              <button style={styles.backButton} onClick={printVarianceReport}>
+                🖨️ Print
+              </button>
+
+              <button style={styles.primaryButton} onClick={exportVarianceReportToExcel}>
+                📥 Export Excel
+              </button>
+            </div>
+          </div>
+
+          <div style={styles.infoBox}>
+            <div>📋 Master items: <strong>{makeInventoryItems.length}</strong></div>
+            <div>✅ Counted: <strong>{countedItems.length}</strong></div>
+            <div>❌ Not counted: <strong>{notCountedItems.length}</strong></div>
+          </div>
+
+          {makeInventoryItems.length === 0 && (
+            <p style={styles.emptyText}>Upload the master inventory file to see variance.</p>
+          )}
+
+          {makeInventoryItems.length > 0 && notCountedItems.length === 0 && (
+            <p style={styles.emptyText}>All master inventory items have been counted for this ship.</p>
+          )}
+
+          <h3 style={{ ...styles.sectionTitle, color: "#b00020" }}>❌ Not Counted</h3>
+
+          <div style={styles.equipmentGrid}>
+            {notCountedItems.map((item, index) => (
+              <div key={`${item.code}-variance-${index}`} style={{ ...styles.equipmentCard, ...styles.orderWarningCard }}>
+                <div style={styles.recipeName}>{item.name}</div>
+                <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
+                <div style={styles.recipeMeta}>Category: {item.category}</div>
+                <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
+                <div style={styles.statusBad}>Not Counted</div>
+              </div>
+            ))}
+          </div>
+
+          <h3 style={{ ...styles.sectionTitle, color: "#2e7d32" }}>✅ Counted</h3>
+
+          <div style={styles.equipmentGrid}>
+            {countedItems.map((item, index) => (
+              <div key={`${item.code}-counted-${index}`} style={styles.equipmentCard}>
+                <div style={styles.recipeName}>{item.name}</div>
+                <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
+                <div style={styles.recipeMeta}>Category: {item.category}</div>
+                <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
+                <div style={styles.statusGood}>Quantity: {formatQty(item.countedQty)}</div>
+                <div style={styles.recipeMeta}>Counted: {item.countedAt}</div>
               </div>
             ))}
           </div>
@@ -1561,8 +1811,9 @@ const styles = {
   logo: { height: 70, objectFit: "contain", marginBottom: 8 },
   header: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: 18, background: "#fff", borderRadius: 16, boxShadow: "0 4px 18px rgba(0,0,0,0.06)", marginBottom: 20 },
   headerLogo: { height: 54, objectFit: "contain" },
-  headerActions: { display: "flex", alignItems: "center", gap: 10 },
+  headerActions: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" },
   backButton: { padding: "10px 14px", borderRadius: 999, border: "1px solid #ccc", background: "#fff", cursor: "pointer", fontWeight: "bold" },
+  deleteButton: { padding: "10px 14px", borderRadius: 999, border: "1px solid #b00020", background: "#b00020", color: "#fff", cursor: "pointer", fontWeight: "bold" },
   title: { margin: 0, fontSize: 28 },
   subtitle: { margin: 0, color: "#666" },
   label: { fontWeight: "bold", marginTop: 8 },
@@ -1572,7 +1823,7 @@ const styles = {
   moduleGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 },
   moduleCard: { border: "1px solid #ddd", background: "#fafafa", borderRadius: 16, padding: 20, cursor: "pointer", textAlign: "left", display: "grid", gap: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.04)" },
   moduleIcon: { fontSize: 34 },
-  viewModeBox: { display: "flex", gap: 10, marginBottom: 20 },
+  viewModeBox: { display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" },
   viewModeButton: { padding: "10px 14px", borderRadius: 999, border: "1px solid #ccc", background: "#fff", cursor: "pointer", fontWeight: "bold" },
   viewModeButtonActive: { background: "#111", color: "#fff", borderColor: "#111" },
   grid: { display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 20, marginBottom: 20 },
@@ -1622,6 +1873,7 @@ const styles = {
   equipmentCategory: { marginBottom: 24 },
   equipmentGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 },
   equipmentCard: { border: "1px solid #ddd", borderRadius: 14, padding: 14, background: "#fafafa", display: "grid", gap: 8, cursor: "pointer", textAlign: "left" },
+  countedCard: { border: "2px solid #2e7d32", background: "#f0fff4" },
   equipmentImage: { width: "100%", height: 150, objectFit: "cover", borderRadius: 10, background: "#eee" },
   equipmentNoImage: { height: 150, borderRadius: 10, background: "#eee", display: "flex", alignItems: "center", justifyContent: "center", color: "#777" },
   modalBackdrop: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: 20 },
