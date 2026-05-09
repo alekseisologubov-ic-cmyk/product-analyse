@@ -620,23 +620,44 @@ export default function App() {
   };
 
   const confirmInventoryQty = async () => {
-    if (!currentInventoryItem) return;
+    if (!currentInventoryItem) {
+      setMakeInventoryMessage("Select a product before confirming quantity.");
+      return;
+    }
 
     const ship = makeInventoryShip || userShip;
     const station = inventoryStation;
     const userName = getEffectiveInventoryUserName();
 
     if (!supabase) {
-      setMakeInventoryMessage("Supabase is not connected. Check your environment variables.");
+      const text = "Supabase is not connected. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
       return;
     }
 
     if (!ship || !station || !userName) {
-      setMakeInventoryMessage("Choose ship, station, and user name before confirming inventory.");
+      const text = "Choose ship, station, and user name before confirming inventory.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
+
+    if (String(inventoryQty).trim() === "") {
+      const text = "Enter quantity counted before confirming.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
       return;
     }
 
     const qty = Number(inventoryQty || 0);
+    if (Number.isNaN(qty) || qty < 0) {
+      const text = "Quantity must be a valid number.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
+
     const itemKey = getInventoryItemKey(currentInventoryItem);
 
     const payload = {
@@ -653,23 +674,79 @@ export default function App() {
       updated_at: new Date().toISOString(),
     };
 
-    const { error } = await supabase
-      .from("inventory_counts")
-      .upsert(payload, {
-        onConflict: "ship,station,user_name,item_key",
-      });
+    setInventoryLoading(true);
+    setInventoryError("");
+    setMakeInventoryMessage("Saving inventory quantity...");
 
-    if (error) {
-      setMakeInventoryMessage(`Could not save inventory: ${error.message}`);
+    const { data: existingRows, error: findError } = await supabase
+      .from("inventory_counts")
+      .select("id")
+      .eq("ship", ship)
+      .eq("station", station)
+      .eq("user_name", userName)
+      .eq("item_key", itemKey)
+      .limit(1);
+
+    if (findError) {
+      const text = `Could not check existing inventory record: ${findError.message}`;
+      setInventoryError(text);
+      setMakeInventoryMessage(text);
+      setInventoryLoading(false);
+      window.alert(text);
       return;
     }
+
+    const existingId = existingRows?.[0]?.id;
+    let saveResult;
+
+    if (existingId) {
+      saveResult = await supabase
+        .from("inventory_counts")
+        .update(payload)
+        .eq("id", existingId)
+        .select("*")
+        .single();
+    } else {
+      saveResult = await supabase
+        .from("inventory_counts")
+        .insert(payload)
+        .select("*")
+        .single();
+    }
+
+    if (saveResult.error) {
+      const text = `Could not save inventory: ${saveResult.error.message}`;
+      setInventoryError(text);
+      setMakeInventoryMessage(text);
+      setInventoryLoading(false);
+      window.alert(text);
+      return;
+    }
+
+    const savedRecord = normalizeInventoryRecord(saveResult.data);
+
+    setInventorySummary((prev) => {
+      const withoutSavedRecord = prev.filter(
+        (item) =>
+          item.id !== savedRecord.id &&
+          !(
+            item.ship === savedRecord.ship &&
+            item.station === savedRecord.station &&
+            item.userName === savedRecord.userName &&
+            item.itemKey === savedRecord.itemKey
+          )
+      );
+
+      return [savedRecord, ...withoutSavedRecord];
+    });
 
     await loadInventoryRecords(ship);
 
     setCurrentInventoryItem(null);
     setInventoryQty("");
     setEditingInventoryId(null);
-    setMakeInventoryMessage("Inventory quantity saved.");
+    setInventoryLoading(false);
+    setMakeInventoryMessage(`Saved ${currentInventoryItem.name} / Qty ${formatQty(qty)}.`);
   };
 
   const editInventoryItem = (item) => {
@@ -720,13 +797,36 @@ export default function App() {
     const ship = makeInventoryShip || userShip;
     const userName = getEffectiveInventoryUserName();
 
-    if (!supabase || !ship || !inventoryStation || !userName) return;
+    if (!supabase) {
+      const text = "Supabase is not connected. Cannot clear records.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
+
+    if (!ship || !inventoryStation || !userName) {
+      const text = "Choose ship, station, and user before clearing your report.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
+
+    const rowsToClear = getMyInventoryRows();
+    if (!rowsToClear.length) {
+      const text = "There are no records to clear for this ship, station, and user.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
 
     const confirmed = window.confirm(
-      `Clear inventory for ${ship} / ${inventoryStation} / ${userName}?`
+      `Clear ${rowsToClear.length} inventory record(s) for ${ship} / ${inventoryStation} / ${userName}?`
     );
 
     if (!confirmed) return;
+
+    setInventoryLoading(true);
+    setMakeInventoryMessage("Clearing your inventory report...");
 
     const { error } = await supabase
       .from("inventory_counts")
@@ -736,24 +836,57 @@ export default function App() {
       .eq("user_name", userName);
 
     if (error) {
-      setMakeInventoryMessage(`Could not clear inventory: ${error.message}`);
+      const text = `Could not clear inventory: ${error.message}`;
+      setInventoryError(text);
+      setMakeInventoryMessage(text);
+      setInventoryLoading(false);
+      window.alert(text);
       return;
     }
+
+    setInventorySummary((prev) =>
+      prev.filter(
+        (item) =>
+          !(item.ship === ship && item.station === inventoryStation && item.userName === userName)
+      )
+    );
 
     await loadInventoryRecords(ship);
 
     setCurrentInventoryItem(null);
     setInventoryQty("");
     setEditingInventoryId(null);
+    setInventoryLoading(false);
+    setMakeInventoryMessage("My inventory report was cleared.");
   };
 
   const clearShipInventory = async () => {
     const ship = makeInventoryShip || userShip;
 
-    if (!supabase || !ship) return;
+    if (!supabase) {
+      const text = "Supabase is not connected. Cannot clear ship records.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
+
+    if (!ship) {
+      const text = "Choose ship before clearing ship records.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
+
+    const shipRows = inventorySummary.filter((item) => item.ship === ship);
+    if (!shipRows.length) {
+      const text = `There are no inventory records to clear for ${ship}.`;
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
 
     const confirmed = window.confirm(
-      `Clear ALL inventory records for ${ship} from ALL users and ALL stations?`
+      `Clear ALL ${shipRows.length} inventory record(s) for ${ship} from ALL users and ALL stations?`
     );
 
     if (!confirmed) return;
@@ -764,21 +897,31 @@ export default function App() {
 
     if (!secondConfirm) return;
 
+    setInventoryLoading(true);
+    setMakeInventoryMessage(`Clearing all ${ship} inventory records...`);
+
     const { error } = await supabase
       .from("inventory_counts")
       .delete()
       .eq("ship", ship);
 
     if (error) {
-      setMakeInventoryMessage(`Could not clear ship inventory: ${error.message}`);
+      const text = `Could not clear ship inventory: ${error.message}`;
+      setInventoryError(text);
+      setMakeInventoryMessage(text);
+      setInventoryLoading(false);
+      window.alert(text);
       return;
     }
 
+    setInventorySummary((prev) => prev.filter((item) => item.ship !== ship));
     await loadInventoryRecords(ship);
 
     setCurrentInventoryItem(null);
     setInventoryQty("");
     setEditingInventoryId(null);
+    setInventoryLoading(false);
+    setMakeInventoryMessage(`All ${ship} inventory records were cleared.`);
   };
 
   const exportInventorySummaryToExcel = () => {
@@ -853,7 +996,14 @@ export default function App() {
     const ship = makeInventoryShip || userShip;
     const rows = getVisibleInventoryReportRows();
 
-    if (!rows.length) return;
+    if (!rows.length) {
+      const text = inventoryReportMode === "summary"
+        ? "No summary records to print for this ship."
+        : "No personal inventory records to print for this ship, station, and user.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
 
     const title =
       inventoryReportMode === "summary"
@@ -956,6 +1106,13 @@ export default function App() {
     `;
 
     const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      const text = "Print window was blocked by the browser. Allow popups for this app and try again.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
+
     printWindow.document.write(html);
     printWindow.document.close();
     printWindow.focus();
@@ -965,7 +1122,13 @@ export default function App() {
   const printInventoryStatus = () => {
     const ship = makeInventoryShip || userShip;
     const rows = getMyInventoryStatusRows();
-    if (!rows.length) return;
+
+    if (!rows.length) {
+      const text = "No inventory status rows to print. Upload a master inventory file first.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
 
     const html = `
       <html>
@@ -1023,6 +1186,13 @@ export default function App() {
     `;
 
     const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      const text = "Print window was blocked by the browser. Allow popups for this app and try again.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
+
     printWindow.document.write(html);
     printWindow.document.close();
     printWindow.focus();
