@@ -922,8 +922,6 @@ export default function App() {
           <button style={styles.primaryButton} onClick={() => userShip && setLoggedIn(true)}>
             Continue
           </button>
-                  </>
-          )}
         </section>
       </main>
     );
@@ -1066,9 +1064,7 @@ export default function App() {
 
             {makeInventoryMessage && <p style={styles.message}>{makeInventoryMessage}</p>}
 
-            {showVariance && (
-          <>
-          <div style={styles.infoBox}>
+            <div style={styles.infoBox}>
               <div>🚢 Inventory ship: <strong>{makeInventoryShip || "Not selected"}</strong></div>
               <div>📋 Master items loaded: <strong>{makeInventoryItems.length}</strong></div>
               <div>✅ Confirmed for this ship: <strong>{summaryForShip.length}</strong></div>
