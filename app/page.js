@@ -1272,62 +1272,69 @@ export default function App() {
         </section>
 
         <section style={styles.card}>
-          <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 20 }}>
+          <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 0 }}>
             <h2 style={styles.productTitle}>📊 Variance Report</h2>
 
             <div style={styles.headerActions}>
               <button
                 style={styles.backButton}
-                onClick={() => setShowVariance((v) => !v)}
+                onClick={() => setShowVariance((value) => !value)}
               >
-                {showVariance ? "Hide" : "Show"}
+                {showVariance ? "Hide Report" : "Open Report"}
               </button>
 
-            <div style={styles.headerActions}>
-              <button style={styles.backButton} onClick={printVarianceReport}>
-                🖨️ Print
-              </button>
+              {showVariance && (
+                <>
+                  <button style={styles.backButton} onClick={printVarianceReport}>
+                    🖨️ Print
+                  </button>
 
-              <button style={styles.primaryButton} onClick={exportVarianceReportToExcel}>
-                📥 Export Excel
-              </button>
+                  <button style={styles.primaryButton} onClick={exportVarianceReportToExcel}>
+                    📥 Export Excel
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
-          <div style={styles.infoBox}>
-            <div>📋 Master items: <strong>{makeInventoryItems.length}</strong></div>
-            <div>✅ Counted: <strong>{countedItems.length}</strong></div>
-            <div>📋 Remaining to count: <strong>{notCountedItems.length}</strong></div>
-          </div>
-
-          {makeInventoryItems.length === 0 && (
-            <p style={styles.emptyText}>Upload the master inventory file to see inventory status.</p>
-          )}
-
-          <h3 style={styles.sectionTitle}>📋 Master Inventory Status</h3>
-
-          <div style={styles.equipmentGrid}>
-            {varianceReport.map((item, index) => (
-              <div
-                key={`${item.code}-status-${index}`}
-                style={{ ...styles.equipmentCard, ...(item.status === "Counted" ? styles.countedCard : {}) }}
-              >
-                <div style={styles.recipeName}>{item.name}</div>
-                <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                <div style={styles.recipeMeta}>Category: {item.category}</div>
-                <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
-
-                {item.status === "Counted" ? (
-                  <>
-                    <div style={styles.statusGood}>Counted: {formatQty(item.countedQty)}</div>
-                    <div style={styles.recipeMeta}>Counted: {item.countedAt}</div>
-                  </>
-                ) : (
-                  <div style={styles.statusNeutral}>Pending Count</div>
-                )}
+          {showVariance && (
+            <>
+              <div style={styles.infoBox}>
+                <div>📋 Master items: <strong>{makeInventoryItems.length}</strong></div>
+                <div>✅ Counted: <strong>{countedItems.length}</strong></div>
+                <div>📋 Remaining to count: <strong>{notCountedItems.length}</strong></div>
               </div>
-            ))}
-          </div>
+
+              {makeInventoryItems.length === 0 && (
+                <p style={styles.emptyText}>Upload the master inventory file to see inventory status.</p>
+              )}
+
+              <h3 style={styles.sectionTitle}>📋 Master Inventory Status</h3>
+
+              <div style={styles.equipmentGrid}>
+                {varianceReport.map((item, index) => (
+                  <div
+                    key={`${item.code}-status-${index}`}
+                    style={{ ...styles.equipmentCard, ...(item.status === "Counted" ? styles.countedCard : {}) }}
+                  >
+                    <div style={styles.recipeName}>{item.name}</div>
+                    <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
+                    <div style={styles.recipeMeta}>Category: {item.category}</div>
+                    <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
+
+                    {item.status === "Counted" ? (
+                      <>
+                        <div style={styles.statusGood}>Counted: {formatQty(item.countedQty)}</div>
+                        <div style={styles.recipeMeta}>Counted: {item.countedAt}</div>
+                      </>
+                    ) : (
+                      <div style={styles.statusNeutral}>Pending Count</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </section>
       </main>
     );
