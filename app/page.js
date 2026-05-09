@@ -90,6 +90,7 @@ export default function App() {
   const [inventoryQty, setInventoryQty] = useState("");
   const [editingInventoryIndex, setEditingInventoryIndex] = useState(null);
   const [inventorySummary, setInventorySummary] = useState([]);
+  const [showVariance, setShowVariance] = useState(false);
 
   const shipColumns = { BRL: 8, RL: 11, SC: 14, VL: 17 };
 
@@ -921,6 +922,8 @@ export default function App() {
           <button style={styles.primaryButton} onClick={() => userShip && setLoggedIn(true)}>
             Continue
           </button>
+                  </>
+          )}
         </section>
       </main>
     );
@@ -1063,7 +1066,9 @@ export default function App() {
 
             {makeInventoryMessage && <p style={styles.message}>{makeInventoryMessage}</p>}
 
-            <div style={styles.infoBox}>
+            {showVariance && (
+          <>
+          <div style={styles.infoBox}>
               <div>🚢 Inventory ship: <strong>{makeInventoryShip || "Not selected"}</strong></div>
               <div>📋 Master items loaded: <strong>{makeInventoryItems.length}</strong></div>
               <div>✅ Confirmed for this ship: <strong>{summaryForShip.length}</strong></div>
@@ -1269,6 +1274,14 @@ export default function App() {
         <section style={styles.card}>
           <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 20 }}>
             <h2 style={styles.productTitle}>📊 Variance Report</h2>
+
+            <div style={styles.headerActions}>
+              <button
+                style={styles.backButton}
+                onClick={() => setShowVariance((v) => !v)}
+              >
+                {showVariance ? "Hide" : "Show"}
+              </button>
 
             <div style={styles.headerActions}>
               <button style={styles.backButton} onClick={printVarianceReport}>
