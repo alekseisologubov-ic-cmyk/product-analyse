@@ -32,6 +32,32 @@ const INVENTORY_USERS = [
   "Other",
 ];
 
+const SCHEDULE_ROLES = [
+  "Cook",
+  "Steward",
+  "Bar",
+  "Utility",
+  "Supervisor",
+  "Host",
+  "Runner",
+  "Other",
+];
+
+const SCHEDULE_SHIFTS = [
+  "Breakfast",
+  "Lunch",
+  "Dinner",
+  "Overnight",
+  "Custom",
+];
+
+const AVAILABILITY_OPTIONS = [
+  "Preferred",
+  "Available",
+  "Emergency Only",
+  "Unavailable",
+];
+
 const ALLERGEN_RULES = [
   { allergen: "Tree Nuts", keywords: ["almond", "walnut", "pecan", "cashew", "hazelnut", "pistachio", "macadamia"] },
   { allergen: "Peanuts", keywords: ["peanut"] },
@@ -125,6 +151,26 @@ export default function App() {
   const [inventoryError, setInventoryError] = useState("");
   const [showVariance, setShowVariance] = useState(false);
 
+  const [scheduleShip, setScheduleShip] = useState("");
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [scheduleStation, setScheduleStation] = useState("");
+  const [scheduleRole, setScheduleRole] = useState("");
+  const [scheduleShiftName, setScheduleShiftName] = useState("Breakfast");
+  const [scheduleStartTime, setScheduleStartTime] = useState("08:00");
+  const [scheduleEndTime, setScheduleEndTime] = useState("16:00");
+  const [scheduleRequiredPeople, setScheduleRequiredPeople] = useState("1");
+  const [scheduleSearch, setScheduleSearch] = useState("");
+  const [scheduleMessage, setScheduleMessage] = useState("");
+  const [schedulePeople, setSchedulePeople] = useState([]);
+  const [scheduleRows, setScheduleRows] = useState([]);
+  const [personName, setPersonName] = useState("");
+  const [personRole, setPersonRole] = useState("");
+  const [personStation, setPersonStation] = useState("");
+  const [personShip, setPersonShip] = useState("");
+  const [personAvailability, setPersonAvailability] = useState("Available");
+  const [personMaxHours, setPersonMaxHours] = useState("8");
+  const [personNotes, setPersonNotes] = useState("");
+
   const shipColumns = { BRL: 8, RL: 11, SC: 14, VL: 17 };
 
   useEffect(() => {
@@ -133,7 +179,30 @@ export default function App() {
 
   useEffect(() => {
     setMakeInventoryShip(userShip);
+    setScheduleShip(userShip);
+    setPersonShip(userShip);
   }, [userShip]);
+
+  useEffect(() => {
+    try {
+      const savedPeople = localStorage.getItem("vv_schedule_people");
+      const savedRows = localStorage.getItem("vv_schedule_rows");
+
+      if (savedPeople) setSchedulePeople(JSON.parse(savedPeople));
+      if (savedRows) setScheduleRows(JSON.parse(savedRows));
+    } catch {
+      setSchedulePeople([]);
+      setScheduleRows([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("vv_schedule_people", JSON.stringify(schedulePeople));
+  }, [schedulePeople]);
+
+  useEffect(() => {
+    localStorage.setItem("vv_schedule_rows", JSON.stringify(scheduleRows));
+  }, [scheduleRows]);
 
   useEffect(() => {
     if (module === "equipment" && equipmentMode === "makeinventory" && makeInventoryShip) {
@@ -1219,6 +1288,234 @@ export default function App() {
     return grouped;
   };
 
+  const getShiftHours = () => {
+    if (!scheduleStartTime || !scheduleEndTime) return 0;
+
+    const [startHour, startMinute] = scheduleStartTime.split(":").map(Number);
+    const [endHour, endMinute] = scheduleEndTime.split(":").map(Number);
+
+    let start = startHour + startMinute / 60;
+    let end = endHour + endMinute / 60;
+
+    if (end <= start) end += 24;
+
+    return Number((end - start).toFixed(2));
+  };
+
+  const resetPersonForm = () => {
+    setPersonName("");
+    setPersonRole("");
+    setPersonStation("");
+    setPersonShip(scheduleShip || userShip);
+    setPersonAvailability("Available");
+    setPersonMaxHours("8");
+    setPersonNotes("");
+  };
+
+  const addSchedulePerson = () => {
+    const name = personName.trim();
+
+    if (!name || !personRole || !personStation || !personShip) {
+      setScheduleMessage("Enter name, role, station and ship before adding a person.");
+      return;
+    }
+
+    const person = {
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      name,
+      role: personRole,
+      station: personStation,
+      ship: personShip,
+      availability: personAvailability,
+      maxHours: Number(personMaxHours || 0),
+      notes: personNotes.trim(),
+    };
+
+    setSchedulePeople((prev) => [...prev, person].sort((a, b) => a.name.localeCompare(b.name)));
+    setScheduleMessage(`${name} added to People list.`);
+    resetPersonForm();
+  };
+
+  const deleteSchedulePerson = (personId) => {
+    setSchedulePeople((prev) => prev.filter((person) => person.id !== personId));
+  };
+
+  const getFilteredSchedulePeople = () => {
+    const ship = scheduleShip || userShip;
+    const searchValue = scheduleSearch.toLowerCase();
+
+    return schedulePeople
+      .filter((person) => !ship || person.ship === ship || person.ship === "All Ships")
+      .filter((person) =>
+        `${person.name} ${person.role} ${person.station} ${person.ship} ${person.availability} ${person.notes}`
+          .toLowerCase()
+          .includes(searchValue)
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
+  };
+
+  const getScheduleCandidates = () => {
+    const ship = scheduleShip || userShip;
+
+    return schedulePeople
+      .filter((person) => person.availability !== "Unavailable")
+      .filter((person) => !ship || person.ship === ship || person.ship === "All Ships")
+      .filter((person) => !scheduleStation || person.station === scheduleStation)
+      .filter((person) => !scheduleRole || person.role === scheduleRole)
+      .sort((a, b) => {
+        const availabilityScore = { Preferred: 0, Available: 1, "Emergency Only": 2 };
+        const scoreA = availabilityScore[a.availability] ?? 9;
+        const scoreB = availabilityScore[b.availability] ?? 9;
+
+        if (scoreA !== scoreB) return scoreA - scoreB;
+        return Number(b.maxHours || 0) - Number(a.maxHours || 0);
+      });
+  };
+
+  const generateSchedule = () => {
+    const ship = scheduleShip || userShip;
+    const requiredPeople = Math.max(Number(scheduleRequiredPeople || 0), 0);
+    const shiftHours = getShiftHours();
+
+    if (!ship || !scheduleDate || !scheduleStation || !scheduleShiftName || !scheduleStartTime || !scheduleEndTime || requiredPeople <= 0) {
+      setScheduleMessage("Choose ship, date, station, shift, start/end time and required people.");
+      return;
+    }
+
+    const candidates = getScheduleCandidates().filter((person) => Number(person.maxHours || 0) >= shiftHours);
+    const selected = candidates.slice(0, requiredPeople);
+
+    const rows = selected.map((person, index) => ({
+      id: `${Date.now()}-${index}`,
+      ship,
+      date: scheduleDate,
+      station: scheduleStation,
+      role: scheduleRole || person.role,
+      shiftName: scheduleShiftName,
+      startTime: scheduleStartTime,
+      endTime: scheduleEndTime,
+      shiftHours,
+      personName: person.name,
+      personRole: person.role,
+      personStation: person.station,
+      availability: person.availability,
+      maxHours: person.maxHours,
+      notes: person.notes,
+      status: "Scheduled",
+    }));
+
+    setScheduleRows(rows);
+
+    if (selected.length < requiredPeople) {
+      setScheduleMessage(`Only ${selected.length} available person(s) matched the criteria. Required: ${requiredPeople}.`);
+    } else {
+      setScheduleMessage(`Schedule created with ${selected.length} person(s).`);
+    }
+  };
+
+  const clearSchedule = () => {
+    const confirmed = window.confirm("Clear the generated schedule?");
+    if (!confirmed) return;
+
+    setScheduleRows([]);
+    setScheduleMessage("Schedule cleared.");
+  };
+
+  const exportScheduleToExcel = () => {
+    if (!scheduleRows.length) return;
+
+    const rows = scheduleRows.map((row) => ({
+      Ship: row.ship,
+      Date: row.date,
+      Station: row.station,
+      Role: row.role,
+      Shift: row.shiftName,
+      Start: row.startTime,
+      End: row.endTime,
+      Hours: row.shiftHours,
+      Person: row.personName,
+      PersonRole: row.personRole,
+      Availability: row.availability,
+      MaxHours: row.maxHours,
+      Notes: row.notes,
+      Status: row.status,
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(wb, ws, "Schedule");
+    XLSX.writeFile(wb, `schedule-${scheduleShip || userShip || "ship"}-${scheduleDate || "date"}.xlsx`);
+  };
+
+  const printSchedule = () => {
+    if (!scheduleRows.length) return;
+
+    const html = `
+      <html>
+        <head>
+          <title>People Schedule</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; }
+            h1 { margin-bottom: 4px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+            th { background: #f2f2f2; }
+          </style>
+        </head>
+        <body>
+          <h1>People Schedule</h1>
+          <div><strong>Ship:</strong> ${scheduleShip || userShip}</div>
+          <div><strong>Date:</strong> ${scheduleDate}</div>
+          <div><strong>Station:</strong> ${scheduleStation}</div>
+          <div><strong>Shift:</strong> ${scheduleShiftName} / ${scheduleStartTime} - ${scheduleEndTime}</div>
+          <div><strong>Printed:</strong> ${new Date().toLocaleString()}</div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Person</th>
+                <th>Role</th>
+                <th>Station</th>
+                <th>Shift</th>
+                <th>Start</th>
+                <th>End</th>
+                <th>Hours</th>
+                <th>Status</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${scheduleRows
+                .map(
+                  (row) => `
+                    <tr>
+                      <td>${row.personName}</td>
+                      <td>${row.personRole}</td>
+                      <td>${row.station}</td>
+                      <td>${row.shiftName}</td>
+                      <td>${row.startTime}</td>
+                      <td>${row.endTime}</td>
+                      <td>${row.shiftHours}</td>
+                      <td>${row.status}</td>
+                      <td>${row.notes || ""}</td>
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open("", "_blank");
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
   const combinedBreakdown = selectedProduct ? getCombinedVenueBreakdown(selectedProduct) : [];
   const recipesForProduct = selectedProduct ? getRecipesUsingProduct(selectedProduct) : [];
   const productsInRecipe = selectedRecipe ? getProductsInRecipe(selectedRecipe) : [];
@@ -1245,7 +1542,7 @@ export default function App() {
         <section style={styles.loginCard}>
           <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.logo} />
           <h1 style={styles.title}>Virgin Voyages Dashboard</h1>
-          <p style={styles.subtitle}>Product and equipment tools</p>
+          <p style={styles.subtitle}>Product, equipment, people and schedule tools</p>
 
           <label style={styles.label}>🚢 Select your ship</label>
           <select value={userShip} onChange={(e) => setUserShip(e.target.value)} style={styles.select}>
@@ -1284,6 +1581,211 @@ export default function App() {
               <strong>Equipment</strong>
               <span>Muster list and inventory tools</span>
             </button>
+
+            <button style={styles.moduleCard} onClick={() => setModule("people")}> 
+              <div style={styles.moduleIcon}>👥</div>
+              <strong>People & Schedule</strong>
+              <span>Create crew schedules based on ship, station, role and availability</span>
+            </button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (module === "people") {
+    const filteredSchedulePeople = getFilteredSchedulePeople();
+    const scheduleCandidates = getScheduleCandidates();
+    const requiredPeople = Math.max(Number(scheduleRequiredPeople || 0), 0);
+    const shiftHours = getShiftHours();
+
+    return (
+      <main style={styles.page}>
+        <header style={styles.header}>
+          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
+          <div style={styles.headerActions}>
+            <button style={styles.backButton} onClick={() => setModule("")}>← Modules</button>
+            <div style={styles.shipBadge}>🚢 {scheduleShip || userShip}</div>
+          </div>
+        </header>
+
+        <section style={styles.grid}>
+          <div style={styles.card}>
+            <h2 style={styles.cardTitle}>👥 People & Schedule</h2>
+
+            <label style={styles.label}>Choose ship</label>
+            <select value={scheduleShip} onChange={(e) => setScheduleShip(e.target.value)} style={styles.select}>
+              <option value="">Choose ship</option>
+              {SHIPS.map((ship) => <option key={ship} value={ship}>{ship}</option>)}
+            </select>
+
+            <label style={styles.label}>Schedule date</label>
+            <input type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)} style={styles.searchInput} />
+
+            <label style={styles.label}>Station</label>
+            <select value={scheduleStation} onChange={(e) => setScheduleStation(e.target.value)} style={styles.select}>
+              <option value="">Choose station</option>
+              {STATIONS.map((station) => <option key={station} value={station}>{station}</option>)}
+            </select>
+
+            <label style={styles.label}>Role / criteria</label>
+            <select value={scheduleRole} onChange={(e) => setScheduleRole(e.target.value)} style={styles.select}>
+              <option value="">Any role</option>
+              {SCHEDULE_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
+            </select>
+
+            <label style={styles.label}>Shift</label>
+            <select value={scheduleShiftName} onChange={(e) => setScheduleShiftName(e.target.value)} style={styles.select}>
+              {SCHEDULE_SHIFTS.map((shift) => <option key={shift} value={shift}>{shift}</option>)}
+            </select>
+
+            <div style={styles.formRow}>
+              <div>
+                <label style={styles.label}>Start</label>
+                <input type="time" value={scheduleStartTime} onChange={(e) => setScheduleStartTime(e.target.value)} style={styles.searchInput} />
+              </div>
+              <div>
+                <label style={styles.label}>End</label>
+                <input type="time" value={scheduleEndTime} onChange={(e) => setScheduleEndTime(e.target.value)} style={styles.searchInput} />
+              </div>
+            </div>
+
+            <label style={styles.label}>Required people</label>
+            <input
+              type="number"
+              min="1"
+              value={scheduleRequiredPeople}
+              onChange={(e) => setScheduleRequiredPeople(e.target.value)}
+              style={styles.searchInput}
+            />
+
+            <div style={styles.headerActions}>
+              <button style={styles.primaryButton} onClick={generateSchedule}>
+                ✨ Generate Schedule
+              </button>
+              <button style={styles.backButton} onClick={clearSchedule}>
+                Clear Schedule
+              </button>
+            </div>
+
+            {scheduleMessage && <p style={styles.message}>{scheduleMessage}</p>}
+
+            <div style={styles.infoBox}>
+              <div>🚢 Ship: <strong>{scheduleShip || "Not selected"}</strong></div>
+              <div>📍 Station: <strong>{scheduleStation || "Not selected"}</strong></div>
+              <div>🧑‍🍳 Role: <strong>{scheduleRole || "Any role"}</strong></div>
+              <div>⏱️ Shift hours: <strong>{formatQty(shiftHours)}</strong></div>
+              <div>👥 Matching people: <strong>{scheduleCandidates.length}</strong></div>
+              <div>✅ Scheduled: <strong>{scheduleRows.length}</strong> / {requiredPeople}</div>
+            </div>
+          </div>
+
+          <div style={styles.card}>
+            <h2 style={styles.cardTitle}>➕ Add Person</h2>
+
+            <label style={styles.label}>Name</label>
+            <input value={personName} onChange={(e) => setPersonName(e.target.value)} placeholder="Enter crew member name..." style={styles.searchInput} />
+
+            <label style={styles.label}>Role</label>
+            <select value={personRole} onChange={(e) => setPersonRole(e.target.value)} style={styles.select}>
+              <option value="">Choose role</option>
+              {SCHEDULE_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
+            </select>
+
+            <label style={styles.label}>Station</label>
+            <select value={personStation} onChange={(e) => setPersonStation(e.target.value)} style={styles.select}>
+              <option value="">Choose station</option>
+              {STATIONS.map((station) => <option key={station} value={station}>{station}</option>)}
+            </select>
+
+            <label style={styles.label}>Ship</label>
+            <select value={personShip} onChange={(e) => setPersonShip(e.target.value)} style={styles.select}>
+              <option value="">Choose ship</option>
+              <option value="All Ships">All Ships</option>
+              {SHIPS.map((ship) => <option key={ship} value={ship}>{ship}</option>)}
+            </select>
+
+            <label style={styles.label}>Availability</label>
+            <select value={personAvailability} onChange={(e) => setPersonAvailability(e.target.value)} style={styles.select}>
+              {AVAILABILITY_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+
+            <label style={styles.label}>Max shift hours</label>
+            <input type="number" min="1" value={personMaxHours} onChange={(e) => setPersonMaxHours(e.target.value)} style={styles.searchInput} />
+
+            <label style={styles.label}>Notes / criteria</label>
+            <input value={personNotes} onChange={(e) => setPersonNotes(e.target.value)} placeholder="Example: AM only, training, strong station..." style={styles.searchInput} />
+
+            <button style={styles.primaryButton} onClick={addSchedulePerson}>
+              Add Person
+            </button>
+          </div>
+        </section>
+
+        <section style={styles.card}>
+          <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 20 }}>
+            <h2 style={styles.productTitle}>👥 People List</h2>
+            <div style={styles.headerActions}>
+              <input
+                placeholder="Search people, role, station, availability..."
+                value={scheduleSearch}
+                onChange={(e) => setScheduleSearch(e.target.value)}
+                style={{ ...styles.searchInput, marginBottom: 0, minWidth: 260 }}
+              />
+            </div>
+          </div>
+
+          {schedulePeople.length === 0 && (
+            <p style={styles.emptyText}>Add people first, then generate a schedule based on your criteria.</p>
+          )}
+
+          <div style={styles.equipmentGrid}>
+            {filteredSchedulePeople.map((person) => (
+              <div key={person.id} style={styles.equipmentCard}>
+                <div style={styles.recipeName}>{person.name}</div>
+                <div style={styles.recipeMeta}>Ship: {person.ship}</div>
+                <div style={styles.recipeMeta}>Station: {person.station}</div>
+                <div style={styles.recipeMeta}>Role: {person.role}</div>
+                <div style={person.availability === "Unavailable" ? styles.statusBad : person.availability === "Preferred" ? styles.statusGood : styles.statusNeutral}>
+                  {person.availability}
+                </div>
+                <div style={styles.recipeMeta}>Max hours: {formatQty(person.maxHours)}</div>
+                {person.notes && <div style={styles.recipeMeta}>Notes: {person.notes}</div>}
+                <button style={styles.deleteButton} onClick={() => deleteSchedulePerson(person.id)}>
+                  🗑️ Delete
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section style={styles.card}>
+          <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 20 }}>
+            <h2 style={styles.productTitle}>📅 Generated Schedule</h2>
+            <div style={styles.headerActions}>
+              <button style={styles.backButton} onClick={printSchedule}>🖨️ Print</button>
+              <button style={styles.primaryButton} onClick={exportScheduleToExcel}>📥 Export Excel</button>
+            </div>
+          </div>
+
+          {scheduleRows.length === 0 && (
+            <p style={styles.emptyText}>Generated schedule will appear here.</p>
+          )}
+
+          <div style={styles.equipmentGrid}>
+            {scheduleRows.map((row) => (
+              <div key={row.id} style={styles.equipmentCard}>
+                <div style={styles.recipeName}>{row.personName}</div>
+                <div style={styles.recipeMeta}>Ship: {row.ship}</div>
+                <div style={styles.recipeMeta}>Date: {row.date}</div>
+                <div style={styles.recipeMeta}>Station: {row.station}</div>
+                <div style={styles.recipeMeta}>Role: {row.personRole}</div>
+                <div style={styles.recipeMeta}>Shift: {row.shiftName}</div>
+                <div style={styles.statusGood}>{row.startTime} - {row.endTime} / {formatQty(row.shiftHours)} hrs</div>
+                <div style={styles.recipeMeta}>Availability: {row.availability}</div>
+                {row.notes && <div style={styles.recipeMeta}>Notes: {row.notes}</div>}
+              </div>
+            ))}
           </div>
         </section>
       </main>
@@ -2309,6 +2811,7 @@ const styles = {
   viewModeButton: { padding: "10px 14px", borderRadius: 999, border: "1px solid #ccc", background: "#fff", cursor: "pointer", fontWeight: "bold" },
   viewModeButtonActive: { background: "#111", color: "#fff", borderColor: "#111" },
   grid: { display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 20, marginBottom: 20 },
+  formRow: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 },
   card: { background: "#fff", borderRadius: 16, padding: 20, boxShadow: "0 4px 18px rgba(0,0,0,0.06)" },
   cardTitle: { marginTop: 0 },
   fileInput: { display: "block", margin: "8px 0 16px" },
