@@ -354,6 +354,19 @@ export default function App() {
     setInventorySummary((prev) => prev.filter((_, index) => index !== indexToDelete));
   };
 
+  const clearInventoryForShip = () => {
+    const ship = makeInventoryShip || userShip;
+    if (!ship) return;
+
+    const confirmed = window.confirm(`Clear all inventory records for ${ship}?`);
+    if (!confirmed) return;
+
+    setInventorySummary((prev) => prev.filter((item) => item.ship !== ship));
+    setCurrentInventoryItem(null);
+    setInventoryQty("");
+    setEditingInventoryIndex(null);
+  };
+
   const getVarianceReport = () => {
     const ship = makeInventoryShip || userShip;
 
@@ -1054,7 +1067,7 @@ export default function App() {
               <div>🚢 Inventory ship: <strong>{makeInventoryShip || "Not selected"}</strong></div>
               <div>📋 Master items loaded: <strong>{makeInventoryItems.length}</strong></div>
               <div>✅ Confirmed for this ship: <strong>{summaryForShip.length}</strong></div>
-              <div>❌ Not counted: <strong>{notCountedItems.length}</strong></div>
+              <div>📋 Remaining to count: <strong>{notCountedItems.length}</strong></div>
               <div>Duplicate entries are automatically updated instead of added twice.</div>
               <div style={{ color: "#8a5a00" }}>
                 Records are saved in this browser. For true multi-user shared records, add database later.
@@ -1214,6 +1227,10 @@ export default function App() {
                 🖨️ Print
               </button>
 
+              <button style={styles.deleteButton} onClick={clearInventoryForShip}>
+                🧹 Clear Inventory
+              </button>
+
               <button style={styles.primaryButton} onClick={exportInventorySummaryToExcel}>
                 📥 Export Excel
               </button>
@@ -1267,42 +1284,34 @@ export default function App() {
           <div style={styles.infoBox}>
             <div>📋 Master items: <strong>{makeInventoryItems.length}</strong></div>
             <div>✅ Counted: <strong>{countedItems.length}</strong></div>
-            <div>❌ Not counted: <strong>{notCountedItems.length}</strong></div>
+            <div>📋 Remaining to count: <strong>{notCountedItems.length}</strong></div>
           </div>
 
           {makeInventoryItems.length === 0 && (
-            <p style={styles.emptyText}>Upload the master inventory file to see variance.</p>
+            <p style={styles.emptyText}>Upload the master inventory file to see inventory status.</p>
           )}
 
-          {makeInventoryItems.length > 0 && notCountedItems.length === 0 && (
-            <p style={styles.emptyText}>All master inventory items have been counted for this ship.</p>
-          )}
-
-          <h3 style={{ ...styles.sectionTitle, color: "#b00020" }}>❌ Not Counted</h3>
+          <h3 style={styles.sectionTitle}>📋 Master Inventory Status</h3>
 
           <div style={styles.equipmentGrid}>
-            {notCountedItems.map((item, index) => (
-              <div key={`${item.code}-variance-${index}`} style={{ ...styles.equipmentCard, ...styles.orderWarningCard }}>
+            {varianceReport.map((item, index) => (
+              <div
+                key={`${item.code}-status-${index}`}
+                style={{ ...styles.equipmentCard, ...(item.status === "Counted" ? styles.countedCard : {}) }}
+              >
                 <div style={styles.recipeName}>{item.name}</div>
                 <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
                 <div style={styles.recipeMeta}>Category: {item.category}</div>
                 <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
-                <div style={styles.statusBad}>Not Counted</div>
-              </div>
-            ))}
-          </div>
 
-          <h3 style={{ ...styles.sectionTitle, color: "#2e7d32" }}>✅ Counted</h3>
-
-          <div style={styles.equipmentGrid}>
-            {countedItems.map((item, index) => (
-              <div key={`${item.code}-counted-${index}`} style={styles.equipmentCard}>
-                <div style={styles.recipeName}>{item.name}</div>
-                <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                <div style={styles.recipeMeta}>Category: {item.category}</div>
-                <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
-                <div style={styles.statusGood}>Quantity: {formatQty(item.countedQty)}</div>
-                <div style={styles.recipeMeta}>Counted: {item.countedAt}</div>
+                {item.status === "Counted" ? (
+                  <>
+                    <div style={styles.statusGood}>Counted: {formatQty(item.countedQty)}</div>
+                    <div style={styles.recipeMeta}>Counted: {item.countedAt}</div>
+                  </>
+                ) : (
+                  <div style={styles.statusNeutral}>Pending Count</div>
+                )}
               </div>
             ))}
           </div>
@@ -1887,5 +1896,6 @@ const styles = {
   suggestedOrderGood: { marginTop: 8, padding: 8, borderRadius: 10, background: "#e8f5e9", color: "#2e7d32", fontWeight: "bold", textAlign: "center" },
   statusGood: { marginTop: 8, padding: 8, borderRadius: 10, background: "#e8f5e9", color: "#2e7d32", fontWeight: "bold", textAlign: "center" },
   statusWarning: { marginTop: 8, padding: 8, borderRadius: 10, background: "#fff4d6", color: "#8a5a00", fontWeight: "bold", textAlign: "center" },
+  statusNeutral: { marginTop: 8, padding: 8, borderRadius: 10, background: "#f2f2f2", color: "#555", fontWeight: "bold", textAlign: "center" },
   statusBad: { marginTop: 8, padding: 8, borderRadius: 10, background: "#b00020", color: "#fff", fontWeight: "bold", textAlign: "center" },
 };
