@@ -586,7 +586,7 @@ export default function App() {
     const targetDays = toNumber(rows[5]?.[1]); // B6
     const currentPeriodSailorDays = targetSailors * targetDays;
 
-    const futureOrderColumns = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14]; // F:O
+    const futureOrderColumns = [5, 6, 7, 8, 9, 10, 11, 12, 13]; // F:N
     const pastConsumptionColumns = [34, 35, 36, 37, 38, 39]; // AI:AN
 
     const historicalSailorDays = pastConsumptionColumns.reduce(
@@ -613,6 +613,22 @@ export default function App() {
         : 0;
 
       const suggestedOrder = Math.max(projectedNeed - stockOnHand - futureOrders, 0);
+      const hasNoPastConsumption = pastConsumption <= 0;
+      const hasNoStockOnHand = stockOnHand <= 0;
+
+      let alertType = suggestedOrder > 0 ? "order" : "normal";
+      let alertLabel = suggestedOrder > 0 ? "Needs order" : "No order suggested";
+      let alertDescription = "Projected need minus stock on hand minus future orders.";
+
+      if (hasNoPastConsumption && hasNoStockOnHand) {
+        alertType = "blue";
+        alertLabel = "No stock and no past consumption";
+        alertDescription = "Blue review: stock on hand is 0 and past consumption is 0.";
+      } else if (hasNoPastConsumption && stockOnHand > 0) {
+        alertType = "red";
+        alertLabel = "Stock on hand but no past consumption";
+        alertDescription = "Red review: item has stock on hand but no past consumption.";
+      }
 
       parsedRows.push({
         excelRow,
@@ -626,7 +642,10 @@ export default function App() {
         currentPeriodSailorDays,
         projectedNeed,
         suggestedOrder,
-        orderReason: "Projected need minus stock on hand and future orders",
+        alertType,
+        alertLabel,
+        alertDescription,
+        orderReason: alertDescription,
       });
     });
 
@@ -643,6 +662,8 @@ export default function App() {
         historicalSailorDays,
         totalItems: parsedRows.length,
         itemsNeedingOrder: parsedRows.filter((item) => item.suggestedOrder > 0).length,
+        blueReviewItems: parsedRows.filter((item) => item.alertType === "blue").length,
+        redReviewItems: parsedRows.filter((item) => item.alertType === "red").length,
       },
     };
   };
@@ -659,7 +680,7 @@ export default function App() {
         setNextOrderMeta(parsed.meta);
         setNextOrderRows([]);
         setNextOrderMessage(
-          `Order file loaded. ${parsed.meta.totalItems} product rows found, ${parsed.meta.itemsNeedingOrder} items currently need order.`
+          `Order file loaded. ${parsed.meta.totalItems} product rows found. ${parsed.meta.itemsNeedingOrder} need order, ${parsed.meta.blueReviewItems} blue review, ${parsed.meta.redReviewItems} red review.`
         );
       } catch (error) {
         setNextOrderFileName(file.name);
@@ -2565,6 +2586,24 @@ export default function App() {
     printWindow.print();
   };
 
+  const getNextOrderPriority = (item) => {
+    if (Number(item.suggestedOrder || 0) > 0) return 0;
+    if (item.alertType === "red") return 1;
+    if (item.alertType === "blue") return 2;
+    return 3;
+  };
+
+  const sortNextOrderRows = (rows) =>
+    [...rows].sort((a, b) => {
+      const priorityDiff = getNextOrderPriority(a) - getNextOrderPriority(b);
+      if (priorityDiff !== 0) return priorityDiff;
+
+      const suggestedDiff = Number(b.suggestedOrder || 0) - Number(a.suggestedOrder || 0);
+      if (suggestedDiff !== 0) return suggestedDiff;
+
+      return String(a.product || "").localeCompare(String(b.product || ""));
+    });
+
   const generateNextOrderReport = () => {
     setNextOrderLoading(true);
     setNextOrderMessage("Generating next order...");
@@ -2578,12 +2617,10 @@ export default function App() {
           return;
         }
 
-        const rows = nextOrderSourceRows
-          .filter((item) => Number(item.suggestedOrder || 0) > 0)
-          .sort((a, b) => Number(b.suggestedOrder || 0) - Number(a.suggestedOrder || 0));
+        const rows = sortNextOrderRows(nextOrderSourceRows);
 
         setNextOrderRows(rows.map((item, index) => ({ ...item, orderRank: index + 1 })));
-        setNextOrderMessage(rows.length ? "" : "No suggested next-order quantities found in this file.");
+        setNextOrderMessage(`Generated ${rows.length} product lines. Positive suggested orders are first, then red/blue review items.`);
       } catch (error) {
         setNextOrderRows([]);
         setNextOrderMessage(error?.message || "Could not generate next order.");
@@ -2595,9 +2632,7 @@ export default function App() {
 
   const getNextOrderRowsForOutput = () => {
     if (nextOrderRows.length) return nextOrderRows;
-    return nextOrderSourceRows
-      .filter((item) => Number(item.suggestedOrder || 0) > 0)
-      .sort((a, b) => Number(b.suggestedOrder || 0) - Number(a.suggestedOrder || 0));
+    return sortNextOrderRows(nextOrderSourceRows);
   };
 
   const exportNextOrderToExcel = () => {
@@ -2619,11 +2654,14 @@ export default function App() {
       Product: item.product,
       UM: item.uom,
       StockOnHand: Number(item.stockOnHand || 0),
-      FutureOrders: Number(item.futureOrders || 0),
-      PastConsumption: Number(item.pastConsumption || 0),
+      FutureOrders_F_to_N: Number(item.futureOrders || 0),
+      PastConsumption_AI_to_AN: Number(item.pastConsumption || 0),
+      CurrentSailorDays_B5_x_B6: Number(item.currentPeriodSailorDays || 0),
+      HistoricalBasis_AI5_AI6: Number(item.historicalSailorDays || 0),
       ProjectedNeed: Number(item.projectedNeed || 0),
       SuggestedNextOrder: Number(item.suggestedOrder || 0),
-      Reason: item.orderReason || "Projected need minus stock on hand and future orders",
+      Alert: item.alertLabel || "",
+      Reason: item.orderReason || "Projected need minus stock on hand minus future orders",
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportRows);
@@ -2658,6 +2696,8 @@ export default function App() {
             th, td { border: 1px solid #ccc; padding: 6px; text-align: left; vertical-align: top; }
             th { background: #f2f2f2; }
             .qty { color: #0057b8; font-weight: bold; }
+            .blue { color: #0057b8; font-weight: bold; }
+            .red { color: #b00020; font-weight: bold; }
           </style>
         </head>
         <body>
@@ -2675,10 +2715,11 @@ export default function App() {
                 <th>Product</th>
                 <th>UM</th>
                 <th>Stock On Hand</th>
-                <th>Future Orders</th>
-                <th>Past Consumption</th>
+                <th>Future Orders F:N</th>
+                <th>Past Consumption AI:AN</th>
                 <th>Projected Need</th>
                 <th>Suggested Next Order</th>
+                <th>Alert</th>
               </tr>
             </thead>
             <tbody>
@@ -2695,6 +2736,7 @@ export default function App() {
                       <td>${formatQty(item.pastConsumption)}</td>
                       <td>${formatQty(item.projectedNeed)}</td>
                       <td class="qty">${formatQty(item.suggestedOrder)}</td>
+                      <td class="${item.alertType === "red" ? "red" : item.alertType === "blue" || item.alertType === "order" ? "blue" : ""}">${escapeHtml(item.alertLabel || "")}</td>
                     </tr>
                   `
                 )
@@ -3829,9 +3871,11 @@ export default function App() {
               <div>👥 Sailors count B5: <strong>{formatQty(nextOrderMeta?.targetSailors)}</strong></div>
               <div>📅 Days of period B6: <strong>{formatQty(nextOrderMeta?.targetDays)}</strong></div>
               <div>📦 Product rows found: <strong>{nextOrderMeta?.totalItems || 0}</strong></div>
-              <div>🛒 Items currently needing order: <strong>{nextOrderMeta?.itemsNeedingOrder || 0}</strong></div>
+              <div>🛒 Items needing order: <strong>{nextOrderMeta?.itemsNeedingOrder || 0}</strong></div>
+              <div style={{ color: "#0057b8" }}>🔵 No stock + no past consumption: <strong>{nextOrderMeta?.blueReviewItems || 0}</strong></div>
+              <div style={{ color: "#b00020" }}>🔴 Stock on hand + no past consumption: <strong>{nextOrderMeta?.redReviewItems || 0}</strong></div>
               <div style={{ color: "#8a5a00" }}>
-                Calculation uses stock on hand from D, future orders from F:O, and past consumption from AI:AN.
+                Calculation uses B5 sailors, B6 days, stock on hand from D, future orders from F:N, AI5:AN5 + AI6:AN6 as historical basis, and past consumption from AI:AN.
               </div>
             </div>
           </div>
@@ -3854,10 +3898,11 @@ export default function App() {
             </div>
 
             <div style={styles.infoBox}>
-              <div>🛒 Order lines generated: <strong>{nextOrderRows.length}</strong></div>
+              <div>🛒 Product lines generated: <strong>{nextOrderRows.length}</strong></div>
               {nextOrderLoading && <div>Generating next order, please wait...</div>}
               {nextOrderMessage && <div style={{ color: nextOrderRows.length ? "#555" : "#8a5a00" }}>{nextOrderMessage}</div>}
-              <div>Formula: projected need minus stock on hand minus future orders.</div>
+              <div>All product rows are included. Positive suggested orders appear first.</div>
+              <div>Formula: projected need minus stock on hand minus future orders. Blue = 0 stock and 0 consumption. Red = stock on hand but 0 consumption.</div>
             </div>
           </div>
         </section>
@@ -3866,25 +3911,42 @@ export default function App() {
           <h2 style={styles.productTitle}>🛒 Generated Next Order</h2>
 
           {nextOrderRows.length === 0 && !nextOrderLoading && (
-            <p style={styles.emptyText}>Upload the latest order file and click Generate Next Order. The order list will appear here.</p>
+            <p style={styles.emptyText}>Upload the latest order file and click Generate Next Order. All product rows will appear here.</p>
           )}
 
           <div style={styles.equipmentGrid}>
-            {nextOrderRows.map((item, index) => (
-              <div key={`${item.code}-${item.excelRow}-next-order-${index}`} style={{ ...styles.equipmentCard, ...styles.orderNeededCard }}>
-                <div style={styles.recipeMeta}>Line #{index + 1}</div>
-                <div style={styles.recipeName}>{item.product}</div>
-                <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                <div style={styles.recipeMeta}>U/M: {item.uom}</div>
-                <div style={styles.recipeMeta}>Excel row: {item.excelRow}</div>
-                <div style={styles.recipeMeta}>Stock on hand: {formatQty(item.stockOnHand)}</div>
-                <div style={styles.recipeMeta}>Future orders F:O: {formatQty(item.futureOrders)}</div>
-                <div style={styles.recipeMeta}>Past consumption AI:AN: {formatQty(item.pastConsumption)}</div>
-                <div style={styles.recipeMeta}>Projected need: {formatQty(item.projectedNeed)}</div>
-                <div style={styles.suggestedOrderBlue}>Suggested Next Order: {formatQty(item.suggestedOrder)}</div>
-                <div style={styles.warningSmall}>{item.orderReason}</div>
-              </div>
-            ))}
+            {nextOrderRows.map((item, index) => {
+              const cardStyle = {
+                ...styles.equipmentCard,
+                ...(item.alertType === "red" ? styles.orderWarningCard : {}),
+                ...(item.alertType === "blue" || item.alertType === "order" ? styles.orderNeededCard : {}),
+              };
+
+              return (
+                <div key={`${item.code}-${item.excelRow}-next-order-${index}`} style={cardStyle}>
+                  <div style={styles.recipeMeta}>Line #{index + 1}</div>
+                  <div style={styles.recipeName}>{item.product}</div>
+                  <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
+                  <div style={styles.recipeMeta}>U/M: {item.uom}</div>
+                  <div style={styles.recipeMeta}>Excel row: {item.excelRow}</div>
+                  <div style={styles.recipeMeta}>Stock on hand D: {formatQty(item.stockOnHand)}</div>
+                  <div style={styles.recipeMeta}>Future orders F:N: {formatQty(item.futureOrders)}</div>
+                  <div style={styles.recipeMeta}>Past consumption AI:AN: {formatQty(item.pastConsumption)}</div>
+                  <div style={styles.recipeMeta}>Projected need: {formatQty(item.projectedNeed)}</div>
+
+                  <div style={Number(item.suggestedOrder || 0) > 0 ? styles.suggestedOrderBlue : styles.statusNeutral}>
+                    Suggested Next Order: {formatQty(item.suggestedOrder)}
+                  </div>
+
+                  {item.alertType === "red" && <div style={styles.statusBad}>{item.alertLabel}</div>}
+                  {item.alertType === "blue" && <div style={styles.suggestedOrderBlue}>{item.alertLabel}</div>}
+                  {item.alertType === "order" && <div style={styles.suggestedOrderBlue}>{item.alertLabel}</div>}
+                  {item.alertType === "normal" && <div style={styles.statusNeutral}>{item.alertLabel}</div>}
+
+                  <div style={styles.warningSmall}>{item.orderReason}</div>
+                </div>
+              );
+            })}
           </div>
         </section>
       </main>
