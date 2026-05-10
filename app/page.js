@@ -383,6 +383,7 @@ export default function App() {
   const [nextOrderMeta, setNextOrderMeta] = useState({});
   const [nextOrderFileName, setNextOrderFileName] = useState("");
   const [nextOrderSearch, setNextOrderSearch] = useState("");
+  const [nextOrderFilter, setNextOrderFilter] = useState("all");
   const [nextOrderLoading, setNextOrderLoading] = useState(false);
   const [nextOrderMessage, setNextOrderMessage] = useState("");
 
@@ -741,6 +742,7 @@ export default function App() {
         setNextOrderMeta(parsed.meta);
         setNextOrderRows([]);
         setNextOrderSearch("");
+        setNextOrderFilter("all");
         setNextOrderMessage(
           `Order file loaded. ${parsed.meta.totalItems} product rows found. ${parsed.meta.itemsNeedingOrder} need order, ${parsed.meta.blueReviewItems} blue review, ${parsed.meta.redReviewItems} red review.`
         );
@@ -750,6 +752,7 @@ export default function App() {
         setNextOrderMeta({});
         setNextOrderRows([]);
         setNextOrderSearch("");
+        setNextOrderFilter("all");
         setNextOrderMessage(error?.message || "Could not read the order file.");
       }
     });
@@ -2659,13 +2662,32 @@ export default function App() {
 
   const filterNextOrderRows = (rows) => {
     const term = nextOrderSearch.toLowerCase().trim();
-    if (!term) return rows;
 
-    return rows.filter((item) =>
-      `${item.code || ""} ${item.product || ""} ${item.uom || ""} ${item.alertLabel || ""} ${item.excelRow || ""}`
+    return rows.filter((item) => {
+      const matchesFilter =
+        nextOrderFilter === "all" ||
+        (nextOrderFilter === "needsOrder" && Number(item.suggestedOrder || 0) > 0) ||
+        (nextOrderFilter === "noConsumption" && Number(item.pastConsumption || 0) <= 0) ||
+        (nextOrderFilter === "noStock" && Number(item.stockOnHand || 0) <= 0);
+
+      if (!matchesFilter) return false;
+      if (!term) return true;
+
+      return `${item.code || ""} ${item.product || ""} ${item.uom || ""} ${item.alertLabel || ""} ${item.excelRow || ""}`
         .toLowerCase()
-        .includes(term)
-    );
+        .includes(term);
+    });
+  };
+
+  const getNextOrderFilterCounts = () => {
+    const rows = nextOrderRows.length ? nextOrderRows : sortNextOrderRows(nextOrderSourceRows);
+
+    return {
+      all: rows.length,
+      needsOrder: rows.filter((item) => Number(item.suggestedOrder || 0) > 0).length,
+      noConsumption: rows.filter((item) => Number(item.pastConsumption || 0) <= 0).length,
+      noStock: rows.filter((item) => Number(item.stockOnHand || 0) <= 0).length,
+    };
   };
 
   const generateNextOrderReport = () => {
@@ -2684,7 +2706,7 @@ export default function App() {
         const rows = sortNextOrderRows(nextOrderSourceRows);
 
         setNextOrderRows(rows.map((item, index) => ({ ...item, orderRank: index + 1 })));
-        setNextOrderMessage(`Generated ${rows.length} product lines in the same order as the Excel file. Use search to find a product.`);
+        setNextOrderMessage(`Generated ${rows.length} product lines in the same order as the Excel file. Use filter buttons and search to find products.`);
       } catch (error) {
         setNextOrderRows([]);
         setNextOrderMessage(error?.message || "Could not generate next order.");
@@ -3910,6 +3932,7 @@ export default function App() {
                 setProductMode("nextorder");
                 setNextOrderRows([]);
                 setNextOrderSearch("");
+                setNextOrderFilter("all");
                 setNextOrderMessage("");
               }}
             >
@@ -3924,6 +3947,9 @@ export default function App() {
   }
 
   if (module === "product" && productMode === "nextorder") {
+    const nextOrderFilterCounts = getNextOrderFilterCounts();
+    const visibleNextOrderRows = getNextOrderRowsForOutput(true);
+
     return (
       <main style={styles.page}>
         <header style={styles.header}>
@@ -3979,10 +4005,11 @@ export default function App() {
 
             <div style={styles.infoBox}>
               <div>🛒 Product lines generated: <strong>{nextOrderRows.length}</strong></div>
-              <div>🔎 Showing after search: <strong>{nextOrderRows.length ? getNextOrderRowsForOutput(true).length : 0}</strong></div>
+              <div>🔎 Showing after filter/search: <strong>{nextOrderRows.length ? visibleNextOrderRows.length : 0}</strong></div>
+              <div>📋 Order: <strong>Same order as uploaded Excel file</strong></div>
               {nextOrderLoading && <div>Generating next order, please wait...</div>}
               {nextOrderMessage && <div style={{ color: nextOrderRows.length ? "#555" : "#8a5a00" }}>{nextOrderMessage}</div>}
-              <div>All product rows are included and kept in the same order as the Excel file.</div>
+              <div>All product rows are included and cards stay in the same order as the Excel file.</div>
               <div>Formula: average daily consumption × voyage days, then subtract stock/future orders after covering usage until arrival. Blue = 0 stock and 0 consumption. Red = stock on hand but 0 consumption.</div>
             </div>
           </div>
@@ -3991,15 +4018,49 @@ export default function App() {
         <section style={styles.card}>
           <h2 style={styles.productTitle}>🛒 Generated Next Order</h2>
 
-          <input
-            placeholder="Search item by name, code, U/M, alert or Excel row..."
-            value={nextOrderSearch}
-            onChange={(e) => setNextOrderSearch(e.target.value)}
-            style={styles.searchInput}
-          />
+          <div style={styles.reportFilterBox}>
+            <label style={styles.label}>Filter generated order</label>
 
-          {nextOrderRows.length > 0 && nextOrderSearch && getNextOrderRowsForOutput(true).length === 0 && (
-            <p style={styles.emptyText}>No generated order lines match this search.</p>
+            <div style={styles.headerActions}>
+              <button
+                style={{ ...styles.viewModeButton, ...(nextOrderFilter === "all" ? styles.viewModeButtonActive : {}) }}
+                onClick={() => setNextOrderFilter("all")}
+              >
+                📋 All ({nextOrderFilterCounts.all})
+              </button>
+
+              <button
+                style={{ ...styles.viewModeButton, ...(nextOrderFilter === "needsOrder" ? styles.viewModeButtonActive : {}) }}
+                onClick={() => setNextOrderFilter("needsOrder")}
+              >
+                🛒 Needs to Order ({nextOrderFilterCounts.needsOrder})
+              </button>
+
+              <button
+                style={{ ...styles.viewModeButton, ...(nextOrderFilter === "noConsumption" ? styles.viewModeButtonActive : {}) }}
+                onClick={() => setNextOrderFilter("noConsumption")}
+              >
+                🔴 No Consumption ({nextOrderFilterCounts.noConsumption})
+              </button>
+
+              <button
+                style={{ ...styles.viewModeButton, ...(nextOrderFilter === "noStock" ? styles.viewModeButtonActive : {}) }}
+                onClick={() => setNextOrderFilter("noStock")}
+              >
+                🔵 No Stock ({nextOrderFilterCounts.noStock})
+              </button>
+            </div>
+
+            <input
+              placeholder="Search item by name, code, U/M, alert or Excel row..."
+              value={nextOrderSearch}
+              onChange={(e) => setNextOrderSearch(e.target.value)}
+              style={{ ...styles.searchInput, marginBottom: 0 }}
+            />
+          </div>
+
+          {nextOrderRows.length > 0 && (nextOrderSearch || nextOrderFilter !== "all") && visibleNextOrderRows.length === 0 && (
+            <p style={styles.emptyText}>No generated order lines match this filter/search.</p>
           )}
 
           {nextOrderRows.length === 0 && !nextOrderLoading && (
@@ -4007,7 +4068,7 @@ export default function App() {
           )}
 
           <div style={styles.equipmentGrid}>
-            {nextOrderRows.length > 0 && getNextOrderRowsForOutput(true).map((item, index) => {
+            {nextOrderRows.length > 0 && visibleNextOrderRows.map((item, index) => {
               const cardStyle = {
                 ...styles.equipmentCard,
                 ...(item.alertType === "red" ? styles.orderWarningCard : {}),
@@ -4016,7 +4077,7 @@ export default function App() {
 
               return (
                 <div key={`${item.code}-${item.excelRow}-next-order-${index}`} style={cardStyle}>
-                  <div style={styles.recipeMeta}>Line #{index + 1}</div>
+                  <div style={styles.recipeMeta}>Excel order #{item.orderRank || index + 1}</div>
                   <div style={styles.recipeName}>{item.product}</div>
                   <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
                   <div style={styles.recipeMeta}>U/M: {item.uom}</div>
