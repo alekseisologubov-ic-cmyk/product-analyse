@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { createClient } from "@supabase/supabase-js";
 
@@ -140,6 +140,14 @@ const getImageUrl = (url) => {
   return value;
 };
 
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
 const getDefaultNextYearStartDate = () => {
   const nextYear = new Date().getFullYear() + 1;
   return `${nextYear}-01-01`;
@@ -192,6 +200,11 @@ export default function App() {
   const [inventoryLoading, setInventoryLoading] = useState(false);
   const [inventoryError, setInventoryError] = useState("");
   const [showVariance, setShowVariance] = useState(false);
+  const [reportBusy, setReportBusy] = useState(false);
+
+  const realtimeRefreshTimersRef = useRef({});
+  const printBusyRef = useRef(false);
+  const saveBusyRef = useRef(false);
 
   const [scheduleShip, setScheduleShip] = useState(SCHEDULE_ALL_SHIPS);
   const [scheduleDate, setScheduleDate] = useState(getDefaultNextYearStartDate());
@@ -297,7 +310,7 @@ export default function App() {
           filter: `ship=eq.${MASTER_INVENTORY_SCOPE}`,
         },
         () => {
-          loadMasterInventoryItems(makeInventoryShip || userShip);
+          scheduleRealtimeRefresh("master", makeInventoryShip || userShip);
         }
       )
       .subscribe();
@@ -316,7 +329,7 @@ export default function App() {
             filter: `ship=eq.${makeInventoryShip}`,
           },
           () => {
-            loadInventoryRecords(makeInventoryShip);
+            scheduleRealtimeRefresh("counts", makeInventoryShip);
           }
         )
         .subscribe();
@@ -328,6 +341,38 @@ export default function App() {
       channels.forEach((channel) => supabase.removeChannel(channel));
     };
   }, [makeInventoryShip, userShip, module, equipmentMode]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(realtimeRefreshTimersRef.current).forEach((timer) => {
+        window.clearTimeout(timer);
+      });
+    };
+  }, []);
+
+  const scheduleRealtimeRefresh = (type, shipOverride) => {
+    if (printBusyRef.current) return;
+
+    const ship = shipOverride || makeInventoryShip || userShip;
+    const key = type === "master" ? "master" : `counts-${ship || "unknown"}`;
+
+    if (realtimeRefreshTimersRef.current[key]) {
+      window.clearTimeout(realtimeRefreshTimersRef.current[key]);
+    }
+
+    realtimeRefreshTimersRef.current[key] = window.setTimeout(() => {
+      delete realtimeRefreshTimersRef.current[key];
+
+      if (type === "master") {
+        loadMasterInventoryItems(ship);
+        return;
+      }
+
+      if (type === "counts" && ship) {
+        loadInventoryRecords(ship);
+      }
+    }, 900);
+  };
 
   const visibleShips = viewMode === "single" ? [userShip] : SHIPS;
 
@@ -843,6 +888,8 @@ export default function App() {
   };
 
   const confirmInventoryQty = async () => {
+    if (saveBusyRef.current) return;
+
     if (!currentInventoryItem) {
       setMakeInventoryMessage("Select a product before confirming quantity.");
       return;
@@ -881,6 +928,8 @@ export default function App() {
       return;
     }
 
+    saveBusyRef.current = true;
+
     const itemKey = getInventoryItemKey(currentInventoryItem);
 
     const payload = {
@@ -915,6 +964,7 @@ export default function App() {
       setInventoryError(text);
       setMakeInventoryMessage(text);
       setInventoryLoading(false);
+      saveBusyRef.current = false;
       window.alert(text);
       return;
     }
@@ -942,6 +992,7 @@ export default function App() {
       setInventoryError(text);
       setMakeInventoryMessage(text);
       setInventoryLoading(false);
+      saveBusyRef.current = false;
       window.alert(text);
       return;
     }
@@ -963,12 +1014,13 @@ export default function App() {
       return [savedRecord, ...withoutSavedRecord];
     });
 
-    await loadInventoryRecords(ship);
+    scheduleRealtimeRefresh("counts", ship);
 
     setCurrentInventoryItem(null);
     setInventoryQty("");
     setEditingInventoryId(null);
     setInventoryLoading(false);
+    saveBusyRef.current = false;
     setMakeInventoryMessage(`Saved ${currentInventoryItem.name} / Qty ${formatQty(qty)}.`);
   };
 
@@ -1013,7 +1065,8 @@ export default function App() {
       return;
     }
 
-    await loadInventoryRecords(makeInventoryShip || userShip);
+    setInventorySummary((prev) => prev.filter((item) => item.id !== itemToDelete.id));
+    scheduleRealtimeRefresh("counts", makeInventoryShip || userShip);
   };
 
   const clearMyInventory = async () => {
@@ -1074,7 +1127,7 @@ export default function App() {
       )
     );
 
-    await loadInventoryRecords(ship);
+    scheduleRealtimeRefresh("counts", ship);
 
     setCurrentInventoryItem(null);
     setInventoryQty("");
@@ -1138,13 +1191,46 @@ export default function App() {
     }
 
     setInventorySummary((prev) => prev.filter((item) => item.ship !== ship));
-    await loadInventoryRecords(ship);
+    scheduleRealtimeRefresh("counts", ship);
 
     setCurrentInventoryItem(null);
     setInventoryQty("");
     setEditingInventoryId(null);
     setInventoryLoading(false);
     setMakeInventoryMessage(`All ${ship} inventory records were cleared.`);
+  };
+
+  const openPreparedPrintWindow = (html) => {
+    if (printBusyRef.current) return;
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      const text = "Print window was blocked by the browser. Allow popups for this app and try again.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
+
+    printBusyRef.current = true;
+    setReportBusy(true);
+    setMakeInventoryMessage("Preparing print view...");
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+
+    window.setTimeout(() => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } finally {
+        window.setTimeout(() => {
+          printBusyRef.current = false;
+          setReportBusy(false);
+          setMakeInventoryMessage("Print view prepared.");
+        }, 700);
+      }
+    }, 250);
   };
 
   const exportInventorySummaryToExcel = () => {
@@ -1216,11 +1302,18 @@ export default function App() {
   };
 
   const printInventorySummary = () => {
+    if (reportBusy || printBusyRef.current) return;
+
     const ship = makeInventoryShip || userShip;
-    const rows = getVisibleInventoryReportRows();
+    const mode = inventoryReportMode;
+    const rows = getVisibleInventoryReportRows().map((item) => ({
+      ...item,
+      stations: Array.isArray(item.stations) ? [...item.stations] : [],
+      users: Array.isArray(item.users) ? [...item.users] : [],
+    }));
 
     if (!rows.length) {
-      const text = inventoryReportMode === "summary"
+      const text = mode === "summary"
         ? "No summary records to print for this ship."
         : "No personal inventory records to print for this ship, station, and user.";
       setMakeInventoryMessage(text);
@@ -1228,97 +1321,94 @@ export default function App() {
       return;
     }
 
-    const title =
-      inventoryReportMode === "summary"
-        ? "Ship Inventory Summary Report"
-        : "My Inventory Report";
+    const title = mode === "summary" ? "Ship Inventory Summary Report" : "My Inventory Report";
 
-    const tableRows =
-      inventoryReportMode === "summary"
-        ? rows
-            .map(
-              (item) => `
-                <tr>
-                  <td>${item.code || ""}</td>
-                  <td>${item.name || ""}</td>
-                  <td>${item.category || ""}</td>
-                  <td>${item.sheetName || ""}</td>
-                  <td>${formatQty(item.totalQty)}</td>
-                  <td>${item.stations.join(", ")}</td>
-                  <td>${item.users.join(", ")}</td>
-                  <td>${item.recordCount}</td>
-                  <td>${item.confirmedAt}</td>
-                </tr>
-              `
-            )
-            .join("")
-        : rows
-            .map(
-              (item) => `
-                <tr>
-                  <td>${item.station || ""}</td>
-                  <td>${item.userName || ""}</td>
-                  <td>${item.code || ""}</td>
-                  <td>${item.name || ""}</td>
-                  <td>${item.category || ""}</td>
-                  <td>${item.sheetName || ""}</td>
-                  <td>${formatQty(item.qty)}</td>
-                  <td>${item.confirmedAt}</td>
-                </tr>
-              `
-            )
-            .join("");
+    const tableRows = mode === "summary"
+      ? rows
+          .map(
+            (item) => `
+              <tr>
+                <td>${escapeHtml(item.code || "")}</td>
+                <td>${escapeHtml(item.name || "")}</td>
+                <td>${escapeHtml(item.category || "")}</td>
+                <td>${escapeHtml(item.sheetName || "")}</td>
+                <td>${escapeHtml(formatQty(item.totalQty))}</td>
+                <td>${escapeHtml(item.stations.join(", "))}</td>
+                <td>${escapeHtml(item.users.join(", "))}</td>
+                <td>${escapeHtml(item.recordCount)}</td>
+                <td>${escapeHtml(item.confirmedAt)}</td>
+              </tr>
+            `
+          )
+          .join("")
+      : rows
+          .map(
+            (item) => `
+              <tr>
+                <td>${escapeHtml(item.station || "")}</td>
+                <td>${escapeHtml(item.userName || "")}</td>
+                <td>${escapeHtml(item.code || "")}</td>
+                <td>${escapeHtml(item.name || "")}</td>
+                <td>${escapeHtml(item.category || "")}</td>
+                <td>${escapeHtml(item.sheetName || "")}</td>
+                <td>${escapeHtml(formatQty(item.qty))}</td>
+                <td>${escapeHtml(item.confirmedAt)}</td>
+              </tr>
+            `
+          )
+          .join("");
 
-    const tableHeader =
-      inventoryReportMode === "summary"
-        ? `
-          <tr>
-            <th>Code</th>
-            <th>Name</th>
-            <th>Category</th>
-            <th>Sheet</th>
-            <th>Total Qty</th>
-            <th>Stations</th>
-            <th>Users</th>
-            <th>Records</th>
-            <th>Last Updated</th>
-          </tr>
-        `
-        : `
-          <tr>
-            <th>Station</th>
-            <th>User</th>
-            <th>Code</th>
-            <th>Name</th>
-            <th>Category</th>
-            <th>Sheet</th>
-            <th>Quantity</th>
-            <th>Confirmed</th>
-          </tr>
-        `;
+    const tableHeader = mode === "summary"
+      ? `
+        <tr>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Category</th>
+          <th>Sheet</th>
+          <th>Total Qty</th>
+          <th>Stations</th>
+          <th>Users</th>
+          <th>Records</th>
+          <th>Last Updated</th>
+        </tr>
+      `
+      : `
+        <tr>
+          <th>Station</th>
+          <th>User</th>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Category</th>
+          <th>Sheet</th>
+          <th>Quantity</th>
+          <th>Confirmed</th>
+        </tr>
+      `;
 
     const html = `
       <html>
         <head>
-          <title>${title}</title>
+          <title>${escapeHtml(title)}</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 24px; }
             h1 { margin-bottom: 4px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+            th, td { border: 1px solid #ccc; padding: 6px; text-align: left; vertical-align: top; }
             th { background: #f2f2f2; }
+            tr { break-inside: avoid; }
           </style>
         </head>
         <body>
-          <h1>${title}</h1>
-          <div><strong>Ship:</strong> ${ship}</div>
+          <h1>${escapeHtml(title)}</h1>
+          <div><strong>Ship:</strong> ${escapeHtml(ship)}</div>
           ${
-            inventoryReportMode === "my"
-              ? `<div><strong>Station:</strong> ${inventoryStation}</div>
-                 <div><strong>User:</strong> ${getEffectiveInventoryUserName()}</div>`
+            mode === "my"
+              ? `<div><strong>Station:</strong> ${escapeHtml(inventoryStation)}</div>
+                 <div><strong>User:</strong> ${escapeHtml(getEffectiveInventoryUserName())}</div>`
               : `<div><strong>Report:</strong> All users and all stations for this ship</div>`
           }
-          <div><strong>Printed:</strong> ${new Date().toLocaleString()}</div>
+          <div><strong>Printed:</strong> ${escapeHtml(new Date().toLocaleString())}</div>
+          <div><strong>Records:</strong> ${escapeHtml(rows.length)}</div>
 
           <table>
             <thead>${tableHeader}</thead>
@@ -1328,23 +1418,14 @@ export default function App() {
       </html>
     `;
 
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      const text = "Print window was blocked by the browser. Allow popups for this app and try again.";
-      setMakeInventoryMessage(text);
-      window.alert(text);
-      return;
-    }
-
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    openPreparedPrintWindow(html);
   };
 
   const printInventoryStatus = () => {
+    if (reportBusy || printBusyRef.current) return;
+
     const ship = makeInventoryShip || userShip;
-    const rows = getMyInventoryStatusRows();
+    const rows = getMyInventoryStatusRows().map((item) => ({ ...item }));
 
     if (!rows.length) {
       const text = "No inventory status rows to print. Upload a master inventory file first.";
@@ -1360,19 +1441,21 @@ export default function App() {
           <style>
             body { font-family: Arial, sans-serif; padding: 24px; }
             h1 { margin-bottom: 4px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+            th, td { border: 1px solid #ccc; padding: 6px; text-align: left; vertical-align: top; }
             th { background: #f2f2f2; }
             .counted { color: #2e7d32; font-weight: bold; }
             .pending { color: #555; font-weight: bold; }
+            tr { break-inside: avoid; }
           </style>
         </head>
         <body>
           <h1>Inventory Status</h1>
-          <div><strong>Ship:</strong> ${ship}</div>
-          <div><strong>Station:</strong> ${inventoryStation}</div>
-          <div><strong>User:</strong> ${getEffectiveInventoryUserName()}</div>
-          <div><strong>Printed:</strong> ${new Date().toLocaleString()}</div>
+          <div><strong>Ship:</strong> ${escapeHtml(ship)}</div>
+          <div><strong>Station:</strong> ${escapeHtml(inventoryStation)}</div>
+          <div><strong>User:</strong> ${escapeHtml(getEffectiveInventoryUserName())}</div>
+          <div><strong>Printed:</strong> ${escapeHtml(new Date().toLocaleString())}</div>
+          <div><strong>Records:</strong> ${escapeHtml(rows.length)}</div>
 
           <table>
             <thead>
@@ -1391,13 +1474,13 @@ export default function App() {
                 .map(
                   (item) => `
                     <tr>
-                      <td>${item.code || ""}</td>
-                      <td>${item.name || ""}</td>
-                      <td>${item.category || ""}</td>
-                      <td>${item.sheetName || ""}</td>
-                      <td class="${item.status === "Counted" ? "counted" : "pending"}">${item.status}</td>
-                      <td>${formatQty(item.countedQty)}</td>
-                      <td>${item.countedAt}</td>
+                      <td>${escapeHtml(item.code || "")}</td>
+                      <td>${escapeHtml(item.name || "")}</td>
+                      <td>${escapeHtml(item.category || "")}</td>
+                      <td>${escapeHtml(item.sheetName || "")}</td>
+                      <td class="${item.status === "Counted" ? "counted" : "pending"}">${escapeHtml(item.status)}</td>
+                      <td>${escapeHtml(formatQty(item.countedQty))}</td>
+                      <td>${escapeHtml(item.countedAt)}</td>
                     </tr>
                   `
                 )
@@ -1408,18 +1491,7 @@ export default function App() {
       </html>
     `;
 
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      const text = "Print window was blocked by the browser. Allow popups for this app and try again.";
-      setMakeInventoryMessage(text);
-      window.alert(text);
-      return;
-    }
-
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    openPreparedPrintWindow(html);
   };
 
   const uploadConsumptionFile = (e) => {
@@ -3227,9 +3299,9 @@ export default function App() {
                   <button
                     style={styles.primaryButton}
                     onClick={confirmInventoryQty}
-                    disabled={!inventoryReady}
+                    disabled={!inventoryReady || inventoryLoading}
                   >
-                    {editingInventoryId ? "Update Quantity" : "Confirm Quantity"}
+                    {inventoryLoading ? "Saving..." : editingInventoryId ? "Update Quantity" : "Confirm Quantity"}
                   </button>
                 </div>
               </div>
@@ -3262,27 +3334,31 @@ export default function App() {
                 🌍 Summary Report
               </button>
 
-              <button style={styles.backButton} onClick={() => refreshMakeInventoryData(makeInventoryShip || userShip)}>
+              <button
+                style={styles.backButton}
+                onClick={() => refreshMakeInventoryData(makeInventoryShip || userShip)}
+                disabled={inventoryLoading || reportBusy}
+              >
                 🔄 Refresh
               </button>
 
-              <button style={styles.backButton} onClick={printInventorySummary}>
-                🖨️ Print
+              <button style={styles.backButton} onClick={printInventorySummary} disabled={reportBusy}>
+                {reportBusy ? "Preparing..." : "🖨️ Print"}
               </button>
 
               {inventoryReportMode === "my" && (
-                <button style={styles.deleteButton} onClick={clearMyInventory}>
+                <button style={styles.deleteButton} onClick={clearMyInventory} disabled={inventoryLoading || reportBusy}>
                   🧹 Clear My Report
                 </button>
               )}
 
               {inventoryReportMode === "summary" && (
-                <button style={styles.deleteButton} onClick={clearShipInventory}>
+                <button style={styles.deleteButton} onClick={clearShipInventory} disabled={inventoryLoading || reportBusy}>
                   🧹 Clear Ship Records
                 </button>
               )}
 
-              <button style={styles.primaryButton} onClick={exportInventorySummaryToExcel}>
+              <button style={styles.primaryButton} onClick={exportInventorySummaryToExcel} disabled={reportBusy}>
                 📥 Export Excel
               </button>
             </div>
