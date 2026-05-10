@@ -312,6 +312,7 @@ export default function App() {
 
   const [warehouseRows, setWarehouseRows] = useState([]);
   const [warehouseSearch, setWarehouseSearch] = useState("");
+  const [warehouseFilter, setWarehouseFilter] = useState("all");
   const [warehouseMessage, setWarehouseMessage] = useState("");
 
   const [inUseRows, setInUseRows] = useState([]);
@@ -1781,6 +1782,7 @@ export default function App() {
 
     readExcelFile(file, (workbook) => {
       setWarehouseRows(workbookToRows(workbook));
+      setWarehouseFilter("all");
       setWarehouseMessage("Warehouse inventory loaded.");
     });
   };
@@ -4308,11 +4310,18 @@ export default function App() {
   }
 
   if (module === "equipment" && equipmentMode === "warehouse") {
-    const warehouseItems = parseWarehouseItems();
-    const totalSuggested = warehouseItems.reduce((sum, item) => sum + item.suggested, 0);
-    const criticalItems = warehouseItems.filter((item) => item.suggested > 0).length;
-    const warehouseItemsWithPictures = warehouseItems.filter((item) => item.image).length;
-    const warehouseOverstockItems = warehouseItems.filter((item) => Number(item.onHand || 0) - Number(item.par || 0) > 10).length;
+    const allWarehouseItems = parseWarehouseItems();
+    const isWarehouseOverstock = (item) => Number(item.onHand || 0) - Number(item.par || 0) > 10;
+    const needsWarehouseOrder = (item) => Number(item.suggested || 0) > 0;
+    const warehouseItems = allWarehouseItems.filter((item) => {
+      if (warehouseFilter === "overstock") return isWarehouseOverstock(item);
+      if (warehouseFilter === "needsOrder") return needsWarehouseOrder(item);
+      return true;
+    });
+    const totalSuggested = allWarehouseItems.reduce((sum, item) => sum + item.suggested, 0);
+    const criticalItems = allWarehouseItems.filter(needsWarehouseOrder).length;
+    const warehouseItemsWithPictures = allWarehouseItems.filter((item) => item.image).length;
+    const warehouseOverstockItems = allWarehouseItems.filter(isWarehouseOverstock).length;
 
     return (
       <main style={styles.page}>
@@ -4333,7 +4342,8 @@ export default function App() {
             {warehouseMessage && <p style={styles.message}>{warehouseMessage}</p>}
 
             <div style={styles.infoBox}>
-              <div>📦 Items loaded: <strong>{warehouseItems.length}</strong></div>
+              <div>📦 Items loaded: <strong>{allWarehouseItems.length}</strong></div>
+              <div>👀 Showing now: <strong>{warehouseItems.length}</strong></div>
               <div>🖼️ Pictures matched: <strong>{warehouseItemsWithPictures}</strong></div>
               <div>🔵 Items needing order: <strong>{criticalItems}</strong></div>
               <div>🛒 Total suggested order: <strong>{formatQty(totalSuggested)}</strong></div>
@@ -4353,6 +4363,29 @@ export default function App() {
             />
             <p style={styles.emptyText}>Blue = suggested order needed. Red = on hand is more than 10 above par level.</p>
 
+            <div style={styles.viewModeBox}>
+              <button
+                style={{ ...styles.viewModeButton, ...(warehouseFilter === "all" ? styles.viewModeButtonActive : {}) }}
+                onClick={() => setWarehouseFilter("all")}
+              >
+                📋 All ({allWarehouseItems.length})
+              </button>
+
+              <button
+                style={{ ...styles.viewModeButton, ...(warehouseFilter === "overstock" ? styles.viewModeButtonActive : {}) }}
+                onClick={() => setWarehouseFilter("overstock")}
+              >
+                🔴 Overstock ({warehouseOverstockItems})
+              </button>
+
+              <button
+                style={{ ...styles.viewModeButton, ...(warehouseFilter === "needsOrder" ? styles.viewModeButtonActive : {}) }}
+                onClick={() => setWarehouseFilter("needsOrder")}
+              >
+                🔵 Needs Order ({criticalItems})
+              </button>
+            </div>
+
             <button style={styles.backButton} onClick={() => loadMasterInventoryItems(makeInventoryShip || userShip)}>
               🔄 Refresh Pictures
             </button>
@@ -4363,6 +4396,11 @@ export default function App() {
           <h2 style={styles.productTitle}>🏬 Inventory Warehouse</h2>
 
           {warehouseRows.length === 0 && <p style={styles.emptyText}>Upload the warehouse inventory file to begin.</p>}
+          {warehouseRows.length > 0 && warehouseItems.length === 0 && (
+            <p style={styles.emptyText}>
+              No warehouse items match the current search/filter.
+            </p>
+          )}
 
           <div style={styles.equipmentGrid}>
             {warehouseItems.map((item, i) => {
