@@ -289,6 +289,7 @@ export default function App() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [message, setMessage] = useState("");
   const [viewMode, setViewMode] = useState("all");
+  const [showProductMissingReport, setShowProductMissingReport] = useState(false);
 
   const [module, setModule] = useState("");
   const [equipmentMode, setEquipmentMode] = useState("");
@@ -1960,6 +1961,201 @@ export default function App() {
     });
   };
 
+  const getProductReportProductList = () => {
+    const productMap = new Map();
+
+    const addProduct = (product) => {
+      const displayProduct = String(product || "").trim();
+      if (!displayProduct) return;
+
+      const tokens = [...new Set(getProductMatchTokens(displayProduct))].sort();
+      const key = tokens.length ? tokens.join("|") : cleanText(displayProduct);
+      if (!key || productMap.has(key)) return;
+
+      productMap.set(key, displayProduct);
+    };
+
+    products.forEach(addProduct);
+
+    recipeData.forEach((row) => {
+      addProduct(row[12] || row[7]);
+    });
+
+    Object.values(templateMap || {}).forEach((venueTemplates) => {
+      Object.values(venueTemplates || {}).forEach((data) => {
+        addProduct(data.product);
+      });
+    });
+
+    return [...productMap.values()].sort((a, b) => a.localeCompare(b));
+  };
+
+  const getTopNotInUseByLocationReport = (limit = 50) => {
+    const reportRows = [];
+    const reportProducts = getProductReportProductList();
+
+    reportProducts.forEach((product) => {
+      const breakdown = getCombinedVenueBreakdown(product);
+
+      breakdown.forEach((venueItem) => {
+        if (!venueItem.required) return;
+        if (!venueItem.missingShips.length) return;
+
+        const visibleTotal = visibleShips.reduce(
+          (sum, ship) => sum + Number(venueItem.ships?.[ship] || 0),
+          0
+        );
+
+        reportRows.push({
+          product,
+          location: venueItem.displayName,
+          venueKey: venueItem.venueKey,
+          source:
+            venueItem.requiredByRecipe && venueItem.requiredFromTemplate
+              ? "Recipe/Location + Template Charge"
+              : venueItem.requiredFromTemplate
+                ? "Template Charge"
+                : "Recipe/Location",
+          missingShips: venueItem.missingShips,
+          visibleTotal,
+          ships: { ...venueItem.ships },
+          templateMatches: venueItem.templateMatches || [],
+          missingFromTemplate: venueItem.missingFromTemplate,
+        });
+      });
+    });
+
+    return reportRows
+      .sort((a, b) => {
+        const missingDifference = b.missingShips.length - a.missingShips.length;
+        if (missingDifference !== 0) return missingDifference;
+
+        const totalDifference = a.visibleTotal - b.visibleTotal;
+        if (totalDifference !== 0) return totalDifference;
+
+        const sourcePriority = (item) => {
+          if (item.source === "Template Charge") return 0;
+          if (item.source === "Recipe/Location + Template Charge") return 1;
+          return 2;
+        };
+
+        const sourceDifference = sourcePriority(a) - sourcePriority(b);
+        if (sourceDifference !== 0) return sourceDifference;
+
+        const locationDifference = a.location.localeCompare(b.location);
+        if (locationDifference !== 0) return locationDifference;
+
+        return a.product.localeCompare(b.product);
+      })
+      .slice(0, limit);
+  };
+
+  const exportTopNotInUseByLocationReportToExcel = () => {
+    const rows = getTopNotInUseByLocationReport(50);
+
+    if (!rows.length) {
+      alert("No not-in-use product/location records found for the current view.");
+      return;
+    }
+
+    const exportRows = rows.map((item, index) => {
+      const shipValues = {};
+      visibleShips.forEach((ship) => {
+        shipValues[ship] = Number(item.ships?.[ship] || 0);
+      });
+
+      return {
+        Rank: index + 1,
+        Product: item.product,
+        Location: item.location,
+        Source: item.source,
+        MissingShips: item.missingShips.join(", "),
+        VisibleTotal: item.visibleTotal,
+        TemplateMenu: item.templateMatches.join(", "),
+        MissingFromTemplate: item.missingFromTemplate ? "Yes" : "No",
+        ...shipValues,
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(exportRows);
+    const wb = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(wb, ws, "Top 50 Not In Use");
+    XLSX.writeFile(wb, `top-50-not-in-use-${viewMode === "single" ? userShip : "all-ships"}.xlsx`);
+  };
+
+  const printTopNotInUseByLocationReport = () => {
+    const rows = getTopNotInUseByLocationReport(50);
+
+    if (!rows.length) {
+      alert("No not-in-use product/location records found for the current view.");
+      return;
+    }
+
+    const html = `
+      <html>
+        <head>
+          <title>Top 50 Items Not In Use</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; }
+            h1 { margin-bottom: 4px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+            th, td { border: 1px solid #ccc; padding: 6px; text-align: left; vertical-align: top; }
+            th { background: #f2f2f2; }
+            .bad { color: #b00020; font-weight: bold; }
+            .blue { color: #0057b8; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h1>Top 50 Items Not In Use By Location</h1>
+          <div><strong>View:</strong> ${viewMode === "single" ? escapeHtml(userShip) : "All ships"}</div>
+          <div><strong>Printed:</strong> ${new Date().toLocaleString()}</div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Product</th>
+                <th>Location</th>
+                <th>Source</th>
+                <th>Missing Ships</th>
+                <th>Ship Usage</th>
+                <th>Template/Menu</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows
+                .map(
+                  (item, index) => `
+                    <tr>
+                      <td>${index + 1}</td>
+                      <td>${escapeHtml(item.product)}</td>
+                      <td>${escapeHtml(item.location)}</td>
+                      <td>${escapeHtml(item.source)}</td>
+                      <td class="bad">${escapeHtml(item.missingShips.join(", "))}</td>
+                      <td>${visibleShips.map((ship) => `${escapeHtml(ship)}: ${formatQty(item.ships?.[ship])}`).join("<br />")}</td>
+                      <td class="${item.missingFromTemplate ? "blue" : ""}">${escapeHtml(item.templateMatches.join(", ") || "N/A")}</td>
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      alert("The print window was blocked. Allow popups and try again.");
+      return;
+    }
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
   const getRecipesUsingProduct = (product) => {
     const recipes = {};
 
@@ -2928,6 +3124,7 @@ export default function App() {
   const productsInRecipe = selectedRecipe ? getProductsInRecipe(selectedRecipe) : [];
   const allergenWarnings = selectedRecipe ? detectAllergens(productsInRecipe) : [];
   const filteredProducts = products.filter((p) => p.toLowerCase().includes(search.toLowerCase()));
+  const topNotInUseReport = showProductMissingReport ? getTopNotInUseByLocationReport(50) : [];
 
   const totalConsumption = (() => {
     const totals = { BRL: 0, RL: 0, SC: 0, VL: 0 };
@@ -4118,6 +4315,100 @@ export default function App() {
             ))}
           </div>
         </div>
+      </section>
+
+      <section style={styles.card}>
+        <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: showProductMissingReport ? 18 : 0 }}>
+          <div>
+            <h2 style={styles.productTitle}>📊 Product Reports</h2>
+            <p style={{ ...styles.emptyText, margin: 0 }}>
+              Top 50 items not in use by the location where they should be used.
+            </p>
+          </div>
+
+          <div style={styles.headerActions}>
+            <button
+              style={styles.backButton}
+              onClick={() => setShowProductMissingReport((value) => !value)}
+            >
+              {showProductMissingReport ? "Hide Report" : "Open Report"}
+            </button>
+
+            <button style={styles.backButton} onClick={printTopNotInUseByLocationReport}>
+              🖨️ Print
+            </button>
+
+            <button style={styles.primaryButton} onClick={exportTopNotInUseByLocationReportToExcel}>
+              📥 Export Excel
+            </button>
+          </div>
+        </div>
+
+        {showProductMissingReport && (
+          <>
+            <div style={styles.infoBox}>
+              <div>📋 Report: <strong>Top 50 Not In Use By Location</strong></div>
+              <div>🚢 View: <strong>{viewMode === "single" ? userShip : "All Ships"}</strong></div>
+              <div>🔎 Rows found: <strong>{topNotInUseReport.length}</strong></div>
+              <div style={{ color: "#b00020" }}>
+                Shows products that are expected by recipe/location or template charge location, but usage is 0 for one or more visible ship(s).
+              </div>
+            </div>
+
+            {topNotInUseReport.length === 0 && (
+              <p style={styles.emptyText}>
+                No not-in-use records found. Upload consumption, recipe/location, and template files, then open the report again.
+              </p>
+            )}
+
+            <div style={styles.equipmentGrid}>
+              {topNotInUseReport.map((item, index) => (
+                <div key={`${item.product}-${item.venueKey}-${index}`} style={{ ...styles.equipmentCard, ...styles.orderWarningCard }}>
+                  <div style={styles.recipeMeta}>#{index + 1}</div>
+                  <div style={styles.recipeName}>{item.product}</div>
+                  <div style={styles.recipeMeta}>Location: {item.location}</div>
+                  <div style={styles.recipeMeta}>Source: {item.source}</div>
+
+                  {item.templateMatches.length > 0 && (
+                    <div style={styles.templateFound}>Template/Menu: {item.templateMatches.join(", ")}</div>
+                  )}
+
+                  {item.missingFromTemplate && (
+                    <div style={styles.templateWarningText}>Also missing from matching template.</div>
+                  )}
+
+                  <div style={styles.shipGrid}>
+                    {visibleShips.map((ship) => {
+                      const isMissing = item.missingShips.includes(ship);
+
+                      return (
+                        <div
+                          key={ship}
+                          style={{ ...styles.shipBox, ...(ship === userShip ? styles.shipBoxActive : {}), ...(isMissing ? styles.shipBoxMissing : {}) }}
+                        >
+                          <span style={styles.shipName}>{ship}</span>
+                          <strong style={styles.shipQty}>{formatQty(item.ships?.[ship])}</strong>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div style={styles.statusBad}>Missing: {item.missingShips.join(", ")}</div>
+
+                  <button
+                    style={styles.backButton}
+                    onClick={() => {
+                      setSelectedProduct(item.product);
+                      setSelectedRecipe(null);
+                    }}
+                  >
+                    Open Product
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </section>
 
       {selectedProduct && (
