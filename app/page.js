@@ -311,8 +311,12 @@ export default function App() {
   const [productMissingReportRows, setProductMissingReportRows] = useState([]);
   const [productMissingReportLoading, setProductMissingReportLoading] = useState(false);
   const [productMissingReportMessage, setProductMissingReportMessage] = useState("");
+  const [nextOrderRows, setNextOrderRows] = useState([]);
+  const [nextOrderLoading, setNextOrderLoading] = useState(false);
+  const [nextOrderMessage, setNextOrderMessage] = useState("");
 
   const [module, setModule] = useState("");
+  const [productMode, setProductMode] = useState("");
   const [equipmentMode, setEquipmentMode] = useState("");
 
   const [musterItems, setMusterItems] = useState([]);
@@ -2434,6 +2438,148 @@ export default function App() {
     printWindow.print();
   };
 
+  const generateNextOrderReport = () => {
+    setNextOrderLoading(true);
+    setNextOrderMessage("Generating next order...");
+    setNextOrderRows([]);
+
+    window.setTimeout(() => {
+      try {
+        const rows = getTopNotInUseByLocationReport(50).map((item, index) => ({
+          ...item,
+          orderRank: index + 1,
+          orderReason: item.missingFromTemplate
+            ? "Expected by location, missing usage, and missing from matching template"
+            : "Expected by location/template charge, but not charged in consumption",
+        }));
+
+        setNextOrderRows(rows);
+        setNextOrderMessage(rows.length ? "" : "No next-order lines found for the current files and view.");
+      } catch (error) {
+        setNextOrderRows([]);
+        setNextOrderMessage(error?.message || "Could not generate next order.");
+      } finally {
+        setNextOrderLoading(false);
+      }
+    }, 25);
+  };
+
+  const exportNextOrderToExcel = () => {
+    if (nextOrderLoading) {
+      alert("Next order is still generating. Please wait a moment.");
+      return;
+    }
+
+    const rows = nextOrderRows.length ? nextOrderRows : getTopNotInUseByLocationReport(50);
+
+    if (!rows.length) {
+      alert("No next-order lines found. Upload the files and generate the order first.");
+      return;
+    }
+
+    const exportRows = rows.map((item, index) => {
+      const shipValues = {};
+      visibleShips.forEach((ship) => {
+        shipValues[ship] = Number(item.ships?.[ship] || 0);
+      });
+
+      return {
+        Line: index + 1,
+        Product: item.product,
+        Location: item.location,
+        Source: item.source,
+        MissingShips: item.missingShips.join(", "),
+        Reason: item.orderReason || "Expected by location/template charge, but not charged in consumption",
+        TemplateMenu: item.templateMatches.join(", "),
+        MissingFromTemplate: item.missingFromTemplate ? "Yes" : "No",
+        ...shipValues,
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(exportRows);
+    const wb = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(wb, ws, "Next Order");
+    XLSX.writeFile(wb, `next-order-${viewMode === "single" ? userShip : "all-ships"}.xlsx`);
+  };
+
+  const printNextOrder = () => {
+    if (nextOrderLoading) {
+      alert("Next order is still generating. Please wait a moment.");
+      return;
+    }
+
+    const rows = nextOrderRows.length ? nextOrderRows : getTopNotInUseByLocationReport(50);
+
+    if (!rows.length) {
+      alert("No next-order lines found. Upload the files and generate the order first.");
+      return;
+    }
+
+    const html = `
+      <html>
+        <head>
+          <title>Generated Next Order</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; }
+            h1 { margin-bottom: 4px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+            th, td { border: 1px solid #ccc; padding: 6px; text-align: left; vertical-align: top; }
+            th { background: #f2f2f2; }
+            .bad { color: #b00020; font-weight: bold; }
+            .blue { color: #0057b8; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h1>Generated Next Order</h1>
+          <div><strong>View:</strong> ${viewMode === "single" ? escapeHtml(userShip) : "All ships"}</div>
+          <div><strong>Generated:</strong> ${new Date().toLocaleString()}</div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Product</th>
+                <th>Location</th>
+                <th>Source</th>
+                <th>Missing Ships</th>
+                <th>Reason</th>
+                <th>Template/Menu</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows
+                .map(
+                  (item, index) => `
+                    <tr>
+                      <td>${index + 1}</td>
+                      <td>${escapeHtml(item.product)}</td>
+                      <td>${escapeHtml(item.location)}</td>
+                      <td>${escapeHtml(item.source)}</td>
+                      <td class="bad">${escapeHtml(item.missingShips.join(", "))}</td>
+                      <td>${escapeHtml(item.orderReason || "Expected by location/template charge, but not charged in consumption")}</td>
+                      <td class="${item.missingFromTemplate ? "blue" : ""}">${escapeHtml(item.templateMatches.join(", ") || "N/A")}</td>
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      alert("The print window was blocked. Allow popups and try again.");
+      return;
+    }
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
   const getRecipesUsingProduct = (product) => {
     const recipes = {};
 
@@ -3452,10 +3598,16 @@ export default function App() {
           <h2 style={styles.cardTitle}>🧭 Select Module</h2>
 
           <div style={styles.moduleGrid}>
-            <button style={styles.moduleCard} onClick={() => setModule("product")}>
+            <button
+              style={styles.moduleCard}
+              onClick={() => {
+                setModule("product");
+                setProductMode("");
+              }}
+            >
               <div style={styles.moduleIcon}>📦</div>
               <strong>Product Dashboard</strong>
-              <span>Consumption, recipes, templates and allergens</span>
+              <span>Consumption, recipes, templates, reports and next order</span>
             </button>
 
             <button style={styles.moduleCard} onClick={() => setModule("equipment")}>
@@ -3469,6 +3621,179 @@ export default function App() {
               <strong>People & Schedule</strong>
               <span>Upload crew workbook and generate yearly contract rotations</span>
             </button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (module === "product" && !productMode) {
+    return (
+      <main style={styles.page}>
+        <header style={styles.header}>
+          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
+          <div style={styles.headerActions}>
+            <button style={styles.backButton} onClick={() => setModule("")}>← Modules</button>
+            <div style={styles.shipBadge}>🚢 {userShip}</div>
+          </div>
+        </header>
+
+        <section style={styles.card}>
+          <h2 style={styles.cardTitle}>📦 Product Options</h2>
+          <p style={styles.emptyText}>Choose whether you want to review products or generate the next order.</p>
+
+          <div style={styles.moduleGrid}>
+            <button style={styles.moduleCard} onClick={() => setProductMode("dashboard")}>
+              <div style={styles.moduleIcon}>📊</div>
+              <strong>Product Dashboard</strong>
+              <span>Use the existing product dashboard with consumption, recipes, templates, allergens and reports.</span>
+            </button>
+
+            <button
+              style={styles.moduleCard}
+              onClick={() => {
+                setProductMode("nextorder");
+                setNextOrderRows([]);
+                setNextOrderMessage("");
+              }}
+            >
+              <div style={styles.moduleIcon}>🛒</div>
+              <strong>Generate Next Order</strong>
+              <span>Create a next-order list from items expected by location/template but not charged in consumption.</span>
+            </button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (module === "product" && productMode === "nextorder") {
+    return (
+      <main style={styles.page}>
+        <header style={styles.header}>
+          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
+          <div style={styles.headerActions}>
+            <button style={styles.backButton} onClick={() => setProductMode("")}>← Product Options</button>
+            <div style={styles.shipBadge}>🚢 {viewMode === "single" ? userShip : "All Ships"}</div>
+          </div>
+        </header>
+
+        <div style={styles.viewModeBox}>
+          <button onClick={() => setViewMode("single")} style={{ ...styles.viewModeButton, ...(viewMode === "single" ? styles.viewModeButtonActive : {}) }}>
+            🚢 {userShip} Only
+          </button>
+
+          <button onClick={() => setViewMode("all")} style={{ ...styles.viewModeButton, ...(viewMode === "all" ? styles.viewModeButtonActive : {}) }}>
+            🌍 All Ships Overview
+          </button>
+        </div>
+
+        <section style={styles.grid}>
+          <div style={styles.card}>
+            <h2 style={styles.cardTitle}>🛒 Generate Next Order</h2>
+
+            <label style={styles.label}>Step 1: Consumption file</label>
+            <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadConsumptionFile} style={styles.fileInput} />
+
+            <label style={styles.label}>Step 2: Recipe / location file</label>
+            <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadRecipeFile} style={styles.fileInput} />
+
+            <label style={styles.label}>Step 3: Template file</label>
+            <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadTemplateFile} style={styles.fileInput} />
+
+            {message && <p style={styles.message}>{message}</p>}
+
+            <div style={styles.infoBox}>
+              <div>📦 Products loaded: <strong>{products.length}</strong></div>
+              <div>📘 Recipe rows loaded: <strong>{Math.max(recipeRows.length - 1, 0)}</strong></div>
+              <div>📋 Template: <strong>{templateStatus}</strong></div>
+              <div>🚢 View: <strong>{viewMode === "single" ? userShip : "All Ships"}</strong></div>
+              <div style={{ color: "#8a5a00" }}>
+                Next order is based on items expected by recipe/location or template charge location with zero usage for the selected ship view.
+              </div>
+            </div>
+          </div>
+
+          <div style={styles.card}>
+            <h2 style={styles.cardTitle}>⚙️ Order Actions</h2>
+
+            <div style={styles.headerActions}>
+              <button style={styles.primaryButton} onClick={generateNextOrderReport} disabled={nextOrderLoading}>
+                {nextOrderLoading ? "Generating..." : "✨ Generate Next Order"}
+              </button>
+
+              <button style={styles.backButton} onClick={printNextOrder} disabled={nextOrderLoading}>
+                🖨️ Print
+              </button>
+
+              <button style={styles.primaryButton} onClick={exportNextOrderToExcel} disabled={nextOrderLoading}>
+                📥 Export Excel
+              </button>
+            </div>
+
+            <div style={styles.infoBox}>
+              <div>🛒 Order lines generated: <strong>{nextOrderRows.length}</strong></div>
+              {nextOrderLoading && <div>Generating next order, please wait...</div>}
+              {nextOrderMessage && <div style={{ color: nextOrderRows.length ? "#555" : "#8a5a00" }}>{nextOrderMessage}</div>}
+              <div>Use <strong>Product Dashboard</strong> option if you need to review one product before ordering.</div>
+            </div>
+          </div>
+        </section>
+
+        <section style={styles.card}>
+          <h2 style={styles.productTitle}>🛒 Generated Next Order</h2>
+
+          {nextOrderRows.length === 0 && !nextOrderLoading && (
+            <p style={styles.emptyText}>Upload the files and click Generate Next Order. The order list will appear here.</p>
+          )}
+
+          <div style={styles.equipmentGrid}>
+            {nextOrderRows.map((item, index) => (
+              <div key={`${item.product}-${item.venueKey}-next-order-${index}`} style={{ ...styles.equipmentCard, ...styles.orderWarningCard }}>
+                <div style={styles.recipeMeta}>Line #{index + 1}</div>
+                <div style={styles.recipeName}>{item.product}</div>
+                <div style={styles.recipeMeta}>Charge Location: {item.location}</div>
+                <div style={styles.recipeMeta}>Source: {item.source}</div>
+                <div style={styles.warningSmall}>{item.orderReason}</div>
+
+                {item.templateMatches.length > 0 && (
+                  <div style={styles.templateFound}>Template/Menu: {item.templateMatches.join(", ")}</div>
+                )}
+
+                {item.missingFromTemplate && (
+                  <div style={styles.templateWarningText}>Also missing from matching template.</div>
+                )}
+
+                <div style={styles.shipGrid}>
+                  {visibleShips.map((ship) => {
+                    const isMissing = item.missingShips.includes(ship);
+
+                    return (
+                      <div
+                        key={ship}
+                        style={{ ...styles.shipBox, ...(ship === userShip ? styles.shipBoxActive : {}), ...(isMissing ? styles.shipBoxMissing : {}) }}
+                      >
+                        <span style={styles.shipName}>{ship}</span>
+                        <strong style={styles.shipQty}>{formatQty(item.ships?.[ship])}</strong>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div style={styles.statusBad}>Missing: {item.missingShips.join(", ")}</div>
+
+                <button
+                  style={styles.backButton}
+                  onClick={() => {
+                    setSelectedProduct(item.product);
+                    setSelectedRecipe(null);
+                    setProductMode("dashboard");
+                  }}
+                >
+                  Open Product Details
+                </button>
+              </div>
+            ))}
           </div>
         </section>
       </main>
@@ -4684,7 +5009,7 @@ export default function App() {
       <header style={styles.header}>
         <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
         <div style={styles.headerActions}>
-          <button style={styles.backButton} onClick={() => setModule("")}>← Modules</button>
+          <button style={styles.backButton} onClick={() => setProductMode("")}>← Product Options</button>
           <div style={styles.shipBadge}>🚢 {userShip}</div>
         </div>
       </header>
