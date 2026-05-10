@@ -289,6 +289,31 @@ const escapeHtml = (value) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 
+const toNumber = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  const cleaned = String(value ?? "")
+    .replace(/,/g, "")
+    .replace(/[^0-9.\-]/g, "")
+    .trim();
+
+  const number = Number(cleaned);
+  return Number.isFinite(number) ? number : 0;
+};
+
+const getHistoricalSailorDays = (sailorCountCell, daysCell) => {
+  const sailorCount = toNumber(sailorCountCell);
+  const days = toNumber(daysCell);
+
+  if (!sailorCount) return 0;
+  if (!days) return sailorCount;
+
+  // Some order files store total sailor-days in row 5, while others store average sailors.
+  // If row 5 is already much larger than the days count, use it directly.
+  // Otherwise calculate sailors x days.
+  return sailorCount > days * 1000 ? sailorCount : sailorCount * days;
+};
+
 const getDefaultNextYearStartDate = () => {
   const nextYear = new Date().getFullYear() + 1;
   return `${nextYear}-01-01`;
@@ -312,6 +337,9 @@ export default function App() {
   const [productMissingReportLoading, setProductMissingReportLoading] = useState(false);
   const [productMissingReportMessage, setProductMissingReportMessage] = useState("");
   const [nextOrderRows, setNextOrderRows] = useState([]);
+  const [nextOrderSourceRows, setNextOrderSourceRows] = useState([]);
+  const [nextOrderMeta, setNextOrderMeta] = useState({});
+  const [nextOrderFileName, setNextOrderFileName] = useState("");
   const [nextOrderLoading, setNextOrderLoading] = useState(false);
   const [nextOrderMessage, setNextOrderMessage] = useState("");
 
@@ -542,6 +570,105 @@ export default function App() {
   const workbookToRows = (workbook) => {
     const ws = workbook.Sheets[workbook.SheetNames[0]];
     return XLSX.utils.sheet_to_json(ws, { header: 1 });
+  };
+
+  const parseNextOrderWorkbook = (workbook) => {
+    const sheetName = workbook.SheetNames.includes("Standard Order Template")
+      ? "Standard Order Template"
+      : workbook.SheetNames.includes("Order Sheet")
+        ? "Order Sheet"
+        : workbook.SheetNames[0];
+
+    const ws = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+
+    const targetSailors = toNumber(rows[4]?.[1]); // B5
+    const targetDays = toNumber(rows[5]?.[1]); // B6
+    const currentPeriodSailorDays = targetSailors * targetDays;
+
+    const futureOrderColumns = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14]; // F:O
+    const pastConsumptionColumns = [34, 35, 36, 37, 38, 39]; // AI:AN
+
+    const historicalSailorDays = pastConsumptionColumns.reduce(
+      (sum, colIndex) => sum + getHistoricalSailorDays(rows[4]?.[colIndex], rows[5]?.[colIndex]),
+      0
+    );
+
+    const parsedRows = [];
+
+    rows.slice(9).forEach((row, rowOffset) => {
+      const excelRow = rowOffset + 10;
+      const code = String(row[0] || "").trim();
+      const product = String(row[1] || "").trim();
+      const uom = String(row[2] || "").trim();
+
+      if (!product || !uom) return;
+
+      const stockOnHand = toNumber(row[3]); // D
+      const futureOrders = futureOrderColumns.reduce((sum, colIndex) => sum + toNumber(row[colIndex]), 0);
+      const pastConsumption = pastConsumptionColumns.reduce((sum, colIndex) => sum + toNumber(row[colIndex]), 0);
+
+      const projectedNeed = historicalSailorDays > 0 && currentPeriodSailorDays > 0
+        ? (pastConsumption / historicalSailorDays) * currentPeriodSailorDays
+        : 0;
+
+      const suggestedOrder = Math.max(projectedNeed - stockOnHand - futureOrders, 0);
+
+      parsedRows.push({
+        excelRow,
+        code,
+        product,
+        uom,
+        stockOnHand,
+        futureOrders,
+        pastConsumption,
+        historicalSailorDays,
+        currentPeriodSailorDays,
+        projectedNeed,
+        suggestedOrder,
+        orderReason: "Projected need minus stock on hand and future orders",
+      });
+    });
+
+    return {
+      rows: parsedRows,
+      meta: {
+        sheetName,
+        shipName: String(rows[0]?.[1] || "").trim(),
+        orderDate: String(rows[1]?.[1] || "").trim(),
+        requestDate: String(rows[2]?.[1] || "").trim(),
+        targetSailors,
+        targetDays,
+        currentPeriodSailorDays,
+        historicalSailorDays,
+        totalItems: parsedRows.length,
+        itemsNeedingOrder: parsedRows.filter((item) => item.suggestedOrder > 0).length,
+      },
+    };
+  };
+
+  const uploadNextOrderFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    readExcelFile(file, (workbook) => {
+      try {
+        const parsed = parseNextOrderWorkbook(workbook);
+        setNextOrderFileName(file.name);
+        setNextOrderSourceRows(parsed.rows);
+        setNextOrderMeta(parsed.meta);
+        setNextOrderRows([]);
+        setNextOrderMessage(
+          `Order file loaded. ${parsed.meta.totalItems} product rows found, ${parsed.meta.itemsNeedingOrder} items currently need order.`
+        );
+      } catch (error) {
+        setNextOrderFileName(file.name);
+        setNextOrderSourceRows([]);
+        setNextOrderMeta({});
+        setNextOrderRows([]);
+        setNextOrderMessage(error?.message || "Could not read the order file.");
+      }
+    });
   };
 
   const loadDefaultTemplate = async () => {
@@ -2445,16 +2572,18 @@ export default function App() {
 
     window.setTimeout(() => {
       try {
-        const rows = getTopNotInUseByLocationReport(50).map((item, index) => ({
-          ...item,
-          orderRank: index + 1,
-          orderReason: item.missingFromTemplate
-            ? "Expected by location, missing usage, and missing from matching template"
-            : "Expected by location/template charge, but not charged in consumption",
-        }));
+        if (!nextOrderSourceRows.length) {
+          setNextOrderMessage("Upload the latest order file first.");
+          setNextOrderRows([]);
+          return;
+        }
 
-        setNextOrderRows(rows);
-        setNextOrderMessage(rows.length ? "" : "No next-order lines found for the current files and view.");
+        const rows = nextOrderSourceRows
+          .filter((item) => Number(item.suggestedOrder || 0) > 0)
+          .sort((a, b) => Number(b.suggestedOrder || 0) - Number(a.suggestedOrder || 0));
+
+        setNextOrderRows(rows.map((item, index) => ({ ...item, orderRank: index + 1 })));
+        setNextOrderMessage(rows.length ? "" : "No suggested next-order quantities found in this file.");
       } catch (error) {
         setNextOrderRows([]);
         setNextOrderMessage(error?.message || "Could not generate next order.");
@@ -2464,43 +2593,44 @@ export default function App() {
     }, 25);
   };
 
+  const getNextOrderRowsForOutput = () => {
+    if (nextOrderRows.length) return nextOrderRows;
+    return nextOrderSourceRows
+      .filter((item) => Number(item.suggestedOrder || 0) > 0)
+      .sort((a, b) => Number(b.suggestedOrder || 0) - Number(a.suggestedOrder || 0));
+  };
+
   const exportNextOrderToExcel = () => {
     if (nextOrderLoading) {
       alert("Next order is still generating. Please wait a moment.");
       return;
     }
 
-    const rows = nextOrderRows.length ? nextOrderRows : getTopNotInUseByLocationReport(50);
+    const rows = getNextOrderRowsForOutput();
 
     if (!rows.length) {
-      alert("No next-order lines found. Upload the files and generate the order first.");
+      alert("No next-order lines found. Upload the latest order file and generate the order first.");
       return;
     }
 
-    const exportRows = rows.map((item, index) => {
-      const shipValues = {};
-      visibleShips.forEach((ship) => {
-        shipValues[ship] = Number(item.ships?.[ship] || 0);
-      });
-
-      return {
-        Line: index + 1,
-        Product: item.product,
-        Location: item.location,
-        Source: item.source,
-        MissingShips: item.missingShips.join(", "),
-        Reason: item.orderReason || "Expected by location/template charge, but not charged in consumption",
-        TemplateMenu: item.templateMatches.join(", "),
-        MissingFromTemplate: item.missingFromTemplate ? "Yes" : "No",
-        ...shipValues,
-      };
-    });
+    const exportRows = rows.map((item, index) => ({
+      Line: index + 1,
+      Code: item.code || "",
+      Product: item.product,
+      UM: item.uom,
+      StockOnHand: Number(item.stockOnHand || 0),
+      FutureOrders: Number(item.futureOrders || 0),
+      PastConsumption: Number(item.pastConsumption || 0),
+      ProjectedNeed: Number(item.projectedNeed || 0),
+      SuggestedNextOrder: Number(item.suggestedOrder || 0),
+      Reason: item.orderReason || "Projected need minus stock on hand and future orders",
+    }));
 
     const ws = XLSX.utils.json_to_sheet(exportRows);
     const wb = XLSX.utils.book_new();
 
     XLSX.utils.book_append_sheet(wb, ws, "Next Order");
-    XLSX.writeFile(wb, `next-order-${viewMode === "single" ? userShip : "all-ships"}.xlsx`);
+    XLSX.writeFile(wb, `next-order-${nextOrderMeta?.shipName || userShip || "ship"}.xlsx`);
   };
 
   const printNextOrder = () => {
@@ -2509,10 +2639,10 @@ export default function App() {
       return;
     }
 
-    const rows = nextOrderRows.length ? nextOrderRows : getTopNotInUseByLocationReport(50);
+    const rows = getNextOrderRowsForOutput();
 
     if (!rows.length) {
-      alert("No next-order lines found. Upload the files and generate the order first.");
+      alert("No next-order lines found. Upload the latest order file and generate the order first.");
       return;
     }
 
@@ -2523,27 +2653,32 @@ export default function App() {
           <style>
             body { font-family: Arial, sans-serif; padding: 24px; }
             h1 { margin-bottom: 4px; }
+            .meta { margin: 2px 0; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
             th, td { border: 1px solid #ccc; padding: 6px; text-align: left; vertical-align: top; }
             th { background: #f2f2f2; }
-            .bad { color: #b00020; font-weight: bold; }
-            .blue { color: #0057b8; font-weight: bold; }
+            .qty { color: #0057b8; font-weight: bold; }
           </style>
         </head>
         <body>
           <h1>Generated Next Order</h1>
-          <div><strong>View:</strong> ${viewMode === "single" ? escapeHtml(userShip) : "All ships"}</div>
-          <div><strong>Generated:</strong> ${new Date().toLocaleString()}</div>
+          <div class="meta"><strong>Source file:</strong> ${escapeHtml(nextOrderFileName || "N/A")}</div>
+          <div class="meta"><strong>Ship:</strong> ${escapeHtml(nextOrderMeta?.shipName || userShip || "N/A")}</div>
+          <div class="meta"><strong>Sailors:</strong> ${formatQty(nextOrderMeta?.targetSailors)}</div>
+          <div class="meta"><strong>Days:</strong> ${formatQty(nextOrderMeta?.targetDays)}</div>
+          <div class="meta"><strong>Generated:</strong> ${new Date().toLocaleString()}</div>
           <table>
             <thead>
               <tr>
                 <th>#</th>
+                <th>Code</th>
                 <th>Product</th>
-                <th>Location</th>
-                <th>Source</th>
-                <th>Missing Ships</th>
-                <th>Reason</th>
-                <th>Template/Menu</th>
+                <th>UM</th>
+                <th>Stock On Hand</th>
+                <th>Future Orders</th>
+                <th>Past Consumption</th>
+                <th>Projected Need</th>
+                <th>Suggested Next Order</th>
               </tr>
             </thead>
             <tbody>
@@ -2552,12 +2687,14 @@ export default function App() {
                   (item, index) => `
                     <tr>
                       <td>${index + 1}</td>
+                      <td>${escapeHtml(item.code || "")}</td>
                       <td>${escapeHtml(item.product)}</td>
-                      <td>${escapeHtml(item.location)}</td>
-                      <td>${escapeHtml(item.source)}</td>
-                      <td class="bad">${escapeHtml(item.missingShips.join(", "))}</td>
-                      <td>${escapeHtml(item.orderReason || "Expected by location/template charge, but not charged in consumption")}</td>
-                      <td class="${item.missingFromTemplate ? "blue" : ""}">${escapeHtml(item.templateMatches.join(", ") || "N/A")}</td>
+                      <td>${escapeHtml(item.uom)}</td>
+                      <td>${formatQty(item.stockOnHand)}</td>
+                      <td>${formatQty(item.futureOrders)}</td>
+                      <td>${formatQty(item.pastConsumption)}</td>
+                      <td>${formatQty(item.projectedNeed)}</td>
+                      <td class="qty">${formatQty(item.suggestedOrder)}</td>
                     </tr>
                   `
                 )
@@ -3659,7 +3796,7 @@ export default function App() {
             >
               <div style={styles.moduleIcon}>🛒</div>
               <strong>Generate Next Order</strong>
-              <span>Create a next-order list from items expected by location/template but not charged in consumption.</span>
+              <span>Upload the latest order workbook and calculate suggested next-order quantities.</span>
             </button>
           </div>
         </section>
@@ -3674,42 +3811,27 @@ export default function App() {
           <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
           <div style={styles.headerActions}>
             <button style={styles.backButton} onClick={() => setProductMode("")}>← Product Options</button>
-            <div style={styles.shipBadge}>🚢 {viewMode === "single" ? userShip : "All Ships"}</div>
+            <div style={styles.shipBadge}>🚢 {nextOrderMeta?.shipName || userShip}</div>
           </div>
         </header>
-
-        <div style={styles.viewModeBox}>
-          <button onClick={() => setViewMode("single")} style={{ ...styles.viewModeButton, ...(viewMode === "single" ? styles.viewModeButtonActive : {}) }}>
-            🚢 {userShip} Only
-          </button>
-
-          <button onClick={() => setViewMode("all")} style={{ ...styles.viewModeButton, ...(viewMode === "all" ? styles.viewModeButtonActive : {}) }}>
-            🌍 All Ships Overview
-          </button>
-        </div>
 
         <section style={styles.grid}>
           <div style={styles.card}>
             <h2 style={styles.cardTitle}>🛒 Generate Next Order</h2>
 
-            <label style={styles.label}>Step 1: Consumption file</label>
-            <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadConsumptionFile} style={styles.fileInput} />
-
-            <label style={styles.label}>Step 2: Recipe / location file</label>
-            <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadRecipeFile} style={styles.fileInput} />
-
-            <label style={styles.label}>Step 3: Template file</label>
-            <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadTemplateFile} style={styles.fileInput} />
-
-            {message && <p style={styles.message}>{message}</p>}
+            <label style={styles.label}>Upload the last updated order file</label>
+            <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadNextOrderFile} style={styles.fileInput} />
 
             <div style={styles.infoBox}>
-              <div>📦 Products loaded: <strong>{products.length}</strong></div>
-              <div>📘 Recipe rows loaded: <strong>{Math.max(recipeRows.length - 1, 0)}</strong></div>
-              <div>📋 Template: <strong>{templateStatus}</strong></div>
-              <div>🚢 View: <strong>{viewMode === "single" ? userShip : "All Ships"}</strong></div>
+              <div>📄 Source file: <strong>{nextOrderFileName || "Not uploaded"}</strong></div>
+              <div>📘 Sheet used: <strong>{nextOrderMeta?.sheetName || "N/A"}</strong></div>
+              <div>🚢 Ship: <strong>{nextOrderMeta?.shipName || "N/A"}</strong></div>
+              <div>👥 Sailors count B5: <strong>{formatQty(nextOrderMeta?.targetSailors)}</strong></div>
+              <div>📅 Days of period B6: <strong>{formatQty(nextOrderMeta?.targetDays)}</strong></div>
+              <div>📦 Product rows found: <strong>{nextOrderMeta?.totalItems || 0}</strong></div>
+              <div>🛒 Items currently needing order: <strong>{nextOrderMeta?.itemsNeedingOrder || 0}</strong></div>
               <div style={{ color: "#8a5a00" }}>
-                Next order is based on items expected by recipe/location or template charge location with zero usage for the selected ship view.
+                Calculation uses stock on hand from D, future orders from F:O, and past consumption from AI:AN.
               </div>
             </div>
           </div>
@@ -3718,7 +3840,7 @@ export default function App() {
             <h2 style={styles.cardTitle}>⚙️ Order Actions</h2>
 
             <div style={styles.headerActions}>
-              <button style={styles.primaryButton} onClick={generateNextOrderReport} disabled={nextOrderLoading}>
+              <button style={styles.primaryButton} onClick={generateNextOrderReport} disabled={nextOrderLoading || !nextOrderSourceRows.length}>
                 {nextOrderLoading ? "Generating..." : "✨ Generate Next Order"}
               </button>
 
@@ -3735,7 +3857,7 @@ export default function App() {
               <div>🛒 Order lines generated: <strong>{nextOrderRows.length}</strong></div>
               {nextOrderLoading && <div>Generating next order, please wait...</div>}
               {nextOrderMessage && <div style={{ color: nextOrderRows.length ? "#555" : "#8a5a00" }}>{nextOrderMessage}</div>}
-              <div>Use <strong>Product Dashboard</strong> option if you need to review one product before ordering.</div>
+              <div>Formula: projected need minus stock on hand minus future orders.</div>
             </div>
           </div>
         </section>
@@ -3744,54 +3866,23 @@ export default function App() {
           <h2 style={styles.productTitle}>🛒 Generated Next Order</h2>
 
           {nextOrderRows.length === 0 && !nextOrderLoading && (
-            <p style={styles.emptyText}>Upload the files and click Generate Next Order. The order list will appear here.</p>
+            <p style={styles.emptyText}>Upload the latest order file and click Generate Next Order. The order list will appear here.</p>
           )}
 
           <div style={styles.equipmentGrid}>
             {nextOrderRows.map((item, index) => (
-              <div key={`${item.product}-${item.venueKey}-next-order-${index}`} style={{ ...styles.equipmentCard, ...styles.orderWarningCard }}>
+              <div key={`${item.code}-${item.excelRow}-next-order-${index}`} style={{ ...styles.equipmentCard, ...styles.orderNeededCard }}>
                 <div style={styles.recipeMeta}>Line #{index + 1}</div>
                 <div style={styles.recipeName}>{item.product}</div>
-                <div style={styles.recipeMeta}>Charge Location: {item.location}</div>
-                <div style={styles.recipeMeta}>Source: {item.source}</div>
+                <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
+                <div style={styles.recipeMeta}>U/M: {item.uom}</div>
+                <div style={styles.recipeMeta}>Excel row: {item.excelRow}</div>
+                <div style={styles.recipeMeta}>Stock on hand: {formatQty(item.stockOnHand)}</div>
+                <div style={styles.recipeMeta}>Future orders F:O: {formatQty(item.futureOrders)}</div>
+                <div style={styles.recipeMeta}>Past consumption AI:AN: {formatQty(item.pastConsumption)}</div>
+                <div style={styles.recipeMeta}>Projected need: {formatQty(item.projectedNeed)}</div>
+                <div style={styles.suggestedOrderBlue}>Suggested Next Order: {formatQty(item.suggestedOrder)}</div>
                 <div style={styles.warningSmall}>{item.orderReason}</div>
-
-                {item.templateMatches.length > 0 && (
-                  <div style={styles.templateFound}>Template/Menu: {item.templateMatches.join(", ")}</div>
-                )}
-
-                {item.missingFromTemplate && (
-                  <div style={styles.templateWarningText}>Also missing from matching template.</div>
-                )}
-
-                <div style={styles.shipGrid}>
-                  {visibleShips.map((ship) => {
-                    const isMissing = item.missingShips.includes(ship);
-
-                    return (
-                      <div
-                        key={ship}
-                        style={{ ...styles.shipBox, ...(ship === userShip ? styles.shipBoxActive : {}), ...(isMissing ? styles.shipBoxMissing : {}) }}
-                      >
-                        <span style={styles.shipName}>{ship}</span>
-                        <strong style={styles.shipQty}>{formatQty(item.ships?.[ship])}</strong>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div style={styles.statusBad}>Missing: {item.missingShips.join(", ")}</div>
-
-                <button
-                  style={styles.backButton}
-                  onClick={() => {
-                    setSelectedProduct(item.product);
-                    setSelectedRecipe(null);
-                    setProductMode("dashboard");
-                  }}
-                >
-                  Open Product Details
-                </button>
               </div>
             ))}
           </div>
@@ -5407,6 +5498,7 @@ const styles = {
   overstockWarning: { marginTop: 8, padding: 8, borderRadius: 10, background: "#b00020", color: "#fff", fontWeight: "bold", textAlign: "center" },
   zeroCountCard: { border: "2px solid #8a5a00", background: "#fff8e1" },
   suggestedOrderBad: { marginTop: 8, padding: 8, borderRadius: 10, background: "#0057b8", color: "#fff", fontWeight: "bold", textAlign: "center" },
+  suggestedOrderBlue: { marginTop: 8, padding: 8, borderRadius: 10, background: "#0057b8", color: "#fff", fontWeight: "bold", textAlign: "center" },
   suggestedOrderGood: { marginTop: 8, padding: 8, borderRadius: 10, background: "#e8f5e9", color: "#2e7d32", fontWeight: "bold", textAlign: "center" },
   statusGood: { marginTop: 8, padding: 8, borderRadius: 10, background: "#e8f5e9", color: "#2e7d32", fontWeight: "bold", textAlign: "center" },
   statusWarning: { marginTop: 8, padding: 8, borderRadius: 10, background: "#fff4d6", color: "#8a5a00", fontWeight: "bold", textAlign: "center" },
