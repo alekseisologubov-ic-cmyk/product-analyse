@@ -3843,21 +3843,54 @@ export default function App() {
 
   if (!loggedIn) {
     return (
-      <main style={styles.page}>
-        <section style={styles.loginCard}>
-          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.logo} />
-          <h1 style={styles.title}>Virgin Voyages Dashboard</h1>
-          <p style={styles.subtitle}>Product, equipment, people and schedule tools</p>
+      <main style={styles.welcomePage}>
+        <style>{`
+          @keyframes vvMarquee {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+          }
 
-          <label style={styles.label}>🚢 Select your ship</label>
-          <select value={userShip} onChange={(e) => setUserShip(e.target.value)} style={styles.select}>
-            <option value="">Choose ship</option>
-            {SHIPS.map((ship) => <option key={ship}>{ship}</option>)}
-          </select>
+          @keyframes vvGlow {
+            0%, 100% { box-shadow: 0 18px 50px rgba(0,0,0,0.18); }
+            50% { box-shadow: 0 22px 70px rgba(176,0,32,0.28); }
+          }
+        `}</style>
 
-          <button style={styles.primaryButton} onClick={() => userShip && setLoggedIn(true)}>
-            Continue
-          </button>
+        <section style={styles.welcomeHero}>
+          <div style={styles.welcomeGlowCard}>
+            <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.welcomeLogo} />
+
+            <div style={styles.runningLineWrapper}>
+              <div style={styles.runningLineTrack}>
+                <span style={styles.runningLineText}>Use it • Save Time • Be the Reason Someone Smiles Today • </span>
+                <span style={styles.runningLineText}>Use it • Save Time • Be the Reason Someone Smiles Today • </span>
+                <span style={styles.runningLineText}>Use it • Save Time • Be the Reason Someone Smiles Today • </span>
+                <span style={styles.runningLineText}>Use it • Save Time • Be the Reason Someone Smiles Today • </span>
+              </div>
+            </div>
+
+            <h1 style={styles.welcomeTitle}>Press your ship to start</h1>
+            <p style={styles.welcomeSubtitle}>Choose your vessel and open the Virgin Voyages dashboard.</p>
+
+            <div style={styles.shipStartGrid}>
+              {SHIPS.map((ship) => (
+                <button
+                  key={ship}
+                  style={styles.shipStartButton}
+                  onClick={() => {
+                    setUserShip(ship);
+                    setLoggedIn(true);
+                  }}
+                >
+                  <span style={styles.shipStartIcon}>🚢</span>
+                  <span style={styles.shipStartCode}>{ship}</span>
+                  <span style={styles.shipStartHint}>Start dashboard</span>
+                </button>
+              ))}
+            </div>
+
+            <div style={styles.welcomeFooterNote}>Product • Equipment • Inventory • People & Schedule</div>
+          </div>
         </section>
       </main>
     );
@@ -5632,6 +5665,21 @@ export default function App() {
 
 const styles = {
   page: { minHeight: "100vh", padding: 24, background: "#f5f5f5", fontFamily: "Arial, sans-serif", color: "#111" },
+  welcomePage: { minHeight: "100vh", padding: 24, background: "radial-gradient(circle at top left, #ffffff 0%, #f7f7f7 32%, #ececec 100%)", fontFamily: "Arial, sans-serif", color: "#111", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  welcomeHero: { width: "100%", maxWidth: 980, margin: "0 auto" },
+  welcomeGlowCard: { position: "relative", padding: "34px 28px", background: "rgba(255,255,255,0.94)", borderRadius: 28, border: "1px solid rgba(0,0,0,0.08)", boxShadow: "0 18px 50px rgba(0,0,0,0.18)", display: "grid", gap: 18, textAlign: "center", overflow: "hidden", animation: "vvGlow 4s ease-in-out infinite" },
+  welcomeLogo: { height: 120, maxWidth: "100%", objectFit: "contain", margin: "0 auto 2px" },
+  runningLineWrapper: { width: "100%", overflow: "hidden", background: "#fff", borderRadius: 999, padding: "10px 0 12px", borderTop: "1px solid rgba(176,0,32,0.10)", borderBottom: "1px solid rgba(176,0,32,0.10)" },
+  runningLineTrack: { display: "flex", width: "max-content", whiteSpace: "nowrap", animation: "vvMarquee 30s linear infinite" },
+  runningLineText: { color: "#e00000", fontFamily: "Brush Script MT, Segoe Script, Lucida Handwriting, Apple Chancery, cursive", fontSize: 44, fontWeight: 400, letterSpacing: 1.1, paddingRight: 70, textShadow: "0 1px 0 rgba(176,0,32,0.10)", lineHeight: 1.15 },
+  welcomeTitle: { margin: "8px 0 0", fontSize: 34, lineHeight: 1.1, fontWeight: 900 },
+  welcomeSubtitle: { margin: 0, color: "#555", fontSize: 16 },
+  shipStartGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 14, marginTop: 8 },
+  shipStartButton: { minHeight: 142, border: "1px solid #ddd", borderRadius: 22, background: "linear-gradient(180deg, #ffffff 0%, #f7f7f7 100%)", cursor: "pointer", display: "grid", alignContent: "center", justifyItems: "center", gap: 8, boxShadow: "0 8px 22px rgba(0,0,0,0.08)", transition: "transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease", color: "#111" },
+  shipStartIcon: { fontSize: 34 },
+  shipStartCode: { fontSize: 32, fontWeight: 900, letterSpacing: 1.2 },
+  shipStartHint: { fontSize: 13, color: "#666", fontWeight: "bold", textTransform: "uppercase", letterSpacing: 0.8 },
+  welcomeFooterNote: { color: "#777", fontSize: 13, fontWeight: "bold", marginTop: 4 },
   loginCard: { maxWidth: 460, margin: "80px auto", padding: 28, background: "#fff", borderRadius: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.08)", display: "grid", gap: 14 },
   logo: { height: 70, objectFit: "contain", marginBottom: 8 },
   header: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: 18, background: "#fff", borderRadius: 16, boxShadow: "0 4px 18px rgba(0,0,0,0.06)", marginBottom: 20 },
