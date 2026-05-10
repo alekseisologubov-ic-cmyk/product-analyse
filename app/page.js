@@ -420,7 +420,7 @@ export default function App() {
   useEffect(() => {
     if (module !== "equipment") return;
 
-    if (equipmentMode === "muster" || equipmentMode === "makeinventory") {
+    if (equipmentMode === "muster" || equipmentMode === "makeinventory" || equipmentMode === "warehouse") {
       loadMasterInventoryItems(makeInventoryShip || userShip);
     }
 
@@ -430,7 +430,7 @@ export default function App() {
   }, [module, equipmentMode, makeInventoryShip, userShip]);
 
   useEffect(() => {
-    if (!supabase || module !== "equipment" || (equipmentMode !== "makeinventory" && equipmentMode !== "muster")) return;
+    if (!supabase || module !== "equipment" || (equipmentMode !== "makeinventory" && equipmentMode !== "muster" && equipmentMode !== "warehouse")) return;
 
     const channels = [];
 
@@ -693,6 +693,65 @@ export default function App() {
   };
 
   const parseWarehouseItems = () => {
+    const masterItems = makeInventoryItems.length ? makeInventoryItems : musterItems;
+    const compactText = (value) => cleanText(value).replace(/[^A-Z0-9]/g, "");
+    const masterByCode = {};
+    const masterByName = {};
+
+    masterItems.forEach((masterItem) => {
+      if (!masterItem?.image) return;
+
+      const codeKey = cleanText(masterItem.code);
+      const nameKey = compactText(masterItem.name);
+
+      if (codeKey && !masterByCode[codeKey]) masterByCode[codeKey] = masterItem;
+      if (nameKey && !masterByName[nameKey]) masterByName[nameKey] = masterItem;
+    });
+
+    const tokenizeName = (value) =>
+      cleanText(value)
+        .replace(/[^A-Z0-9 ]/g, " ")
+        .split(" ")
+        .map((word) => word.trim())
+        .filter((word) => word.length >= 3 && !["FOR", "THE", "AND", "WITH", "EA", "PCS"].includes(word));
+
+    const findPictureMatch = (code, name) => {
+      const codeKey = cleanText(code);
+      const nameKey = compactText(name);
+      const nameTokens = new Set(tokenizeName(name));
+
+      if (codeKey && masterByCode[codeKey]) return masterByCode[codeKey];
+      if (nameKey && masterByName[nameKey]) return masterByName[nameKey];
+
+      let bestMatch = null;
+      let bestScore = 0;
+
+      masterItems.forEach((masterItem) => {
+        if (!masterItem?.image) return;
+
+        const masterCodeKey = cleanText(masterItem.code);
+        const masterNameKey = compactText(masterItem.name);
+        const masterTokens = tokenizeName(masterItem.name);
+
+        let score = 0;
+
+        if (masterCodeKey && nameKey.includes(masterCodeKey)) score += 80;
+        if (masterNameKey.length >= 8 && nameKey.includes(masterNameKey)) score += 70;
+        if (masterNameKey.length >= 8 && masterNameKey.includes(nameKey)) score += 65;
+
+        const sharedTokens = masterTokens.filter((token) => nameTokens.has(token));
+        const tokenScore = sharedTokens.length * 12;
+        score += tokenScore;
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = masterItem;
+        }
+      });
+
+      return bestScore >= 36 ? bestMatch : null;
+    };
+
     return warehouseRows
       .slice(1)
       .map((row) => {
@@ -702,8 +761,20 @@ export default function App() {
         const onHand = Number(row[7] || 0);
         const future = Number(row[12] || 0);
         const suggested = Math.max(par - onHand - future, 0);
+        const pictureMatch = findPictureMatch(code, name);
 
-        return { code, name, par, onHand, future, suggested };
+        return {
+          code,
+          name,
+          par,
+          onHand,
+          future,
+          suggested,
+          image: pictureMatch?.image || "",
+          imageSource: pictureMatch?.name || "",
+          masterSheetName: pictureMatch?.sheetName || "",
+          masterCategory: pictureMatch?.category || "",
+        };
       })
       .filter((item) => item.name || item.code)
       .filter((item) => `${item.code} ${item.name}`.toLowerCase().includes(warehouseSearch.toLowerCase()));
@@ -4240,6 +4311,7 @@ export default function App() {
     const warehouseItems = parseWarehouseItems();
     const totalSuggested = warehouseItems.reduce((sum, item) => sum + item.suggested, 0);
     const criticalItems = warehouseItems.filter((item) => item.suggested > 0).length;
+    const warehouseItemsWithPictures = warehouseItems.filter((item) => item.image).length;
 
     return (
       <main style={styles.page}>
@@ -4261,9 +4333,11 @@ export default function App() {
 
             <div style={styles.infoBox}>
               <div>📦 Items loaded: <strong>{warehouseItems.length}</strong></div>
+              <div>🖼️ Pictures matched: <strong>{warehouseItemsWithPictures}</strong></div>
               <div>🚨 Items needing order: <strong>{criticalItems}</strong></div>
               <div>🛒 Total suggested order: <strong>{formatQty(totalSuggested)}</strong></div>
               <div>A = Code, B = Name, G = Par, H = On Hand, M = Future Order</div>
+              <div>Pictures are matched from the shared MEL master list by code/name.</div>
             </div>
           </div>
 
@@ -4276,6 +4350,10 @@ export default function App() {
               style={styles.searchInput}
             />
             <p style={styles.emptyText}>Suggested Next Order = Par Level - On Hand - Future Order. Minimum is 0.</p>
+
+            <button style={styles.backButton} onClick={() => loadMasterInventoryItems(makeInventoryShip || userShip)}>
+              🔄 Refresh Pictures
+            </button>
           </div>
         </section>
 
@@ -4287,17 +4365,86 @@ export default function App() {
           <div style={styles.equipmentGrid}>
             {warehouseItems.map((item, i) => (
               <div key={`${item.code}-${i}`} style={{ ...styles.equipmentCard, ...(item.suggested > 0 ? styles.orderWarningCard : {}) }}>
+                {item.image ? (
+                  <div>
+                    <img
+                      src={getImageUrl(item.image)}
+                      alt={item.name}
+                      style={styles.equipmentImage}
+                      onClick={() => setSelectedEquipment({
+                        name: item.name,
+                        code: item.code,
+                        category: item.masterCategory || "Warehouse Item",
+                        sheetName: item.masterSheetName || "Warehouse",
+                        image: item.image,
+                      })}
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                        const link = e.currentTarget.nextElementSibling;
+                        if (link) link.style.display = "block";
+                      }}
+                    />
+                    <button
+                      style={styles.imageButton}
+                      onClick={() => setSelectedEquipment({
+                        name: item.name,
+                        code: item.code,
+                        category: item.masterCategory || "Warehouse Item",
+                        sheetName: item.masterSheetName || "Warehouse",
+                        image: item.image,
+                      })}
+                    >
+                      View Picture
+                    </button>
+                    <a href={item.image} target="_blank" rel="noreferrer" style={styles.imageLink}>Open Picture</a>
+                  </div>
+                ) : (
+                  <div style={styles.equipmentNoImage}>No image matched</div>
+                )}
+
                 <div style={styles.recipeName}>{item.name || "Unnamed Item"}</div>
                 <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
                 <div style={styles.recipeMeta}>Par Level: {formatQty(item.par)}</div>
                 <div style={styles.recipeMeta}>On Hand: {formatQty(item.onHand)}</div>
                 <div style={styles.recipeMeta}>Future Order: {formatQty(item.future)}</div>
+                {item.imageSource && <div style={styles.recipeMeta}>Picture match: {item.imageSource}</div>}
                 <div style={item.suggested > 0 ? styles.suggestedOrderBad : styles.suggestedOrderGood}>
                   Suggested Next Order: {formatQty(item.suggested)}
                 </div>
               </div>
             ))}
           </div>
+
+          {selectedEquipment && (
+            <div style={styles.modalBackdrop} onClick={() => setSelectedEquipment(null)}>
+              <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+                <button style={styles.closeButton} onClick={() => setSelectedEquipment(null)}>✕</button>
+
+                <h2>{selectedEquipment.name}</h2>
+                <p><strong>Code:</strong> {selectedEquipment.code || "N/A"}</p>
+                <p><strong>Sheet:</strong> {selectedEquipment.sheetName || "N/A"}</p>
+                <p><strong>Category:</strong> {selectedEquipment.category || "N/A"}</p>
+
+                {selectedEquipment.image ? (
+                  <div>
+                    <img
+                      src={getImageUrl(selectedEquipment.image)}
+                      alt={selectedEquipment.name}
+                      style={styles.modalImage}
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                        const link = e.currentTarget.nextElementSibling;
+                        if (link) link.style.display = "block";
+                      }}
+                    />
+                    <a href={selectedEquipment.image} target="_blank" rel="noreferrer" style={{ ...styles.imageLink, display: "block" }}>Open Picture</a>
+                  </div>
+                ) : (
+                  <div style={styles.equipmentNoImage}>No image</div>
+                )}
+              </div>
+            </div>
+          )}
         </section>
       </main>
     );
@@ -4822,6 +4969,7 @@ const styles = {
   modalCard: { background: "#fff", borderRadius: 18, padding: 22, maxWidth: 760, width: "100%", maxHeight: "90vh", overflowY: "auto", position: "relative", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" },
   modalImage: { width: "100%", maxHeight: "65vh", objectFit: "contain", borderRadius: 14, background: "#f2f2f2" },
   closeButton: { position: "absolute", top: 12, right: 12, border: 0, background: "#111", color: "#fff", borderRadius: 999, width: 34, height: 34, cursor: "pointer", fontWeight: "bold" },
+  imageButton: { display: "block", width: "100%", marginTop: 8, padding: 10, borderRadius: 10, border: 0, background: "#111", color: "#fff", textAlign: "center", cursor: "pointer", fontWeight: "bold" },
   imageLink: { display: "none", marginTop: 8, padding: 10, borderRadius: 10, background: "#111", color: "#fff", textAlign: "center", textDecoration: "none", fontWeight: "bold" },
   orderWarningCard: { border: "2px solid #b00020", background: "#fff0f0" },
   zeroCountCard: { border: "2px solid #8a5a00", background: "#fff8e1" },
