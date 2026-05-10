@@ -1600,28 +1600,61 @@ export default function App() {
     return false;
   };
 
-  const templateHasProduct = (venueKey, product) => {
-    const selected = cleanText(product);
-    const venueTemplates = templateMap[venueKey] || {};
+  const getTemplateVenueKeysForVenue = (venueKey) => {
+    const selectedVenue = normalizeVenue(venueKey);
+    if (!selectedVenue) return [];
 
-    return Object.entries(venueTemplates).some(([templateProductKey]) => {
-      if (templateProductKey === selected) return true;
-      if (templateProductKey.length > 12 && (selected.includes(templateProductKey) || templateProductKey.includes(selected))) return true;
-      return false;
+    const templateVenueKeys = Object.keys(templateMap || {});
+    if (!templateVenueKeys.length) return [];
+
+    const exactMatches = templateVenueKeys.filter((key) => key === selectedVenue);
+    if (exactMatches.length) return exactMatches;
+
+    return templateVenueKeys.filter((key) => {
+      if (!key || key.length < 5 || selectedVenue.length < 5) return false;
+      return key.includes(selectedVenue) || selectedVenue.includes(key);
+    });
+  };
+
+  const templateProductMatches = (templateProductKey, product) => {
+    const selected = cleanText(product);
+    if (!selected || !templateProductKey) return false;
+
+    if (templateProductKey === selected) return true;
+
+    if (
+      templateProductKey.length > 12 &&
+      (selected.includes(templateProductKey) || templateProductKey.includes(selected))
+    ) {
+      return true;
+    }
+
+    return false;
+  };
+
+  const templateHasProduct = (venueKey, product) => {
+    const possibleVenueKeys = getTemplateVenueKeysForVenue(venueKey);
+
+    return possibleVenueKeys.some((templateVenueKey) => {
+      const venueTemplates = templateMap[templateVenueKey] || {};
+      return Object.keys(venueTemplates).some((templateProductKey) =>
+        templateProductMatches(templateProductKey, product)
+      );
     });
   };
 
   const getTemplateMatches = (venueKey, product) => {
-    const selected = cleanText(product);
-    const venueTemplates = templateMap[venueKey] || {};
+    const possibleVenueKeys = getTemplateVenueKeysForVenue(venueKey);
     const matches = [];
 
-    Object.entries(venueTemplates).forEach(([templateProductKey, data]) => {
-      const isMatch =
-        templateProductKey === selected ||
-        (templateProductKey.length > 12 && (selected.includes(templateProductKey) || templateProductKey.includes(selected)));
+    possibleVenueKeys.forEach((templateVenueKey) => {
+      const venueTemplates = templateMap[templateVenueKey] || {};
 
-      if (isMatch) matches.push(...data.templates);
+      Object.entries(venueTemplates).forEach(([templateProductKey, data]) => {
+        if (templateProductMatches(templateProductKey, product)) {
+          matches.push(...data.templates);
+        }
+      });
     });
 
     return [...new Set(matches)];
@@ -1692,10 +1725,11 @@ export default function App() {
         ships[ship] = actualVenue?.ships?.[ship] || 0;
       });
 
-      const templateMatches = getTemplateMatches(venueKey, product);
+      const templateLoaded = Object.keys(templateMap || {}).length > 0;
       const requiredByRecipe = Boolean(requiredVenue);
-      const inTemplate = templateHasProduct(venueKey, product);
-      const missingFromTemplate = requiredByRecipe && !inTemplate;
+      const inTemplate = requiredByRecipe && templateLoaded && templateHasProduct(venueKey, product);
+      const templateMatches = inTemplate ? getTemplateMatches(venueKey, product) : [];
+      const missingFromTemplate = requiredByRecipe && templateLoaded && !inTemplate;
 
       return {
         venueKey,
@@ -3903,11 +3937,9 @@ export default function App() {
                   </span>
                 </h4>
 
-                {venueItem.templateMatches.length > 0 && <div style={styles.templateFound}>Template/Menu: {venueItem.templateMatches.join(", ")}</div>}
-
                 {venueItem.missingFromTemplate && (
                   <div style={styles.templateWarningText}>
-                    Product is used in recipe/location file for this venue but is not found in any template. Product has to be used.
+                    Product is used in the recipe/location file for this venue, but it is not found in this venue template.
                   </div>
                 )}
 
