@@ -127,6 +127,81 @@ const normalizeVenue = (value) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const PRODUCT_MATCH_STOP_WORDS = new Set([
+  "FRESH",
+  "BABY",
+  "LARGE",
+  "SMALL",
+  "REGULAR",
+  "HYDROPONIC",
+  "OR",
+  "AND",
+  "THE",
+  "FOR",
+  "WITH",
+  "WITHOUT",
+  "LBS",
+  "LB",
+  "KG",
+  "G",
+  "OZ",
+  "CS",
+  "CASE",
+  "BOX",
+  "PC",
+  "PCS",
+  "PK",
+  "PACK",
+  "CT",
+  "EA",
+  "EACH",
+]);
+
+const singularizeProductToken = (token) => {
+  if (!token) return "";
+  if (token.length > 4 && token.endsWith("IES")) return `${token.slice(0, -3)}Y`;
+  if (token.length > 4 && token.endsWith("ES") && !token.endsWith("SES")) return token.slice(0, -2);
+  if (token.length > 3 && token.endsWith("S") && !token.endsWith("SS")) return token.slice(0, -1);
+  return token;
+};
+
+const getProductMatchTokens = (value) => {
+  return cleanText(value)
+    .replace(/[^A-Z0-9]+/g, " ")
+    .split(" ")
+    .map((token) => singularizeProductToken(token.trim()))
+    .filter((token) => token && token.length > 2)
+    .filter((token) => !/^\d+$/.test(token))
+    .filter((token) => !PRODUCT_MATCH_STOP_WORDS.has(token));
+};
+
+const productNamesMatch = (left, right) => {
+  const a = cleanText(left);
+  const b = cleanText(right);
+
+  if (!a || !b) return false;
+  if (a === b) return true;
+
+  if (a.length > 12 && (a.includes(b) || b.includes(a))) return true;
+  if (b.length > 12 && (a.includes(b) || b.includes(a))) return true;
+
+  const aTokens = getProductMatchTokens(a);
+  const bTokens = getProductMatchTokens(b);
+
+  if (!aTokens.length || !bTokens.length) return false;
+
+  const shortTokens = aTokens.length <= bTokens.length ? aTokens : bTokens;
+  const longTokenSet = new Set(aTokens.length <= bTokens.length ? bTokens : aTokens);
+  const matchedCount = shortTokens.filter((token) => longTokenSet.has(token)).length;
+
+  if (shortTokens.length === 1) {
+    const token = shortTokens[0];
+    return token.length >= 4 && matchedCount === 1;
+  }
+
+  return matchedCount >= Math.ceil(shortTokens.length * 0.75);
+};
+
 const formatQty = (value) => Number(value || 0).toFixed(2);
 
 const getImageUrl = (url) => {
@@ -1588,16 +1663,16 @@ export default function App() {
   const recipeData = useMemo(() => recipeRows.slice(1), [recipeRows]);
 
   const productMatches = (selectedProductName, row) => {
-    const selected = cleanText(selectedProductName);
-    const assignedProduct = cleanText(row[12]);
-    const productName = cleanText(row[7]);
+    const selected = String(selectedProductName || "").trim();
+    const assignedProduct = String(row[12] || "").trim();
+    const productName = String(row[7] || "").trim();
 
     if (!selected) return false;
-    if (assignedProduct === selected || productName === selected) return true;
-    if (assignedProduct.length > 12 && (selected.includes(assignedProduct) || assignedProduct.includes(selected))) return true;
-    if (productName.length > 12 && (selected.includes(productName) || productName.includes(selected))) return true;
 
-    return false;
+    return (
+      productNamesMatch(selected, assignedProduct) ||
+      productNamesMatch(selected, productName)
+    );
   };
 
   const getTemplateVenueKeysForVenue = (venueKey) => {
@@ -1607,29 +1682,14 @@ export default function App() {
     const templateVenueKeys = Object.keys(templateMap || {});
     if (!templateVenueKeys.length) return [];
 
-    const exactMatches = templateVenueKeys.filter((key) => key === selectedVenue);
-    if (exactMatches.length) return exactMatches;
-
-    return templateVenueKeys.filter((key) => {
-      if (!key || key.length < 5 || selectedVenue.length < 5) return false;
-      return key.includes(selectedVenue) || selectedVenue.includes(key);
-    });
+    // Important: do not fuzzy-match different venue names.
+    // Blue warning should appear only when the recipe/location venue has
+    // the same normalized venue name as a template sheet.
+    return templateVenueKeys.filter((key) => key === selectedVenue);
   };
 
   const templateProductMatches = (templateProductKey, product) => {
-    const selected = cleanText(product);
-    if (!selected || !templateProductKey) return false;
-
-    if (templateProductKey === selected) return true;
-
-    if (
-      templateProductKey.length > 12 &&
-      (selected.includes(templateProductKey) || templateProductKey.includes(selected))
-    ) {
-      return true;
-    }
-
-    return false;
+    return productNamesMatch(templateProductKey, product);
   };
 
   const templateHasProduct = (venueKey, product) => {
@@ -1727,9 +1787,11 @@ export default function App() {
 
       const templateLoaded = Object.keys(templateMap || {}).length > 0;
       const requiredByRecipe = Boolean(requiredVenue);
-      const inTemplate = requiredByRecipe && templateLoaded && templateHasProduct(venueKey, product);
+      const matchedTemplateVenueKeys = getTemplateVenueKeysForVenue(venueKey);
+      const hasMatchingTemplateVenue = matchedTemplateVenueKeys.length > 0;
+      const inTemplate = requiredByRecipe && hasMatchingTemplateVenue && templateHasProduct(venueKey, product);
       const templateMatches = inTemplate ? getTemplateMatches(venueKey, product) : [];
-      const missingFromTemplate = requiredByRecipe && templateLoaded && !inTemplate;
+      const missingFromTemplate = requiredByRecipe && templateLoaded && hasMatchingTemplateVenue && !inTemplate;
 
       return {
         venueKey,
