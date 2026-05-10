@@ -15,6 +15,23 @@ const supabase =
     ? createClient(supabaseUrl, supabaseAnonKey)
     : null;
 
+const getOrCreateVisitorId = () => {
+  if (typeof window === "undefined") return "";
+
+  const storageKey = "vv_app_visitor_id";
+  const existing = window.localStorage.getItem(storageKey);
+
+  if (existing) return existing;
+
+  const nextId =
+    typeof window.crypto !== "undefined" && window.crypto.randomUUID
+      ? window.crypto.randomUUID()
+      : `visitor-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+  window.localStorage.setItem(storageKey, nextId);
+  return nextId;
+};
+
 const SHIPS = ["BRL", "RL", "SC", "VL"];
 
 const SHIP_DISPLAY_NAMES = {
@@ -435,6 +452,34 @@ export default function App() {
 
   const shipColumns = { BRL: 8, RL: 11, SC: 14, VL: 17 };
 
+  const logUsageEvent = async (eventType, details = {}) => {
+    try {
+      if (!supabase || !eventType) return;
+
+      const payload = {
+        event_type: eventType,
+        ship: details.ship || makeInventoryShip || userShip || "",
+        module: details.module || module || "",
+        station: details.station || inventoryStation || "",
+        user_name: details.userName || getEffectiveInventoryUserName?.() || "",
+        user_position: details.userPosition || inventoryUserPosition || "",
+        visitor_id: getOrCreateVisitorId(),
+        page_path: typeof window !== "undefined" ? window.location.pathname : "",
+        user_agent: typeof navigator !== "undefined" ? navigator.userAgent : "",
+        details,
+      };
+
+      await supabase.from("app_usage_logs").insert(payload);
+    } catch {
+      // Tracking should never block the app.
+    }
+  };
+
+  useEffect(() => {
+    logUsageEvent("app_opened", { module: "welcome" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     loadDefaultTemplate();
   }, []);
@@ -684,6 +729,15 @@ export default function App() {
         setNextOrderMessage(
           `Order file loaded. ${parsed.meta.totalItems} product rows found. ${parsed.meta.itemsNeedingOrder} need order, ${parsed.meta.blueReviewItems} blue review, ${parsed.meta.redReviewItems} red review.`
         );
+        logUsageEvent("next_order_file_uploaded", {
+          module: "generate_next_order",
+          fileName: file.name,
+          sheetName: parsed.meta.sheetName,
+          totalItems: parsed.meta.totalItems,
+          itemsNeedingOrder: parsed.meta.itemsNeedingOrder,
+          blueReviewItems: parsed.meta.blueReviewItems,
+          redReviewItems: parsed.meta.redReviewItems,
+        });
       } catch (error) {
         setNextOrderFileName(file.name);
         setNextOrderSourceRows([]);
@@ -1441,6 +1495,17 @@ export default function App() {
     setInventoryLoading(false);
     saveBusyRef.current = false;
     setMakeInventoryMessage(`Saved ${currentInventoryItem.name} / Qty ${formatQty(qty)}.`);
+    logUsageEvent("inventory_count_saved", {
+      module: "make_inventory",
+      ship,
+      station,
+      userName,
+      userPosition: inventoryUserPosition,
+      itemName: currentInventoryItem.name,
+      code: currentInventoryItem.code,
+      category: currentInventoryItem.category,
+      qty,
+    });
   };
 
   const editInventoryItem = (item) => {
@@ -1481,6 +1546,16 @@ export default function App() {
     }
 
     setInventorySummary((prev) => prev.filter((item) => item.id !== itemToDelete.id));
+    logUsageEvent("inventory_count_deleted", {
+      module: "make_inventory",
+      ship: itemToDelete.ship || makeInventoryShip || userShip,
+      station: itemToDelete.station || inventoryStation,
+      userName: itemToDelete.userName || getEffectiveInventoryUserName(),
+      userPosition: inventoryUserPosition,
+      code: itemToDelete.code || "",
+      itemName: itemToDelete.name || "",
+      qty: itemToDelete.qty || 0,
+    });
     scheduleRealtimeRefresh("counts", makeInventoryShip || userShip);
   };
 
@@ -1541,6 +1616,15 @@ export default function App() {
           !(item.ship === ship && item.station === inventoryStation && item.userName === userName)
       )
     );
+
+    logUsageEvent("inventory_report_cleared", {
+      module: "make_inventory",
+      ship,
+      station: inventoryStation,
+      userName,
+      userPosition: inventoryUserPosition,
+      recordsCleared: rowsToClear.length,
+    });
 
     scheduleRealtimeRefresh("counts", ship);
 
@@ -1606,6 +1690,11 @@ export default function App() {
     }
 
     setInventorySummary((prev) => prev.filter((item) => item.ship !== ship));
+    logUsageEvent("ship_inventory_cleared", {
+      module: "make_inventory",
+      ship,
+      recordsCleared: shipRows.length,
+    });
     scheduleRealtimeRefresh("counts", ship);
 
     setCurrentInventoryItem(null);
@@ -1649,6 +1738,7 @@ export default function App() {
   };
 
   const exportInventorySummaryToExcel = () => {
+    logUsageEvent("export_excel_clicked", { module: "make_inventory", reportMode: inventoryReportMode, ship: makeInventoryShip || userShip, station: inventoryReportMode === "summary" ? summaryStationFilter : inventoryStation });
     const ship = makeInventoryShip || userShip;
     const rows = getVisibleInventoryReportRows();
 
@@ -1694,6 +1784,7 @@ export default function App() {
   };
 
   const exportInventoryStatusToExcel = () => {
+    logUsageEvent("export_excel_clicked", { module: "make_inventory", reportMode: "count_status", ship: makeInventoryShip || userShip, station: inventoryStation });
     const ship = makeInventoryShip || userShip;
     const rows = getMyInventoryStatusRows().map((item) => ({
       Ship: ship,
@@ -1718,6 +1809,7 @@ export default function App() {
   };
 
   const printInventorySummary = () => {
+    logUsageEvent("print_clicked", { module: "make_inventory", reportMode: inventoryReportMode, ship: makeInventoryShip || userShip, station: inventoryReportMode === "summary" ? summaryStationFilter : inventoryStation });
     if (reportBusy || printBusyRef.current) return;
 
     const ship = makeInventoryShip || userShip;
@@ -1839,6 +1931,7 @@ export default function App() {
   };
 
   const printInventoryStatus = () => {
+    logUsageEvent("print_clicked", { module: "make_inventory", reportMode: "count_status", ship: makeInventoryShip || userShip, station: inventoryStation });
     if (reportBusy || printBusyRef.current) return;
 
     const ship = makeInventoryShip || userShip;
@@ -1922,6 +2015,12 @@ export default function App() {
       setSelectedProduct("");
       setSelectedRecipe(null);
       setMessage("Consumption file loaded.");
+      logUsageEvent("product_consumption_file_uploaded", {
+        module: "product_dashboard",
+        fileName: file.name,
+        rowCount: Math.max(rows.length - 1, 0),
+        products: buildProductList(rows).length,
+      });
     });
   };
 
@@ -1930,9 +2029,15 @@ export default function App() {
     if (!file) return;
 
     readExcelFile(file, (workbook) => {
-      setRecipeRows(workbookToRows(workbook));
+      const rows = workbookToRows(workbook);
+      setRecipeRows(rows);
       setSelectedRecipe(null);
       setMessage("Recipe / location file loaded.");
+      logUsageEvent("product_recipe_location_file_uploaded", {
+        module: "product_dashboard",
+        fileName: file.name,
+        rowCount: Math.max(rows.length - 1, 0),
+      });
     });
   };
 
@@ -1941,8 +2046,15 @@ export default function App() {
     if (!file) return;
 
     readExcelFile(file, (workbook) => {
-      setTemplateMap(parseTemplateWorkbook(workbook));
+      const parsedTemplate = parseTemplateWorkbook(workbook);
+      setTemplateMap(parsedTemplate);
       setTemplateStatus("Custom template loaded.");
+      logUsageEvent("product_template_file_uploaded", {
+        module: "product_dashboard",
+        fileName: file.name,
+        sheetCount: workbook.SheetNames.length,
+        venueCount: Object.keys(parsedTemplate).length,
+      });
     });
   };
 
@@ -1956,6 +2068,12 @@ export default function App() {
       setMakeInventoryItems(items);
       setSelectedEquipment(null);
       setMusterMessage(`Equipment Muster List loaded from ${workbook.SheetNames.length} sheet(s). Saving shared MEL list...`);
+      logUsageEvent("equipment_muster_file_uploaded", {
+        module: "equipment_muster",
+        fileName: file.name,
+        sheetCount: workbook.SheetNames.length,
+        itemCount: items.length,
+      });
       await saveMasterInventoryItems(null, items);
       e.target.value = "";
     });
@@ -1966,9 +2084,15 @@ export default function App() {
     if (!file) return;
 
     readExcelFile(file, (workbook) => {
-      setWarehouseRows(workbookToRows(workbook));
+      const rows = workbookToRows(workbook);
+      setWarehouseRows(rows);
       setWarehouseFilter("all");
       setWarehouseMessage("Warehouse inventory loaded.");
+      logUsageEvent("warehouse_file_uploaded", {
+        module: "inventory_warehouse",
+        fileName: file.name,
+        rowCount: Math.max(rows.length - 1, 0),
+      });
     });
   };
 
@@ -1977,8 +2101,14 @@ export default function App() {
     if (!file) return;
 
     readExcelFile(file, (workbook) => {
-      setInUseRows(workbookToRows(workbook));
+      const rows = workbookToRows(workbook);
+      setInUseRows(rows);
       setInUseMessage("Inventory in Use file loaded.");
+      logUsageEvent("inventory_in_use_file_uploaded", {
+        module: "inventory_in_use",
+        fileName: file.name,
+        rowCount: Math.max(rows.length - 1, 0),
+      });
     });
   };
 
@@ -1996,6 +2126,12 @@ export default function App() {
       setShowVariance(false);
       setMasterInventorySource(`Uploaded from ${file.name}`);
       setMakeInventoryMessage(`Master inventory loaded from ${workbook.SheetNames.length} sheet(s). Saving shared MEL list for all users...`);
+      logUsageEvent("shared_master_inventory_uploaded", {
+        module: "make_inventory",
+        fileName: file.name,
+        sheetCount: workbook.SheetNames.length,
+        itemCount: items.length,
+      });
 
       await saveMasterInventoryItems(null, items);
       e.target.value = "";
@@ -2475,6 +2611,7 @@ export default function App() {
   };
 
   const exportTopNotInUseByLocationReportToExcel = () => {
+    logUsageEvent("export_excel_clicked", { module: "product_dashboard", reportMode: "top_not_in_use_by_location", ship: userShip, viewMode });
     if (productMissingReportLoading) {
       alert("Report is still preparing. Please wait a moment.");
       return;
@@ -2514,6 +2651,7 @@ export default function App() {
   };
 
   const printTopNotInUseByLocationReport = () => {
+    logUsageEvent("print_clicked", { module: "product_dashboard", reportMode: "top_not_in_use_by_location", ship: userShip, viewMode });
     if (productMissingReportLoading) {
       alert("Report is still preparing. Please wait a moment.");
       return;
@@ -2645,6 +2783,14 @@ export default function App() {
 
         setNextOrderRows(rows.map((item, index) => ({ ...item, orderRank: index + 1 })));
         setNextOrderMessage(`Generated ${rows.length} product lines in the same order as the Excel file. Use filter buttons and search to find products.`);
+        logUsageEvent("next_order_generated", {
+          module: "generate_next_order",
+          fileName: nextOrderFileName,
+          rowsGenerated: rows.length,
+          itemsNeedingOrder: nextOrderMeta?.itemsNeedingOrder || 0,
+          blueReviewItems: nextOrderMeta?.blueReviewItems || 0,
+          redReviewItems: nextOrderMeta?.redReviewItems || 0,
+        });
       } catch (error) {
         setNextOrderRows([]);
         setNextOrderMessage(error?.message || "Could not generate next order.");
@@ -2660,6 +2806,7 @@ export default function App() {
   };
 
   const exportNextOrderToExcel = () => {
+    logUsageEvent("export_excel_clicked", { module: "generate_next_order", ship: nextOrderMeta?.shipName || userShip, search: nextOrderSearch, filter: nextOrderFilter });
     if (nextOrderLoading) {
       alert("Next order is still generating. Please wait a moment.");
       return;
@@ -2699,6 +2846,7 @@ export default function App() {
   };
 
   const printNextOrder = () => {
+    logUsageEvent("print_clicked", { module: "generate_next_order", ship: nextOrderMeta?.shipName || userShip, search: nextOrderSearch, filter: nextOrderFilter });
     if (nextOrderLoading) {
       alert("Next order is still generating. Please wait a moment.");
       return;
@@ -2735,7 +2883,7 @@ export default function App() {
           <div class="meta"><strong>Arrival day B3:</strong> ${escapeHtml(nextOrderMeta?.arrivalDate || "N/A")}</div>
           <div class="meta"><strong>Days until arrival:</strong> ${formatQty(nextOrderMeta?.daysUntilArrival)}</div>
           <div class="meta"><strong>Sailors:</strong> ${formatQty(nextOrderMeta?.targetSailors)}</div>
-          <div class="meta"><strong>Days:</strong> ${formatQty(nextOrderMeta?.targetDays)}</div>
+                   <div class="meta"><strong>Days:</strong> ${formatQty(nextOrderMeta?.targetDays)}</div>
           <div class="meta"><strong>Generated:</strong> ${new Date().toLocaleString()}</div>
           <table>
             <thead>
@@ -2962,7 +3110,13 @@ export default function App() {
               <img src="/ships-start.png" alt="Virgin Voyages ships" style={styles.shipPhotoStartImage} />
 
               <div style={styles.shipPhotoOverlayBottom}>
-                <button style={styles.welcomeStartButton} onClick={() => setWelcomeStarted(true)}>
+                <button
+                  style={styles.welcomeStartButton}
+                  onClick={() => {
+                    logUsageEvent("welcome_start_clicked", { module: "welcome" });
+                    setWelcomeStarted(true);
+                  }}
+                >
                   Start
                 </button>
               </div>
@@ -2990,7 +3144,14 @@ export default function App() {
             {SHIPS.map((ship) => <option key={ship} value={ship}>{ship}</option>)}
           </select>
 
-          <button style={styles.primaryButton} onClick={() => userShip && setLoggedIn(true)}>
+          <button
+            style={styles.primaryButton}
+            onClick={() => {
+              if (!userShip) return;
+              logUsageEvent("ship_selected", { ship: userShip, module: "welcome" });
+              setLoggedIn(true);
+            }}
+          >
             Continue
           </button>
 
@@ -3019,6 +3180,7 @@ export default function App() {
               onClick={() => {
                 setModule("product");
                 setProductMode("");
+                logUsageEvent("module_opened", { module: "product", ship: userShip });
               }}
             >
               <div style={styles.moduleIcon}>📦</div>
@@ -3026,7 +3188,13 @@ export default function App() {
               <span>Consumption, recipes, templates, reports and next order</span>
             </button>
 
-            <button style={styles.moduleCard} onClick={() => setModule("equipment")}>
+            <button
+              style={styles.moduleCard}
+              onClick={() => {
+                setModule("equipment");
+                logUsageEvent("module_opened", { module: "equipment", ship: userShip });
+              }}
+            >
               <div style={styles.moduleIcon}>🍽️</div>
               <strong>Equipment</strong>
               <span>Muster list and inventory tools</span>
@@ -3039,6 +3207,7 @@ export default function App() {
               onClick={() => {
                 loadPeopleScheduleModule();
                 setModule("people");
+                logUsageEvent("module_opened", { module: "people_schedule", ship: userShip });
               }}
             >
               <div style={styles.moduleIcon}>👥</div>
@@ -3067,7 +3236,13 @@ export default function App() {
           <p style={styles.emptyText}>Choose whether you want to review products or generate the next order.</p>
 
           <div style={styles.moduleGrid}>
-            <button style={styles.moduleCard} onClick={() => setProductMode("dashboard")}>
+            <button
+              style={styles.moduleCard}
+              onClick={() => {
+                setProductMode("dashboard");
+                logUsageEvent("product_option_opened", { module: "product_dashboard", ship: userShip });
+              }}
+            >
               <div style={styles.moduleIcon}>📊</div>
               <strong>Product Dashboard</strong>
               <span>Use the existing product dashboard with consumption, recipes, templates, allergens and reports.</span>
@@ -3081,6 +3256,7 @@ export default function App() {
                 setNextOrderSearch("");
                 setNextOrderFilter("all");
                 setNextOrderMessage("");
+                logUsageEvent("product_option_opened", { module: "generate_next_order", ship: userShip });
               }}
             >
               <div style={styles.moduleIcon}>🛒</div>
@@ -3280,6 +3456,7 @@ export default function App() {
           userShip={userShip}
           onBack={() => setModule("")}
           styles={styles}
+          logUsageEvent={logUsageEvent}
         />
       </Suspense>
     );
@@ -3300,13 +3477,25 @@ export default function App() {
           <h2 style={styles.cardTitle}>🍽️ Equipment Options</h2>
 
           <div style={styles.moduleGrid}>
-            <button style={styles.moduleCard} onClick={() => setEquipmentMode("muster")}>
+            <button
+              style={styles.moduleCard}
+              onClick={() => {
+                setEquipmentMode("muster");
+                logUsageEvent("equipment_option_opened", { module: "equipment_muster", ship: userShip });
+              }}
+            >
               <div style={styles.moduleIcon}>📋</div>
               <strong>Equipment Muster List</strong>
               <span>Grouped by all sheets and sub categories</span>
             </button>
 
-            <button style={styles.moduleCard} onClick={() => setEquipmentMode("inventory")}>
+            <button
+              style={styles.moduleCard}
+              onClick={() => {
+                setEquipmentMode("inventory");
+                logUsageEvent("equipment_option_opened", { module: "equipment_inventory", ship: userShip });
+              }}
+            >
               <div style={styles.moduleIcon}>📊</div>
               <strong>Equipment Inventory</strong>
               <span>Inventory in use, warehouse stock and make inventory</span>
@@ -3332,19 +3521,37 @@ export default function App() {
           <h2 style={styles.cardTitle}>📊 Equipment Inventory</h2>
 
           <div style={styles.moduleGrid}>
-            <button style={styles.moduleCard} onClick={() => setEquipmentMode("inuse")}>
+            <button
+              style={styles.moduleCard}
+              onClick={() => {
+                setEquipmentMode("inuse");
+                logUsageEvent("equipment_inventory_option_opened", { module: "inventory_in_use", ship: userShip });
+              }}
+            >
               <div style={styles.moduleIcon}>✅</div>
               <strong>Inventory in Use</strong>
               <span>Compare muster list against in-use inventory</span>
             </button>
 
-            <button style={styles.moduleCard} onClick={() => setEquipmentMode("warehouse")}>
+            <button
+              style={styles.moduleCard}
+              onClick={() => {
+                setEquipmentMode("warehouse");
+                logUsageEvent("equipment_inventory_option_opened", { module: "inventory_warehouse", ship: userShip });
+              }}
+            >
               <div style={styles.moduleIcon}>🏬</div>
               <strong>Inventory Warehouse</strong>
               <span>Par, on hand, future order and suggested order</span>
             </button>
 
-            <button style={styles.moduleCard} onClick={() => setEquipmentMode("makeinventory")}>
+            <button
+              style={styles.moduleCard}
+              onClick={() => {
+                setEquipmentMode("makeinventory");
+                logUsageEvent("equipment_inventory_option_opened", { module: "make_inventory", ship: userShip });
+              }}
+            >
               <div style={styles.moduleIcon}>📝</div>
               <strong>Make Inventory</strong>
               <span>Multi-user counts, my report and ship summary</span>
