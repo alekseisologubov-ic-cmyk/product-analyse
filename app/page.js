@@ -372,6 +372,7 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [userShip, setUserShip] = useState("");
   const [loggedIn, setLoggedIn] = useState(false);
+  const [welcomeStarted, setWelcomeStarted] = useState(false);
   const [message, setMessage] = useState("");
   const [viewMode, setViewMode] = useState("all");
   const [showProductMissingReport, setShowProductMissingReport] = useState(false);
@@ -3841,7 +3842,7 @@ export default function App() {
     return { totals, allShips };
   })();
 
-  if (!loggedIn) {
+  if (!loggedIn && !welcomeStarted) {
     return (
       <main style={styles.welcomePage}>
         <style>{`
@@ -3872,30 +3873,42 @@ export default function App() {
             <div style={styles.shipPhotoStartBox}>
               <img src="/ships-start.png" alt="Virgin Voyages ships" style={styles.shipPhotoStartImage} />
 
-              <div style={styles.shipPhotoOverlay}>
-                <div style={styles.shipPhotoTitle}>Press the ships to start</div>
-
-                <div style={styles.shipPhotoButtons}>
-                  {SHIPS.map((ship) => (
-                    <button
-                      key={ship}
-                      style={styles.shipPhotoButton}
-                      onClick={() => {
-                        setUserShip(ship);
-                        setLoggedIn(true);
-                      }}
-                    >
-                      <span style={styles.shipPhotoButtonShip}>🚢 {ship}</span>
-                      <span style={styles.shipPhotoButtonHint}>Start</span>
-                    </button>
-                  ))}
-                </div>
+              <div style={styles.shipPhotoOverlayBottom}>
+                <button style={styles.welcomeStartButton} onClick={() => setWelcomeStarted(true)}>
+                  Start
+                </button>
               </div>
             </div>
 
-            <p style={styles.welcomeSubtitle}>Choose your vessel and open the Virgin Voyages dashboard.</p>
+            <p style={styles.welcomeSubtitle}>Press Start, choose your ship, and open the Virgin Voyages dashboard.</p>
             <div style={styles.welcomeFooterNote}>Product • Equipment • Inventory • People & Schedule</div>
           </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (!loggedIn && welcomeStarted) {
+    return (
+      <main style={styles.page}>
+        <section style={styles.loginCard}>
+          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.logo} />
+          <h1 style={styles.title}>Choose Your Ship</h1>
+          <p style={styles.subtitle}>Select your vessel to start the dashboard.</p>
+
+          <label style={styles.label}>🚢 Select your ship</label>
+          <select value={userShip} onChange={(e) => setUserShip(e.target.value)} style={styles.select}>
+            <option value="">Choose ship</option>
+            {SHIPS.map((ship) => <option key={ship} value={ship}>{ship}</option>)}
+          </select>
+
+          <button style={styles.primaryButton} onClick={() => userShip && setLoggedIn(true)}>
+            Continue
+          </button>
+
+          <button style={styles.backButton} onClick={() => setWelcomeStarted(false)}>
+            ← Back to Start
+          </button>
         </section>
       </main>
     );
@@ -5682,6 +5695,8 @@ const styles = {
   shipPhotoStartBox: { position: "relative", width: "100%", minHeight: 330, borderRadius: 26, overflow: "hidden", border: "1px solid rgba(0,0,0,0.10)", boxShadow: "0 16px 42px rgba(0,0,0,0.18)", background: "#111" },
   shipPhotoStartImage: { width: "100%", height: 350, objectFit: "cover", display: "block", filter: "saturate(1.12) contrast(1.04)" },
   shipPhotoOverlay: { position: "absolute", inset: 0, padding: 22, display: "flex", flexDirection: "column", justifyContent: "space-between", background: "linear-gradient(180deg, rgba(0,0,0,0.16) 0%, rgba(0,0,0,0.05) 43%, rgba(0,0,0,0.62) 100%)" },
+  shipPhotoOverlayBottom: { position: "absolute", left: 0, right: 0, bottom: 26, display: "flex", justifyContent: "center", alignItems: "center", padding: "0 24px" },
+  welcomeStartButton: { minWidth: 260, padding: "18px 34px", borderRadius: 999, border: "2px solid rgba(255,255,255,0.9)", background: "rgba(17,17,17,0.90)", color: "#fff", fontSize: 28, fontWeight: 900, cursor: "pointer", boxShadow: "0 14px 35px rgba(0,0,0,0.35)", textTransform: "uppercase", letterSpacing: 1 },
   shipPhotoTitle: { alignSelf: "center", padding: "11px 22px", borderRadius: 999, background: "rgba(255,255,255,0.92)", color: "#111", fontSize: 28, fontWeight: 900, boxShadow: "0 8px 20px rgba(0,0,0,0.20)", letterSpacing: 0.2 },
   shipPhotoButtons: { display: "grid", gridTemplateColumns: "repeat(4, minmax(90px, 1fr))", gap: 12, width: "100%" },
   shipPhotoButton: { minHeight: 82, border: "1px solid rgba(255,255,255,0.75)", borderRadius: 18, background: "rgba(17,17,17,0.88)", color: "#fff", cursor: "pointer", display: "grid", alignContent: "center", justifyItems: "center", gap: 5, boxShadow: "0 8px 24px rgba(0,0,0,0.28)", backdropFilter: "blur(4px)", fontWeight: "bold" },
