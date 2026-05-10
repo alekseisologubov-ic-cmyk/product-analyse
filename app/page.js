@@ -32,6 +32,15 @@ const getOrCreateVisitorId = () => {
   return nextId;
 };
 
+const normalizeAppEmail = (value) => String(value || "").trim().toLowerCase();
+
+const isVirginVoyagesEmail = (value) => {
+  const email = normalizeAppEmail(value);
+  return /^[^\s@]+@virginvoyages\.com$/.test(email);
+};
+
+const USER_EMAIL_STORAGE_KEY = "vv_app_user_email";
+
 const SHIPS = ["BRL", "RL", "SC", "VL"];
 
 const SHIP_DISPLAY_NAMES = {
@@ -393,6 +402,10 @@ export default function App() {
   const [userShip, setUserShip] = useState("");
   const [loggedIn, setLoggedIn] = useState(false);
   const [welcomeStarted, setWelcomeStarted] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
+  const [emailConfirmed, setEmailConfirmed] = useState(false);
+  const [rememberEmail, setRememberEmail] = useState(false);
+  const [emailError, setEmailError] = useState("");
   const [message, setMessage] = useState("");
   const [viewMode, setViewMode] = useState("all");
   const [showProductMissingReport, setShowProductMissingReport] = useState(false);
@@ -456,6 +469,8 @@ export default function App() {
     try {
       if (!supabase || !eventType) return;
 
+      const activeUserEmail = normalizeAppEmail(details.userEmail || userEmail || "");
+
       const payload = {
         event_type: eventType,
         ship: details.ship || makeInventoryShip || userShip || "",
@@ -463,10 +478,14 @@ export default function App() {
         station: details.station || inventoryStation || "",
         user_name: details.userName || getEffectiveInventoryUserName?.() || "",
         user_position: details.userPosition || inventoryUserPosition || "",
+        user_email: activeUserEmail,
         visitor_id: getOrCreateVisitorId(),
         page_path: typeof window !== "undefined" ? window.location.pathname : "",
         user_agent: typeof navigator !== "undefined" ? navigator.userAgent : "",
-        details,
+        details: {
+          ...details,
+          userEmail: activeUserEmail || details.userEmail || "",
+        },
       };
 
       await supabase.from("app_usage_logs").insert(payload);
@@ -474,6 +493,18 @@ export default function App() {
       // Tracking should never block the app.
     }
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const savedEmail = normalizeAppEmail(window.localStorage.getItem(USER_EMAIL_STORAGE_KEY));
+    if (isVirginVoyagesEmail(savedEmail)) {
+      setUserEmail(savedEmail);
+      setRememberEmail(true);
+      setEmailConfirmed(true);
+      logUsageEvent("remembered_email_loaded", { module: "welcome", userEmail: savedEmail });
+    }
+  }, []);
 
   useEffect(() => {
     logUsageEvent("app_opened", { module: "welcome" });
@@ -2883,7 +2914,7 @@ export default function App() {
           <div class="meta"><strong>Arrival day B3:</strong> ${escapeHtml(nextOrderMeta?.arrivalDate || "N/A")}</div>
           <div class="meta"><strong>Days until arrival:</strong> ${formatQty(nextOrderMeta?.daysUntilArrival)}</div>
           <div class="meta"><strong>Sailors:</strong> ${formatQty(nextOrderMeta?.targetSailors)}</div>
-                   <div class="meta"><strong>Days:</strong> ${formatQty(nextOrderMeta?.targetDays)}</div>
+          <div class="meta"><strong>Days:</strong> ${formatQty(nextOrderMeta?.targetDays)}</div>
           <div class="meta"><strong>Generated:</strong> ${new Date().toLocaleString()}</div>
           <table>
             <thead>
@@ -3062,6 +3093,37 @@ export default function App() {
   const productsInRecipe = selectedRecipe ? getProductsInRecipe(selectedRecipe) : [];
   const allergenWarnings = selectedRecipe ? detectAllergens(productsInRecipe) : [];
   const filteredProducts = products.filter((p) => p.toLowerCase().includes(search.toLowerCase()));
+
+  const confirmUserEmail = () => {
+    const email = normalizeAppEmail(userEmail);
+
+    if (!isVirginVoyagesEmail(email)) {
+      setEmailError("Please use your Virgin Voyages email ending with @virginvoyages.com.");
+      return;
+    }
+
+    if (typeof window !== "undefined") {
+      if (rememberEmail) {
+        window.localStorage.setItem(USER_EMAIL_STORAGE_KEY, email);
+      } else {
+        window.localStorage.removeItem(USER_EMAIL_STORAGE_KEY);
+      }
+    }
+
+    setUserEmail(email);
+    setEmailError("");
+    setEmailConfirmed(true);
+    logUsageEvent("email_confirmed", { module: "welcome", userEmail: email, remembered: rememberEmail });
+  };
+
+  const resetUserEmail = () => {
+    if (typeof window !== "undefined") window.localStorage.removeItem(USER_EMAIL_STORAGE_KEY);
+    setUserEmail("");
+    setEmailConfirmed(false);
+    setRememberEmail(false);
+    setEmailError("");
+    logUsageEvent("email_reset", { module: "welcome" });
+  };
   const topNotInUseReport = productMissingReportRows;
 
   const totalConsumption = (() => {
@@ -3130,13 +3192,76 @@ export default function App() {
     );
   }
 
-  if (!loggedIn && welcomeStarted) {
+  if (!loggedIn && welcomeStarted && !emailConfirmed) {
+    return (
+      <main style={styles.page}>
+        <section style={styles.loginCard}>
+          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.logo} />
+          <h1 style={styles.title}>Enter Your Email</h1>
+          <p style={styles.subtitle}>Use your Virgin Voyages email to continue.</p>
+
+          <label style={styles.label}>✉️ Virgin Voyages email</label>
+          <input
+            type="email"
+            value={userEmail}
+            onChange={(e) => {
+              setUserEmail(e.target.value);
+              setEmailError("");
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") confirmUserEmail();
+            }}
+            placeholder="name@virginvoyages.com"
+            style={styles.searchInput}
+            autoComplete="email"
+          />
+
+          {emailError && <div style={styles.emailError}>{emailError}</div>}
+
+          <label style={styles.checkboxRow}>
+            <input
+              type="checkbox"
+              checked={rememberEmail}
+              onChange={(e) => setRememberEmail(e.target.checked)}
+            />
+            <span>Remember me on this device</span>
+          </label>
+
+          <div style={styles.infoBox}>
+            <div>🔒 Only emails ending with <strong>@virginvoyages.com</strong> are allowed.</div>
+            <div>📊 Usage tracking will be connected to this email.</div>
+          </div>
+
+          <button style={styles.primaryButton} onClick={confirmUserEmail}>
+            Continue
+          </button>
+
+          <button
+            style={styles.backButton}
+            onClick={() => {
+              setWelcomeStarted(false);
+              setEmailError("");
+            }}
+          >
+            ← Back to Start
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  if (!loggedIn && welcomeStarted && emailConfirmed) {
     return (
       <main style={styles.page}>
         <section style={styles.loginCard}>
           <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.logo} />
           <h1 style={styles.title}>Choose Your Ship</h1>
           <p style={styles.subtitle}>Select your vessel to start the dashboard.</p>
+
+          <div style={styles.infoBox}>
+            <div>👤 Signed in as: <strong>{normalizeAppEmail(userEmail)}</strong></div>
+            <button style={styles.inlineLinkButton} onClick={resetUserEmail}>Use different email</button>
+          </div>
 
           <label style={styles.label}>🚢 Select your ship</label>
           <select value={userShip} onChange={(e) => setUserShip(e.target.value)} style={styles.select}>
@@ -3148,7 +3273,7 @@ export default function App() {
             style={styles.primaryButton}
             onClick={() => {
               if (!userShip) return;
-              logUsageEvent("ship_selected", { ship: userShip, module: "welcome" });
+              logUsageEvent("ship_selected", { ship: userShip, module: "welcome", userEmail: normalizeAppEmail(userEmail) });
               setLoggedIn(true);
             }}
           >
@@ -4805,6 +4930,9 @@ const styles = {
   headerLogo: { height: 54, objectFit: "contain" },
   headerActions: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" },
   backButton: { padding: "10px 14px", borderRadius: 999, border: "1px solid #ccc", background: "#fff", cursor: "pointer", fontWeight: "bold" },
+  checkboxRow: { display: "flex", alignItems: "center", gap: 10, fontWeight: "bold", marginTop: 4 },
+  emailError: { color: "#b00020", background: "#fff0f0", border: "1px solid #f1b8b8", borderRadius: 10, padding: 10, fontWeight: "bold" },
+  inlineLinkButton: { border: 0, background: "transparent", color: "#0057b8", cursor: "pointer", fontWeight: "bold", padding: 0, textAlign: "left" },
   deleteButton: { padding: "10px 14px", borderRadius: 999, border: "1px solid #b00020", background: "#b00020", color: "#fff", cursor: "pointer", fontWeight: "bold" },
   title: { margin: 0, fontSize: 28 },
   subtitle: { margin: 0, color: "#666" },
