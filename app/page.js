@@ -301,17 +301,59 @@ const toNumber = (value) => {
   return Number.isFinite(number) ? number : 0;
 };
 
-const getHistoricalSailorDays = (sailorCountCell, daysCell) => {
-  const sailorCount = toNumber(sailorCountCell);
-  const days = toNumber(daysCell);
+const getHistoricalSailorDays = (cellA, cellB) => {
+  const a = toNumber(cellA);
+  const b = toNumber(cellB);
 
-  if (!sailorCount) return 0;
-  if (!days) return sailorCount;
+  if (!a && !b) return 0;
+  if (a && !b) return a;
+  if (!a && b) return b;
 
-  // Some order files store total sailor-days in row 5, while others store average sailors.
-  // If row 5 is already much larger than the days count, use it directly.
-  // Otherwise calculate sailors x days.
-  return sailorCount > days * 1000 ? sailorCount : sailorCount * days;
+  const low = Math.min(Math.abs(a), Math.abs(b));
+  const high = Math.max(Math.abs(a), Math.abs(b));
+
+  // In these order files, one row can be # days and the other can be total sailor-days.
+  // If the large value is much bigger than days x 1000, treat it as already total sailor-days.
+  if (low > 0 && high > low * 1000) return high;
+
+  // Otherwise treat the two cells as sailors x days.
+  return a * b;
+};
+
+const excelDateToDate = (value) => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const excelEpoch = Date.UTC(1899, 11, 30);
+    return new Date(excelEpoch + value * 24 * 60 * 60 * 1000);
+  }
+
+  const text = String(value || "").trim();
+  if (!text) return null;
+
+  const parsed = new Date(text);
+  if (!Number.isNaN(parsed.getTime())) return parsed;
+
+  return null;
+};
+
+const formatDateCell = (value) => {
+  const date = excelDateToDate(value);
+  if (!date) return String(value || "").trim();
+  return date.toLocaleDateString();
+};
+
+const getDaysBetweenCells = (startValue, endValue) => {
+  const startDate = excelDateToDate(startValue);
+  const endDate = excelDateToDate(endValue);
+
+  if (!startDate || !endDate) return 0;
+
+  const startUtc = Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate());
+  const endUtc = Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate());
+  const days = Math.round((endUtc - startUtc) / (24 * 60 * 60 * 1000));
+
+  return Number.isFinite(days) && days > 0 ? days : 0;
 };
 
 const getDefaultNextYearStartDate = () => {
@@ -582,13 +624,20 @@ export default function App() {
     const ws = workbook.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
 
+    const rawOrderDate = rows[1]?.[1]; // B2
+    const rawArrivalDate = rows[2]?.[1]; // B3
     const targetSailors = toNumber(rows[4]?.[1]); // B5
     const targetDays = toNumber(rows[5]?.[1]); // B6
+    const daysUntilArrival = getDaysBetweenCells(rawOrderDate, rawArrivalDate);
     const currentPeriodSailorDays = targetSailors * targetDays;
 
     const futureOrderColumns = [5, 6, 7, 8, 9, 10, 11, 12, 13]; // F:N
     const pastConsumptionColumns = [34, 35, 36, 37, 38, 39]; // AI:AN
 
+    // Historical basis:
+    // AI5:AN5 and AI6:AN6 contain the past sailor/day basis.
+    // Some files store total sailor-days in one of these rows, while others store sailors x days.
+    // The helper below handles both layouts so the calculation stays safe.
     const historicalSailorDays = pastConsumptionColumns.reduce(
       (sum, colIndex) => sum + getHistoricalSailorDays(rows[4]?.[colIndex], rows[5]?.[colIndex]),
       0
@@ -608,17 +657,22 @@ export default function App() {
       const futureOrders = futureOrderColumns.reduce((sum, colIndex) => sum + toNumber(row[colIndex]), 0);
       const pastConsumption = pastConsumptionColumns.reduce((sum, colIndex) => sum + toNumber(row[colIndex]), 0);
 
-      const projectedNeed = historicalSailorDays > 0 && currentPeriodSailorDays > 0
-        ? (pastConsumption / historicalSailorDays) * currentPeriodSailorDays
+      const averageConsumptionPerSailorDay = historicalSailorDays > 0
+        ? pastConsumption / historicalSailorDays
         : 0;
 
-      const suggestedOrder = Math.max(projectedNeed - stockOnHand - futureOrders, 0);
+      const averageConsumptionPerDay = averageConsumptionPerSailorDay * targetSailors;
+      const projectedNeed = averageConsumptionPerDay * targetDays;
+      const consumptionUntilArrival = averageConsumptionPerDay * daysUntilArrival;
+      const availableAtArrival = stockOnHand + futureOrders - consumptionUntilArrival;
+      const suggestedOrder = Math.max(projectedNeed - availableAtArrival, 0);
+
       const hasNoPastConsumption = pastConsumption <= 0;
       const hasNoStockOnHand = stockOnHand <= 0;
 
       let alertType = suggestedOrder > 0 ? "order" : "normal";
       let alertLabel = suggestedOrder > 0 ? "Needs order" : "No order suggested";
-      let alertDescription = "Projected need minus stock on hand minus future orders.";
+      let alertDescription = "Average daily consumption x voyage days, adjusted for stock/future orders until order arrival.";
 
       if (hasNoPastConsumption && hasNoStockOnHand) {
         alertType = "blue";
@@ -640,7 +694,12 @@ export default function App() {
         pastConsumption,
         historicalSailorDays,
         currentPeriodSailorDays,
+        daysUntilArrival,
+        averageConsumptionPerSailorDay,
+        averageConsumptionPerDay,
         projectedNeed,
+        consumptionUntilArrival,
+        availableAtArrival,
         suggestedOrder,
         alertType,
         alertLabel,
@@ -654,10 +713,11 @@ export default function App() {
       meta: {
         sheetName,
         shipName: String(rows[0]?.[1] || "").trim(),
-        orderDate: String(rows[1]?.[1] || "").trim(),
-        requestDate: String(rows[2]?.[1] || "").trim(),
+        orderDate: formatDateCell(rawOrderDate),
+        arrivalDate: formatDateCell(rawArrivalDate),
         targetSailors,
         targetDays,
+        daysUntilArrival,
         currentPeriodSailorDays,
         historicalSailorDays,
         totalItems: parsedRows.length,
@@ -2620,7 +2680,7 @@ export default function App() {
         const rows = sortNextOrderRows(nextOrderSourceRows);
 
         setNextOrderRows(rows.map((item, index) => ({ ...item, orderRank: index + 1 })));
-        setNextOrderMessage(`Generated ${rows.length} product lines. Positive suggested orders are first, then red/blue review items.`);
+        setNextOrderMessage(`Generated ${rows.length} product lines. Positive suggested orders are first, using average daily consumption and order-arrival coverage.`);
       } catch (error) {
         setNextOrderRows([]);
         setNextOrderMessage(error?.message || "Could not generate next order.");
@@ -2656,12 +2716,15 @@ export default function App() {
       StockOnHand: Number(item.stockOnHand || 0),
       FutureOrders_F_to_N: Number(item.futureOrders || 0),
       PastConsumption_AI_to_AN: Number(item.pastConsumption || 0),
-      CurrentSailorDays_B5_x_B6: Number(item.currentPeriodSailorDays || 0),
-      HistoricalBasis_AI5_AI6: Number(item.historicalSailorDays || 0),
-      ProjectedNeed: Number(item.projectedNeed || 0),
+      HistoricalSailorDays_AI5_AI6: Number(item.historicalSailorDays || 0),
+      AverageConsumptionPerDay: Number(item.averageConsumptionPerDay || 0),
+      DaysUntilArrival_B2_to_B3: Number(item.daysUntilArrival || 0),
+      ConsumptionUntilArrival: Number(item.consumptionUntilArrival || 0),
+      AvailableAtArrival: Number(item.availableAtArrival || 0),
+      ProjectedVoyageNeed_B6: Number(item.projectedNeed || 0),
       SuggestedNextOrder: Number(item.suggestedOrder || 0),
       Alert: item.alertLabel || "",
-      Reason: item.orderReason || "Projected need minus stock on hand minus future orders",
+      Reason: item.orderReason || "Average daily consumption x voyage days, adjusted for stock/future orders until order arrival",
     }));
 
     const ws = XLSX.utils.json_to_sheet(exportRows);
@@ -2704,6 +2767,9 @@ export default function App() {
           <h1>Generated Next Order</h1>
           <div class="meta"><strong>Source file:</strong> ${escapeHtml(nextOrderFileName || "N/A")}</div>
           <div class="meta"><strong>Ship:</strong> ${escapeHtml(nextOrderMeta?.shipName || userShip || "N/A")}</div>
+          <div class="meta"><strong>Order day B2:</strong> ${escapeHtml(nextOrderMeta?.orderDate || "N/A")}</div>
+          <div class="meta"><strong>Arrival day B3:</strong> ${escapeHtml(nextOrderMeta?.arrivalDate || "N/A")}</div>
+          <div class="meta"><strong>Days until arrival:</strong> ${formatQty(nextOrderMeta?.daysUntilArrival)}</div>
           <div class="meta"><strong>Sailors:</strong> ${formatQty(nextOrderMeta?.targetSailors)}</div>
           <div class="meta"><strong>Days:</strong> ${formatQty(nextOrderMeta?.targetDays)}</div>
           <div class="meta"><strong>Generated:</strong> ${new Date().toLocaleString()}</div>
@@ -2717,7 +2783,10 @@ export default function App() {
                 <th>Stock On Hand</th>
                 <th>Future Orders F:N</th>
                 <th>Past Consumption AI:AN</th>
-                <th>Projected Need</th>
+                <th>Avg / Day</th>
+                <th>Use Until Arrival</th>
+                <th>Available At Arrival</th>
+                <th>Projected Voyage Need</th>
                 <th>Suggested Next Order</th>
                 <th>Alert</th>
               </tr>
@@ -2734,6 +2803,9 @@ export default function App() {
                       <td>${formatQty(item.stockOnHand)}</td>
                       <td>${formatQty(item.futureOrders)}</td>
                       <td>${formatQty(item.pastConsumption)}</td>
+                      <td>${formatQty(item.averageConsumptionPerDay)}</td>
+                      <td>${formatQty(item.consumptionUntilArrival)}</td>
+                      <td>${formatQty(item.availableAtArrival)}</td>
                       <td>${formatQty(item.projectedNeed)}</td>
                       <td class="qty">${formatQty(item.suggestedOrder)}</td>
                       <td class="${item.alertType === "red" ? "red" : item.alertType === "blue" || item.alertType === "order" ? "blue" : ""}">${escapeHtml(item.alertLabel || "")}</td>
@@ -3868,14 +3940,17 @@ export default function App() {
               <div>📄 Source file: <strong>{nextOrderFileName || "Not uploaded"}</strong></div>
               <div>📘 Sheet used: <strong>{nextOrderMeta?.sheetName || "N/A"}</strong></div>
               <div>🚢 Ship: <strong>{nextOrderMeta?.shipName || "N/A"}</strong></div>
+              <div>🗓️ Order day B2: <strong>{nextOrderMeta?.orderDate || "N/A"}</strong></div>
+              <div>🚚 Arrival day B3: <strong>{nextOrderMeta?.arrivalDate || "N/A"}</strong></div>
+              <div>⏳ Days until arrival: <strong>{formatQty(nextOrderMeta?.daysUntilArrival)}</strong></div>
               <div>👥 Sailors count B5: <strong>{formatQty(nextOrderMeta?.targetSailors)}</strong></div>
-              <div>📅 Days of period B6: <strong>{formatQty(nextOrderMeta?.targetDays)}</strong></div>
+              <div>📅 Days of voyage B6: <strong>{formatQty(nextOrderMeta?.targetDays)}</strong></div>
               <div>📦 Product rows found: <strong>{nextOrderMeta?.totalItems || 0}</strong></div>
               <div>🛒 Items needing order: <strong>{nextOrderMeta?.itemsNeedingOrder || 0}</strong></div>
               <div style={{ color: "#0057b8" }}>🔵 No stock + no past consumption: <strong>{nextOrderMeta?.blueReviewItems || 0}</strong></div>
               <div style={{ color: "#b00020" }}>🔴 Stock on hand + no past consumption: <strong>{nextOrderMeta?.redReviewItems || 0}</strong></div>
               <div style={{ color: "#8a5a00" }}>
-                Calculation uses B5 sailors, B6 days, stock on hand from D, future orders from F:N, AI5:AN5 + AI6:AN6 as historical basis, and past consumption from AI:AN.
+                Calculation uses B2 order day, B3 arrival day, B5 sailors, B6 voyage days, stock on hand from D, future orders from F:N, AI5:AN5 days, AI6:AN6 sailors, and past consumption from AI:AN.
               </div>
             </div>
           </div>
@@ -3902,7 +3977,7 @@ export default function App() {
               {nextOrderLoading && <div>Generating next order, please wait...</div>}
               {nextOrderMessage && <div style={{ color: nextOrderRows.length ? "#555" : "#8a5a00" }}>{nextOrderMessage}</div>}
               <div>All product rows are included. Positive suggested orders appear first.</div>
-              <div>Formula: projected need minus stock on hand minus future orders. Blue = 0 stock and 0 consumption. Red = stock on hand but 0 consumption.</div>
+              <div>Formula: average daily consumption × voyage days, then subtract stock/future orders after covering usage until arrival. Blue = 0 stock and 0 consumption. Red = stock on hand but 0 consumption.</div>
             </div>
           </div>
         </section>
@@ -3932,7 +4007,10 @@ export default function App() {
                   <div style={styles.recipeMeta}>Stock on hand D: {formatQty(item.stockOnHand)}</div>
                   <div style={styles.recipeMeta}>Future orders F:N: {formatQty(item.futureOrders)}</div>
                   <div style={styles.recipeMeta}>Past consumption AI:AN: {formatQty(item.pastConsumption)}</div>
-                  <div style={styles.recipeMeta}>Projected need: {formatQty(item.projectedNeed)}</div>
+                  <div style={styles.recipeMeta}>Average consumption / day: {formatQty(item.averageConsumptionPerDay)}</div>
+                  <div style={styles.recipeMeta}>Usage until arrival: {formatQty(item.consumptionUntilArrival)}</div>
+                  <div style={styles.recipeMeta}>Available at arrival: {formatQty(item.availableAtArrival)}</div>
+                  <div style={styles.recipeMeta}>Projected voyage need: {formatQty(item.projectedNeed)}</div>
 
                   <div style={Number(item.suggestedOrder || 0) > 0 ? styles.suggestedOrderBlue : styles.statusNeutral}>
                     Suggested Next Order: {formatQty(item.suggestedOrder)}
