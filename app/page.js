@@ -4312,6 +4312,7 @@ export default function App() {
     const totalSuggested = warehouseItems.reduce((sum, item) => sum + item.suggested, 0);
     const criticalItems = warehouseItems.filter((item) => item.suggested > 0).length;
     const warehouseItemsWithPictures = warehouseItems.filter((item) => item.image).length;
+    const warehouseOverstockItems = warehouseItems.filter((item) => Number(item.onHand || 0) - Number(item.par || 0) > 10).length;
 
     return (
       <main style={styles.page}>
@@ -4334,8 +4335,9 @@ export default function App() {
             <div style={styles.infoBox}>
               <div>📦 Items loaded: <strong>{warehouseItems.length}</strong></div>
               <div>🖼️ Pictures matched: <strong>{warehouseItemsWithPictures}</strong></div>
-              <div>🚨 Items needing order: <strong>{criticalItems}</strong></div>
+              <div>🔵 Items needing order: <strong>{criticalItems}</strong></div>
               <div>🛒 Total suggested order: <strong>{formatQty(totalSuggested)}</strong></div>
+              <div>🔴 Over par by more than 10: <strong>{warehouseOverstockItems}</strong></div>
               <div>A = Code, B = Name, G = Par, H = On Hand, M = Future Order</div>
               <div>Pictures are matched from the shared MEL master list by code/name.</div>
             </div>
@@ -4349,7 +4351,7 @@ export default function App() {
               onChange={(e) => setWarehouseSearch(e.target.value)}
               style={styles.searchInput}
             />
-            <p style={styles.emptyText}>Suggested Next Order = Par Level - On Hand - Future Order. Minimum is 0.</p>
+            <p style={styles.emptyText}>Blue = suggested order needed. Red = on hand is more than 10 above par level.</p>
 
             <button style={styles.backButton} onClick={() => loadMasterInventoryItems(makeInventoryShip || userShip)}>
               🔄 Refresh Pictures
@@ -4363,8 +4365,19 @@ export default function App() {
           {warehouseRows.length === 0 && <p style={styles.emptyText}>Upload the warehouse inventory file to begin.</p>}
 
           <div style={styles.equipmentGrid}>
-            {warehouseItems.map((item, i) => (
-              <div key={`${item.code}-${i}`} style={{ ...styles.equipmentCard, ...(item.suggested > 0 ? styles.orderWarningCard : {}) }}>
+            {warehouseItems.map((item, i) => {
+              const overstockAmount = Number(item.onHand || 0) - Number(item.par || 0);
+              const isOverstock = overstockAmount > 10;
+
+              return (
+              <div
+                key={`${item.code}-${i}`}
+                style={{
+                  ...styles.equipmentCard,
+                  ...(item.suggested > 0 ? styles.orderNeededCard : {}),
+                  ...(isOverstock ? styles.overstockCard : {}),
+                }}
+              >
                 {item.image ? (
                   <div>
                     <img
@@ -4408,11 +4421,17 @@ export default function App() {
                 <div style={styles.recipeMeta}>On Hand: {formatQty(item.onHand)}</div>
                 <div style={styles.recipeMeta}>Future Order: {formatQty(item.future)}</div>
                 {item.imageSource && <div style={styles.recipeMeta}>Picture match: {item.imageSource}</div>}
+                {isOverstock && (
+                  <div style={styles.overstockWarning}>
+                    Overstock Alert: {formatQty(overstockAmount)} above par
+                  </div>
+                )}
                 <div style={item.suggested > 0 ? styles.suggestedOrderBad : styles.suggestedOrderGood}>
                   Suggested Next Order: {formatQty(item.suggested)}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {selectedEquipment && (
@@ -4972,8 +4991,11 @@ const styles = {
   imageButton: { display: "block", width: "100%", marginTop: 8, padding: 10, borderRadius: 10, border: 0, background: "#111", color: "#fff", textAlign: "center", cursor: "pointer", fontWeight: "bold" },
   imageLink: { display: "none", marginTop: 8, padding: 10, borderRadius: 10, background: "#111", color: "#fff", textAlign: "center", textDecoration: "none", fontWeight: "bold" },
   orderWarningCard: { border: "2px solid #b00020", background: "#fff0f0" },
+  orderNeededCard: { border: "2px solid #0057b8", background: "#eef5ff" },
+  overstockCard: { border: "2px solid #b00020", background: "#fff0f0" },
+  overstockWarning: { marginTop: 8, padding: 8, borderRadius: 10, background: "#b00020", color: "#fff", fontWeight: "bold", textAlign: "center" },
   zeroCountCard: { border: "2px solid #8a5a00", background: "#fff8e1" },
-  suggestedOrderBad: { marginTop: 8, padding: 8, borderRadius: 10, background: "#b00020", color: "#fff", fontWeight: "bold", textAlign: "center" },
+  suggestedOrderBad: { marginTop: 8, padding: 8, borderRadius: 10, background: "#0057b8", color: "#fff", fontWeight: "bold", textAlign: "center" },
   suggestedOrderGood: { marginTop: 8, padding: 8, borderRadius: 10, background: "#e8f5e9", color: "#2e7d32", fontWeight: "bold", textAlign: "center" },
   statusGood: { marginTop: 8, padding: 8, borderRadius: 10, background: "#e8f5e9", color: "#2e7d32", fontWeight: "bold", textAlign: "center" },
   statusWarning: { marginTop: 8, padding: 8, borderRadius: 10, background: "#fff4d6", color: "#8a5a00", fontWeight: "bold", textAlign: "center" },
