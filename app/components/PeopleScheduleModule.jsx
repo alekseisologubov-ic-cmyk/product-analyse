@@ -47,7 +47,7 @@ const getDefaultNextYearStartDate = () => {
   return `${nextYear}-01-01`;
 };
 
-export default function PeopleScheduleModule({ userShip, onBack, styles }) {
+export default function PeopleScheduleModule({ userShip, onBack, styles, logUsageEvent = () => {} }) {
   const [scheduleShip, setScheduleShip] = useState(SCHEDULE_ALL_SHIPS);
   const [scheduleDate, setScheduleDate] = useState(getDefaultNextYearStartDate());
   const [scheduleSearch, setScheduleSearch] = useState("");
@@ -416,6 +416,17 @@ export default function PeopleScheduleModule({ userShip, onBack, styles }) {
           `${generated.rows.length} projected period(s) for ${getScheduleShipDisplayName(generated.selectedShip)} from ${formatDate(generated.planningStart)} to ${formatDate(generated.planningEnd)}. ` +
           `${generated.replacementRows} replacement assignment(s), ${generated.openSlots} open slot(s), ${generated.missingDateRows} needs-date review row(s).`
         );
+        logUsageEvent("people_schedule_file_uploaded", {
+          module: "people_schedule",
+          fileName: file.name,
+          crewRows: crewRows.length,
+          sheets: selectedSheets,
+          generatedRows: generated.rows.length,
+          selectedShip: generated.selectedShip,
+          replacementRows: generated.replacementRows,
+          openSlots: generated.openSlots,
+          missingDateRows: generated.missingDateRows,
+        });
       } catch (error) {
         setScheduleMessage(`Could not read schedule file: ${error.message}`);
       }
@@ -743,6 +754,14 @@ export default function PeopleScheduleModule({ userShip, onBack, styles }) {
       `Generated ${generated.rows.length} projected period(s) for ${getScheduleShipDisplayName(generated.selectedShip)} from ${formatDate(generated.planningStart)} to ${formatDate(generated.planningEnd)}. ` +
       `${generated.replacementRows} replacement assignment(s), ${generated.openSlots} open slot(s), ${generated.missingDateRows} needs-date review row(s).`
     );
+    logUsageEvent("people_schedule_generated", {
+      module: "people_schedule",
+      generatedRows: generated.rows.length,
+      selectedShip: generated.selectedShip,
+      replacementRows: generated.replacementRows,
+      openSlots: generated.openSlots,
+      missingDateRows: generated.missingDateRows,
+    });
   };
 
   const clearSchedule = () => {
@@ -837,6 +856,13 @@ export default function PeopleScheduleModule({ userShip, onBack, styles }) {
   };
 
   const exportScheduleToExcel = () => {
+    logUsageEvent("export_excel_clicked", {
+      module: "people_schedule",
+      selectedShip: scheduleShip,
+      search: scheduleSearch,
+      rows: getFilteredScheduleRows().length,
+    });
+
     if (!scheduleRows.length) return;
 
     const rows = scheduleRows.map((row) => ({
@@ -864,6 +890,13 @@ export default function PeopleScheduleModule({ userShip, onBack, styles }) {
   };
 
   const printSchedule = () => {
+    logUsageEvent("print_clicked", {
+      module: "people_schedule",
+      selectedShip: scheduleShip,
+      search: scheduleSearch,
+      rows: getFilteredScheduleRows().length,
+    });
+
     if (!scheduleRows.length) return;
 
     const planningStart = getPlanningStartDate();
