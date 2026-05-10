@@ -342,6 +342,7 @@ export default function App() {
   const [editingInventoryId, setEditingInventoryId] = useState(null);
   const [inventorySummary, setInventorySummary] = useState([]);
   const [inventoryReportMode, setInventoryReportMode] = useState("my");
+  const [summaryStationFilter, setSummaryStationFilter] = useState("ALL");
   const [inventoryLoading, setInventoryLoading] = useState(false);
   const [inventoryError, setInventoryError] = useState("");
   const [showVariance, setShowVariance] = useState(false);
@@ -1053,12 +1054,28 @@ export default function App() {
       .sort((a, b) => a.name.localeCompare(b.name));
   };
 
+  const getSummaryStationOptions = () => {
+    const ship = makeInventoryShip || userShip;
+    const stationsFromRecords = inventorySummary
+      .filter((item) => item.ship === ship && item.station)
+      .map((item) => item.station);
+
+    return [...new Set([...STATIONS, ...stationsFromRecords])]
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+  };
+
   const getShipSummaryRows = () => {
     const ship = makeInventoryShip || userShip;
     const grouped = {};
+    const selectedStation = summaryStationFilter || "ALL";
 
     inventorySummary
-      .filter((item) => item.ship === ship)
+      .filter(
+        (item) =>
+          item.ship === ship &&
+          (selectedStation === "ALL" || item.station === selectedStation)
+      )
       .forEach((item) => {
         const key = item.itemKey || cleanText(item.code || item.name);
 
@@ -1092,11 +1109,12 @@ export default function App() {
     return Object.values(grouped)
       .map((item) => ({
         ...item,
+        stationFilter: selectedStation,
         stations: [...item.stations].sort(),
         users: [...item.users].sort(),
         confirmedAt: item.lastUpdated ? new Date(item.lastUpdated).toLocaleString() : "",
       }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => b.totalQty - a.totalQty || a.name.localeCompare(b.name));
   };
 
   const getVisibleInventoryReportRows = () => {
@@ -1487,6 +1505,7 @@ export default function App() {
             Name: item.name || "",
             Category: item.category || "",
             Sheet: item.sheetName || "",
+            StationFilter: summaryStationFilter === "ALL" ? "All Stations" : summaryStationFilter,
             TotalQuantity: item.totalQty,
             Stations: item.stations.join(", "),
             Users: item.users.join(", "),
@@ -1645,7 +1664,8 @@ export default function App() {
             mode === "my"
               ? `<div><strong>Station:</strong> ${escapeHtml(inventoryStation)}</div>
                  <div><strong>User:</strong> ${escapeHtml(getEffectiveInventoryUserName())}</div>`
-              : `<div><strong>Report:</strong> All users and all stations for this ship</div>`
+              : `<div><strong>Report:</strong> All users for this ship</div>
+                 <div><strong>Station Filter:</strong> ${escapeHtml(summaryStationFilter === "ALL" ? "All Stations" : summaryStationFilter)}</div>`
           }
           <div><strong>Printed:</strong> ${escapeHtml(new Date().toLocaleString())}</div>
           <div><strong>Records:</strong> ${escapeHtml(rows.length)}</div>
@@ -3770,6 +3790,8 @@ export default function App() {
     const myReportRows = getMyInventoryRows();
     const summaryReportRows = getShipSummaryRows();
     const visibleReportRows = getVisibleInventoryReportRows();
+    const summaryStationOptions = getSummaryStationOptions();
+    const selectedSummaryStationLabel = summaryStationFilter === "ALL" ? "All Stations" : summaryStationFilter;
     const inventoryStatusRows = getMyInventoryStatusRows();
     const statusCountedItems = inventoryStatusRows.filter((item) => item.status === "Counted");
     const statusPendingItems = inventoryStatusRows.filter((item) => item.status !== "Counted");
@@ -4061,6 +4083,26 @@ export default function App() {
             </div>
           </div>
 
+          {inventoryReportMode === "summary" && (
+            <div style={styles.reportFilterBox}>
+              <label style={styles.label}>📍 Station Filter</label>
+              <select
+                value={summaryStationFilter}
+                onChange={(e) => setSummaryStationFilter(e.target.value)}
+                style={styles.select}
+              >
+                <option value="ALL">All Stations</option>
+                {summaryStationOptions.map((station) => (
+                  <option key={station} value={station}>{station}</option>
+                ))}
+              </select>
+
+              <div style={styles.recipeMeta}>
+                Managers can filter the ship summary by galley/station to see where equipment is being consumed.
+              </div>
+            </div>
+          )}
+
           <div style={styles.infoBox}>
             <div>🚢 Ship: <strong>{makeInventoryShip || userShip}</strong></div>
             {inventoryReportMode === "my" ? (
@@ -4071,8 +4113,9 @@ export default function App() {
               </>
             ) : (
               <>
-                <div>🌍 Report: <strong>All users and all stations for selected ship</strong></div>
-                <div>📦 Summary items: <strong>{summaryReportRows.length}</strong></div>
+                <div>🌍 Report: <strong>All users for selected ship</strong></div>
+                <div>📍 Station Filter: <strong>{selectedSummaryStationLabel}</strong></div>
+                <div>📦 Summary items shown: <strong>{summaryReportRows.length}</strong></div>
               </>
             )}
           </div>
@@ -4080,7 +4123,7 @@ export default function App() {
           {visibleReportRows.length === 0 && (
             <p style={styles.emptyText}>
               {inventoryReportMode === "summary"
-                ? "No ship summary records yet."
+                ? `No ship summary records yet for ${selectedSummaryStationLabel}.`
                 : "Your confirmed quantities will appear here."}
             </p>
           )}
@@ -4096,6 +4139,9 @@ export default function App() {
                     <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
                     <div style={styles.statusGood}>Total Quantity: {formatQty(item.totalQty)}</div>
                     <div style={styles.recipeMeta}>Stations: {item.stations.join(", ") || "N/A"}</div>
+                    {summaryStationFilter !== "ALL" && (
+                      <div style={styles.statusWarning}>Filtered Station: {summaryStationFilter}</div>
+                    )}
                     <div style={styles.recipeMeta}>Users: {item.users.join(", ") || "N/A"}</div>
                     <div style={styles.recipeMeta}>Records: {item.recordCount}</div>
                     <div style={styles.recipeMeta}>Last Updated: {item.confirmedAt}</div>
@@ -4977,6 +5023,7 @@ const styles = {
   fileInput: { display: "block", margin: "8px 0 16px" },
   message: { color: "#555", fontSize: 14 },
   infoBox: { marginTop: 12, padding: 12, borderRadius: 12, background: "#f2f2f2", display: "grid", gap: 6 },
+  reportFilterBox: { marginBottom: 16, padding: 14, borderRadius: 14, background: "#f7fbff", border: "1px solid #cfe4ff", display: "grid", gap: 8 },
   searchInput: { width: "100%", padding: 12, borderRadius: 10, border: "1px solid #ccc", marginBottom: 10 },
   productList: { maxHeight: 300, overflowY: "auto", border: "1px solid #ddd", borderRadius: 12 },
   productItem: { width: "100%", display: "block", textAlign: "left", padding: 10, border: 0, borderBottom: "1px solid #eee", background: "#fff", cursor: "pointer" },
