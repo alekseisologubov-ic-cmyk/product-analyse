@@ -250,6 +250,14 @@ const productNamesMatch = (left, right) => {
   return matchedCount >= Math.ceil(shortTokens.length * 0.75);
 };
 
+const getProductReportKey = (value) => {
+  const displayValue = String(value || "").trim();
+  if (!displayValue) return "";
+
+  const tokens = [...new Set(getProductMatchTokens(displayValue))].sort();
+  return tokens.length ? tokens.join("|") : cleanText(displayValue);
+};
+
 const formatQty = (value) => Number(value || 0).toFixed(2);
 
 const getImageUrl = (url) => {
@@ -290,6 +298,9 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [viewMode, setViewMode] = useState("all");
   const [showProductMissingReport, setShowProductMissingReport] = useState(false);
+  const [productMissingReportRows, setProductMissingReportRows] = useState([]);
+  const [productMissingReportLoading, setProductMissingReportLoading] = useState(false);
+  const [productMissingReportMessage, setProductMissingReportMessage] = useState("");
 
   const [module, setModule] = useState("");
   const [equipmentMode, setEquipmentMode] = useState("");
@@ -1990,38 +2001,164 @@ export default function App() {
     return [...productMap.values()].sort((a, b) => a.localeCompare(b));
   };
 
+  const getReportProductKey = (product) => {
+    const tokens = [...new Set(getProductMatchTokens(product))].sort();
+    return tokens.length ? tokens.join("|") : cleanText(product);
+  };
+
   const getTopNotInUseByLocationReport = (limit = 50) => {
-    const reportRows = [];
-    const reportProducts = getProductReportProductList();
+    const expectedMap = new Map();
+    const usageMap = new Map();
+    const templateLocationKeys = new Set();
+    const templateProductLocationKeys = new Set();
+    const templateLoaded = Object.keys(templateMap || {}).length > 0;
+    const delimiter = "|||";
 
-    reportProducts.forEach((product) => {
-      const breakdown = getCombinedVenueBreakdown(product);
+    const makeExpectedKey = (productKey, venueKey) => `${productKey}${delimiter}${venueKey}`;
 
-      breakdown.forEach((venueItem) => {
-        if (!venueItem.required) return;
-        if (!venueItem.missingShips.length) return;
+    const ensureExpected = ({ product, venueKey, displayName, source, templateName }) => {
+      const productName = String(product || "").trim();
+      const locationKey = normalizeVenue(venueKey);
+      if (!productName || !locationKey) return;
 
-        const visibleTotal = visibleShips.reduce(
-          (sum, ship) => sum + Number(venueItem.ships?.[ship] || 0),
-          0
-        );
+      const productKey = getReportProductKey(productName);
+      if (!productKey) return;
 
-        reportRows.push({
-          product,
-          location: venueItem.displayName,
-          venueKey: venueItem.venueKey,
-          source:
-            venueItem.requiredByRecipe && venueItem.requiredFromTemplate
-              ? "Recipe/Location + Template Charge"
-              : venueItem.requiredFromTemplate
-                ? "Template Charge"
-                : "Recipe/Location",
-          missingShips: venueItem.missingShips,
-          visibleTotal,
-          ships: { ...venueItem.ships },
-          templateMatches: venueItem.templateMatches || [],
-          missingFromTemplate: venueItem.missingFromTemplate,
+      const key = makeExpectedKey(productKey, locationKey);
+
+      if (!expectedMap.has(key)) {
+        expectedMap.set(key, {
+          productKey,
+          product: productName,
+          venueKey: locationKey,
+          location: displayName || venueKey || locationKey,
+          sourceRecipe: false,
+          sourceTemplate: false,
+          templateMatches: new Set(),
         });
+      }
+
+      const row = expectedMap.get(key);
+
+      if (source === "recipe") row.sourceRecipe = true;
+      if (source === "template") row.sourceTemplate = true;
+      if (templateName) row.templateMatches.add(templateName);
+
+      if ((!row.location || row.location === row.venueKey) && displayName) {
+        row.location = displayName;
+      }
+    };
+
+    recipeData.forEach((row) => {
+      const product = String(row[12] || row[7] || "").trim();
+      const venueRaw = String(row[1] || "").trim();
+      const venueKey = normalizeVenue(venueRaw);
+
+      if (!product || !venueKey) return;
+
+      ensureExpected({
+        product,
+        venueKey,
+        displayName: venueRaw || venueKey,
+        source: "recipe",
+      });
+    });
+
+    Object.entries(templateMap || {}).forEach(([templateVenueKey, venueTemplates]) => {
+      const normalizedTemplateVenueKey = normalizeVenue(templateVenueKey);
+      if (normalizedTemplateVenueKey) templateLocationKeys.add(normalizedTemplateVenueKey);
+
+      Object.entries(venueTemplates || {}).forEach(([templateProductKey, data]) => {
+        const product = data.product || templateProductKey;
+        const productKey = getReportProductKey(product);
+        if (!productKey) return;
+
+        const locations = data.templateLocations?.length
+          ? data.templateLocations
+          : (data.templates || []).map((templateName) => ({
+              locationKey: getTemplateLocationKey(templateVenueKey, templateName),
+              displayName: getTemplateLocationDisplay(templateVenueKey, templateName),
+              templateName,
+              sheetName: templateVenueKey,
+            }));
+
+        locations.forEach((location) => {
+          const locationKey = normalizeVenue(
+            location.locationKey || getTemplateLocationKey(location.sheetName || templateVenueKey, location.templateName)
+          );
+          if (!locationKey) return;
+
+          templateLocationKeys.add(locationKey);
+          templateProductLocationKeys.add(makeExpectedKey(productKey, locationKey));
+
+          ensureExpected({
+            product,
+            venueKey: locationKey,
+            displayName: location.displayName || getTemplateLocationDisplay(location.sheetName || templateVenueKey, location.templateName),
+            source: "template",
+            templateName: location.templateName,
+          });
+        });
+      });
+    });
+
+    let currentVenue = "";
+
+    consumptionData.forEach((row) => {
+      if (row[2]) currentVenue = String(row[2]).trim();
+
+      const product = String(row[6] || "").trim();
+      const venueKey = normalizeVenue(currentVenue || "Unknown");
+      if (!product || !venueKey) return;
+
+      const productKey = getReportProductKey(product);
+      if (!productKey) return;
+
+      const key = makeExpectedKey(productKey, venueKey);
+
+      if (!usageMap.has(key)) {
+        usageMap.set(key, { BRL: 0, RL: 0, SC: 0, VL: 0 });
+      }
+
+      const ships = usageMap.get(key);
+      SHIPS.forEach((ship) => {
+        ships[ship] += Number(row[shipColumns[ship]] || 0);
+      });
+    });
+
+    const reportRows = [];
+
+    expectedMap.forEach((expected) => {
+      const key = makeExpectedKey(expected.productKey, expected.venueKey);
+      const ships = usageMap.get(key) || { BRL: 0, RL: 0, SC: 0, VL: 0 };
+
+      const missingShips = visibleShips.filter((ship) => Number(ships[ship] || 0) === 0);
+      if (!missingShips.length) return;
+
+      const visibleTotal = visibleShips.reduce((sum, ship) => sum + Number(ships[ship] || 0), 0);
+      const source =
+        expected.sourceRecipe && expected.sourceTemplate
+          ? "Recipe/Location + Template Charge"
+          : expected.sourceTemplate
+            ? "Template Charge"
+            : "Recipe/Location";
+
+      const missingFromTemplate =
+        expected.sourceRecipe &&
+        templateLoaded &&
+        templateLocationKeys.has(expected.venueKey) &&
+        !templateProductLocationKeys.has(key);
+
+      reportRows.push({
+        product: expected.product,
+        location: expected.location,
+        venueKey: expected.venueKey,
+        source,
+        missingShips,
+        visibleTotal,
+        ships: { ...ships },
+        templateMatches: [...expected.templateMatches].sort(),
+        missingFromTemplate,
       });
     });
 
@@ -2050,8 +2187,42 @@ export default function App() {
       .slice(0, limit);
   };
 
+  const refreshProductMissingReport = () => {
+    setProductMissingReportLoading(true);
+    setProductMissingReportMessage("Preparing report...");
+    setProductMissingReportRows([]);
+
+    window.setTimeout(() => {
+      try {
+        const rows = getTopNotInUseByLocationReport(50);
+        setProductMissingReportRows(rows);
+        setProductMissingReportMessage(rows.length ? "" : "No not-in-use records found for the current view.");
+      } catch (error) {
+        setProductMissingReportRows([]);
+        setProductMissingReportMessage(error?.message || "Could not prepare report.");
+      } finally {
+        setProductMissingReportLoading(false);
+      }
+    }, 25);
+  };
+
+  const toggleProductMissingReport = () => {
+    if (showProductMissingReport) {
+      setShowProductMissingReport(false);
+      return;
+    }
+
+    setShowProductMissingReport(true);
+    refreshProductMissingReport();
+  };
+
   const exportTopNotInUseByLocationReportToExcel = () => {
-    const rows = getTopNotInUseByLocationReport(50);
+    if (productMissingReportLoading) {
+      alert("Report is still preparing. Please wait a moment.");
+      return;
+    }
+
+    const rows = showProductMissingReport ? productMissingReportRows : getTopNotInUseByLocationReport(50);
 
     if (!rows.length) {
       alert("No not-in-use product/location records found for the current view.");
@@ -2085,7 +2256,12 @@ export default function App() {
   };
 
   const printTopNotInUseByLocationReport = () => {
-    const rows = getTopNotInUseByLocationReport(50);
+    if (productMissingReportLoading) {
+      alert("Report is still preparing. Please wait a moment.");
+      return;
+    }
+
+    const rows = showProductMissingReport ? productMissingReportRows : getTopNotInUseByLocationReport(50);
 
     if (!rows.length) {
       alert("No not-in-use product/location records found for the current view.");
@@ -3124,7 +3300,7 @@ export default function App() {
   const productsInRecipe = selectedRecipe ? getProductsInRecipe(selectedRecipe) : [];
   const allergenWarnings = selectedRecipe ? detectAllergens(productsInRecipe) : [];
   const filteredProducts = products.filter((p) => p.toLowerCase().includes(search.toLowerCase()));
-  const topNotInUseReport = showProductMissingReport ? getTopNotInUseByLocationReport(50) : [];
+  const topNotInUseReport = productMissingReportRows;
 
   const totalConsumption = (() => {
     const totals = { BRL: 0, RL: 0, SC: 0, VL: 0 };
@@ -4329,16 +4505,35 @@ export default function App() {
           <div style={styles.headerActions}>
             <button
               style={styles.backButton}
-              onClick={() => setShowProductMissingReport((value) => !value)}
+              onClick={toggleProductMissingReport}
+              disabled={productMissingReportLoading}
             >
-              {showProductMissingReport ? "Hide Report" : "Open Report"}
+              {productMissingReportLoading ? "Preparing..." : showProductMissingReport ? "Hide Report" : "Open Report"}
             </button>
 
-            <button style={styles.backButton} onClick={printTopNotInUseByLocationReport}>
+            {showProductMissingReport && (
+              <button
+                style={styles.backButton}
+                onClick={refreshProductMissingReport}
+                disabled={productMissingReportLoading}
+              >
+                🔄 Refresh Report
+              </button>
+            )}
+
+            <button
+              style={styles.backButton}
+              onClick={printTopNotInUseByLocationReport}
+              disabled={productMissingReportLoading}
+            >
               🖨️ Print
             </button>
 
-            <button style={styles.primaryButton} onClick={exportTopNotInUseByLocationReportToExcel}>
+            <button
+              style={styles.primaryButton}
+              onClick={exportTopNotInUseByLocationReportToExcel}
+              disabled={productMissingReportLoading}
+            >
               📥 Export Excel
             </button>
           </div>
@@ -4350,12 +4545,14 @@ export default function App() {
               <div>📋 Report: <strong>Top 50 Not In Use By Location</strong></div>
               <div>🚢 View: <strong>{viewMode === "single" ? userShip : "All Ships"}</strong></div>
               <div>🔎 Rows found: <strong>{topNotInUseReport.length}</strong></div>
+              {productMissingReportLoading && <div>Preparing report, please wait...</div>}
+              {productMissingReportMessage && <div style={{ color: productMissingReportRows.length ? "#555" : "#8a5a00" }}>{productMissingReportMessage}</div>}
               <div style={{ color: "#b00020" }}>
                 Shows products that are expected by recipe/location or template charge location, but usage is 0 for one or more visible ship(s).
               </div>
             </div>
 
-            {topNotInUseReport.length === 0 && (
+            {!productMissingReportLoading && topNotInUseReport.length === 0 && (
               <p style={styles.emptyText}>
                 No not-in-use records found. Upload consumption, recipe/location, and template files, then open the report again.
               </p>
