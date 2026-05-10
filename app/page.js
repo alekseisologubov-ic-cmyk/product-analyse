@@ -42,21 +42,30 @@ const getScheduleShipDisplayName = (shipCode) =>
   shipCode === SCHEDULE_ALL_SHIPS ? "All Ships" : getShipDisplayName(shipCode);
 
 const STATIONS = [
-  "Galley",
-  "Restaurant",
-  "Bar",
-  "Pantry",
-  "Warehouse",
-  "Dishwash",
-  "Other",
-];
-
-const INVENTORY_USERS = [
-  "Aleksei",
-  "User 1",
-  "User 2",
-  "User 3",
-  "Other",
+  "VEG PREP",
+  "BUTCHER PREP",
+  "FISH PREP",
+  "BAKERY",
+  "PA",
+  "PA/RD PASTRY",
+  "RD",
+  "KT",
+  "TK",
+  "MAIN PASTRY",
+  "TW",
+  "GARDE",
+  "EV",
+  "MANOR",
+  "TDH",
+  "SC",
+  "PP",
+  "TGFH",
+  "GB",
+  "SUN CLUB",
+  "POT WASH DECK 4",
+  "POT WASH DECK 5",
+  "POT WASH DECK 6",
+  "POT WASH DECK 15",
 ];
 
 const SCHEDULE_ROLES = [
@@ -327,7 +336,7 @@ export default function App() {
   const [makeInventoryShip, setMakeInventoryShip] = useState("");
   const [inventoryStation, setInventoryStation] = useState("");
   const [inventoryUserName, setInventoryUserName] = useState("");
-  const [customInventoryUserName, setCustomInventoryUserName] = useState("");
+  const [inventoryUserPosition, setInventoryUserPosition] = useState("");
   const [currentInventoryItem, setCurrentInventoryItem] = useState(null);
   const [inventoryQty, setInventoryQty] = useState("");
   const [editingInventoryId, setEditingInventoryId] = useState(null);
@@ -830,8 +839,11 @@ export default function App() {
   };
 
   const getEffectiveInventoryUserName = () => {
-    if (inventoryUserName === "Other") return customInventoryUserName.trim();
-    return inventoryUserName.trim();
+    const name = inventoryUserName.trim();
+    const position = inventoryUserPosition.trim();
+
+    if (!name) return "";
+    return position ? `${name} - ${position}` : name;
   };
 
   const getInventoryItemKey = (item) =>
@@ -1271,13 +1283,9 @@ export default function App() {
     if (item.station) setInventoryStation(item.station);
 
     if (item.userName) {
-      if (INVENTORY_USERS.includes(item.userName)) {
-        setInventoryUserName(item.userName);
-        setCustomInventoryUserName("");
-      } else {
-        setInventoryUserName("Other");
-        setCustomInventoryUserName(item.userName);
-      }
+      const userParts = String(item.userName).split(" - ");
+      setInventoryUserName(userParts[0]?.trim() || "");
+      setInventoryUserPosition(userParts.slice(1).join(" - ").trim());
     }
   };
 
@@ -3808,28 +3816,20 @@ export default function App() {
             </select>
 
             <label style={styles.label}>Choose user</label>
-            <select
+            <input
+              placeholder="Type your name..."
               value={inventoryUserName}
               onChange={(e) => setInventoryUserName(e.target.value)}
-              style={styles.select}
-            >
-              <option value="">Choose user</option>
-              {INVENTORY_USERS.map((name) => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
+              style={styles.searchInput}
+            />
 
-            {inventoryUserName === "Other" && (
-              <>
-                <label style={styles.label}>Enter your name</label>
-                <input
-                  placeholder="Enter your name..."
-                  value={customInventoryUserName}
-                  onChange={(e) => setCustomInventoryUserName(e.target.value)}
-                  style={styles.searchInput}
-                />
-              </>
-            )}
+            <label style={styles.label}>Position</label>
+            <input
+              placeholder="Type your position..."
+              value={inventoryUserPosition}
+              onChange={(e) => setInventoryUserPosition(e.target.value)}
+              style={styles.searchInput}
+            />
 
             <label style={styles.label}>Upload / Replace Shared Master Inventory List</label>
             <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadMakeInventoryFile} style={styles.fileInput} />
