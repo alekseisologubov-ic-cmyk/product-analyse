@@ -127,6 +127,54 @@ const normalizeVenue = (value) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const cleanTemplateTitle = (value) =>
+  String(value || "")
+    .replace(/\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/\s*-\s*$/g, "")
+    .trim();
+
+const cleanTemplateSheetDisplay = (sheetName) =>
+  String(sheetName || "")
+    .replace(/^\d+\s*[-]?\s*/g, "")
+    .replace(/\bSCL\b/gi, "")
+    .replace(/\bVAL\b/gi, "")
+    .replace(/\bRES\b/gi, "")
+    .replace(/\bBRL\b/gi, "")
+    .replace(/\bROJO\b/gi, "")
+    .replace(/\bARIYA\b/gi, "")
+    .replace(/\bONLY\b/gi, "")
+    .replace(/\s*-\s*$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const getTemplateSectionName = (templateName) => {
+  const cleaned = cleanTemplateTitle(templateName);
+  const parts = cleaned.split(/\s*-\s*/).map((part) => part.trim()).filter(Boolean);
+  return parts.length > 1 ? parts[parts.length - 1] : cleaned;
+};
+
+const getTemplateLocationDisplay = (sheetName, templateName) => {
+  const sheetDisplay = cleanTemplateSheetDisplay(sheetName);
+  const sectionName = getTemplateSectionName(templateName);
+
+  if (!sheetDisplay && !sectionName) return "Template";
+  if (!sheetDisplay) return sectionName;
+  if (!sectionName) return sheetDisplay;
+
+  const sheetKey = normalizeVenue(sheetDisplay);
+  const sectionKey = normalizeVenue(sectionName);
+
+  if (!sectionKey || sheetKey === sectionKey || sheetKey.includes(sectionKey)) {
+    return sheetDisplay;
+  }
+
+  return `${sheetDisplay} - ${sectionName}`;
+};
+
+const getTemplateLocationKey = (sheetName, templateName) =>
+  normalizeVenue(getTemplateLocationDisplay(sheetName, templateName));
+
 const PRODUCT_MATCH_STOP_WORDS = new Set([
   "FRESH",
   "BABY",
@@ -501,8 +549,19 @@ export default function App() {
         row.forEach((cell, colIndex) => {
           if (cleanText(cell) !== "INGREDIENT NAME") return;
 
-          const templateName =
-            String(rows[rowIndex - 1]?.[colIndex] || rows[rowIndex - 1]?.[colIndex - 1] || sheetName || "Template").trim();
+          const templateName = cleanTemplateTitle(
+            rows[rowIndex - 1]?.[colIndex] ||
+            rows[rowIndex - 1]?.[colIndex - 1] ||
+            sheetName ||
+            "Template"
+          );
+
+          const templateLocation = {
+            locationKey: getTemplateLocationKey(sheetName, templateName),
+            displayName: getTemplateLocationDisplay(sheetName, templateName),
+            sheetName,
+            templateName: templateName || sheetName || "Template",
+          };
 
           rows.slice(rowIndex + 1).forEach((dataRow) => {
             const product = String(dataRow[colIndex] || "").trim();
@@ -521,10 +580,15 @@ export default function App() {
             }
 
             if (!map[venueKey][productKey]) {
-              map[venueKey][productKey] = { product, templates: new Set() };
+              map[venueKey][productKey] = {
+                product,
+                templates: new Set(),
+                templateLocations: new Set(),
+              };
             }
 
-            map[venueKey][productKey].templates.add(templateName);
+            map[venueKey][productKey].templates.add(templateName || sheetName || "Template");
+            map[venueKey][productKey].templateLocations.add(JSON.stringify(templateLocation));
           });
         });
       });
@@ -533,6 +597,15 @@ export default function App() {
     Object.keys(map).forEach((venueKey) => {
       Object.keys(map[venueKey]).forEach((productKey) => {
         map[venueKey][productKey].templates = [...map[venueKey][productKey].templates];
+        map[venueKey][productKey].templateLocations = [...(map[venueKey][productKey].templateLocations || [])]
+          .map((locationText) => {
+            try {
+              return JSON.parse(locationText);
+            } catch {
+              return null;
+            }
+          })
+          .filter(Boolean);
       });
     });
 
@@ -1682,9 +1755,7 @@ export default function App() {
     const templateVenueKeys = Object.keys(templateMap || {});
     if (!templateVenueKeys.length) return [];
 
-    // Important: do not fuzzy-match different venue names.
-    // Blue warning should appear only when the recipe/location venue has
-    // the same normalized venue name as a template sheet.
+    // Exact sheet-name match only. No fuzzy venue matching.
     return templateVenueKeys.filter((key) => key === selectedVenue);
   };
 
@@ -1692,19 +1763,43 @@ export default function App() {
     return productNamesMatch(templateProductKey, product);
   };
 
-  const templateHasProduct = (venueKey, product) => {
-    const possibleVenueKeys = getTemplateVenueKeysForVenue(venueKey);
+  const templateLocationExistsForVenue = (venueKey) => {
+    const selectedVenue = normalizeVenue(venueKey);
+    if (!selectedVenue) return false;
 
-    return possibleVenueKeys.some((templateVenueKey) => {
+    if (getTemplateVenueKeysForVenue(selectedVenue).length > 0) return true;
+
+    return Object.values(templateMap || {}).some((venueTemplates) =>
+      Object.values(venueTemplates || {}).some((data) =>
+        (data.templateLocations || []).some((location) => location.locationKey === selectedVenue)
+      )
+    );
+  };
+
+  const templateHasProduct = (venueKey, product) => {
+    const selectedVenue = normalizeVenue(venueKey);
+    const possibleVenueKeys = getTemplateVenueKeysForVenue(selectedVenue);
+
+    const sheetMatch = possibleVenueKeys.some((templateVenueKey) => {
       const venueTemplates = templateMap[templateVenueKey] || {};
       return Object.keys(venueTemplates).some((templateProductKey) =>
         templateProductMatches(templateProductKey, product)
       );
     });
+
+    if (sheetMatch) return true;
+
+    return Object.values(templateMap || {}).some((venueTemplates) =>
+      Object.entries(venueTemplates || {}).some(([templateProductKey, data]) =>
+        templateProductMatches(templateProductKey, product) &&
+        (data.templateLocations || []).some((location) => location.locationKey === selectedVenue)
+      )
+    );
   };
 
   const getTemplateMatches = (venueKey, product) => {
-    const possibleVenueKeys = getTemplateVenueKeysForVenue(venueKey);
+    const selectedVenue = normalizeVenue(venueKey);
+    const possibleVenueKeys = getTemplateVenueKeysForVenue(selectedVenue);
     const matches = [];
 
     possibleVenueKeys.forEach((templateVenueKey) => {
@@ -1714,6 +1809,18 @@ export default function App() {
         if (templateProductMatches(templateProductKey, product)) {
           matches.push(...data.templates);
         }
+      });
+    });
+
+    Object.values(templateMap || {}).forEach((venueTemplates) => {
+      Object.entries(venueTemplates || {}).forEach(([templateProductKey, data]) => {
+        if (!templateProductMatches(templateProductKey, product)) return;
+
+        (data.templateLocations || []).forEach((location) => {
+          if (location.locationKey === selectedVenue && location.templateName) {
+            matches.push(location.templateName);
+          }
+        });
       });
     });
 
@@ -1740,6 +1847,45 @@ export default function App() {
       if (recipeCode || recipeName) {
         required[venueKey].recipes.add(`${recipeCode || "N/A"} - ${recipeName || "Unnamed Recipe"}`);
       }
+    });
+
+    return required;
+  };
+
+  const getTemplateRequiredVenuesForProduct = (product) => {
+    const required = {};
+
+    Object.entries(templateMap || {}).forEach(([venueKey, venueTemplates]) => {
+      Object.entries(venueTemplates || {}).forEach(([templateProductKey, data]) => {
+        if (!templateProductMatches(templateProductKey, product)) return;
+
+        const locations = data.templateLocations?.length
+          ? data.templateLocations
+          : (data.templates || []).map((templateName) => ({
+              locationKey: getTemplateLocationKey(venueKey, templateName),
+              displayName: getTemplateLocationDisplay(venueKey, templateName),
+              templateName,
+            }));
+
+        locations.forEach((location) => {
+          const locationKey = location.locationKey || getTemplateLocationKey(location.sheetName || venueKey, location.templateName);
+          if (!locationKey) return;
+
+          if (!required[locationKey]) {
+            required[locationKey] = {
+              displayName: location.displayName || getTemplateLocationDisplay(location.sheetName || venueKey, location.templateName),
+              templateMatches: new Set(),
+              templateVenueKey: venueKey,
+            };
+          }
+
+          if (location.templateName) required[locationKey].templateMatches.add(location.templateName);
+        });
+      });
+    });
+
+    Object.keys(required).forEach((locationKey) => {
+      required[locationKey].templateMatches = [...required[locationKey].templateMatches];
     });
 
     return required;
@@ -1774,11 +1920,15 @@ export default function App() {
   const getCombinedVenueBreakdown = (product) => {
     const actual = getConsumptionBreakdown(product);
     const required = getRequiredVenuesForProduct(product);
-    const allVenueKeys = Array.from(new Set([...Object.keys(actual), ...Object.keys(required)])).sort();
+    const templateRequired = getTemplateRequiredVenuesForProduct(product);
+    const allVenueKeys = Array.from(
+      new Set([...Object.keys(actual), ...Object.keys(required), ...Object.keys(templateRequired)])
+    ).sort();
 
     return allVenueKeys.map((venueKey) => {
       const actualVenue = actual[venueKey];
       const requiredVenue = required[venueKey];
+      const templateRequiredVenue = templateRequired[venueKey];
 
       const ships = {};
       SHIPS.forEach((ship) => {
@@ -1787,18 +1937,23 @@ export default function App() {
 
       const templateLoaded = Object.keys(templateMap || {}).length > 0;
       const requiredByRecipe = Boolean(requiredVenue);
-      const matchedTemplateVenueKeys = getTemplateVenueKeysForVenue(venueKey);
-      const hasMatchingTemplateVenue = matchedTemplateVenueKeys.length > 0;
+      const requiredByTemplate = Boolean(templateRequiredVenue);
+      const hasMatchingTemplateVenue = templateLocationExistsForVenue(venueKey);
       const inTemplate = requiredByRecipe && hasMatchingTemplateVenue && templateHasProduct(venueKey, product);
-      const templateMatches = inTemplate ? getTemplateMatches(venueKey, product) : [];
+      const recipeTemplateMatches = inTemplate ? getTemplateMatches(venueKey, product) : [];
+      const templateChargeMatches = templateRequiredVenue?.templateMatches || [];
+      const templateMatches = [...new Set([...recipeTemplateMatches, ...templateChargeMatches])];
       const missingFromTemplate = requiredByRecipe && templateLoaded && hasMatchingTemplateVenue && !inTemplate;
+      const requiredForUsage = requiredByRecipe || requiredByTemplate;
 
       return {
         venueKey,
-        displayName: actualVenue?.displayName || requiredVenue?.displayName || venueKey,
+        displayName: actualVenue?.displayName || requiredVenue?.displayName || templateRequiredVenue?.displayName || venueKey,
         ships,
-        required: requiredByRecipe,
-        missingShips: visibleShips.filter((ship) => requiredByRecipe && (ships[ship] || 0) === 0),
+        required: requiredForUsage,
+        requiredByRecipe,
+        requiredFromTemplate: requiredByTemplate,
+        missingShips: visibleShips.filter((ship) => requiredForUsage && (ships[ship] || 0) === 0),
         missingFromTemplate,
         templateMatches,
       };
@@ -3939,8 +4094,8 @@ export default function App() {
             <div>📦 Products loaded: <strong>{products.length}</strong></div>
             <div>📘 Recipe rows loaded: <strong>{Math.max(recipeRows.length - 1, 0)}</strong></div>
             <div>📋 Template: <strong>{templateStatus}</strong></div>
-            <div style={{ color: "#b00020" }}>Red = recipe/location expects usage, but consumption is 0 for visible ship(s).</div>
-            <div style={{ color: "#0057b8" }}>Blue = product is in recipe/location, but missing from template for that venue.</div>
+            <div style={{ color: "#b00020" }}>Red = recipe/location or template charge location expects usage, but consumption is 0 for visible ship(s).</div>
+            <div style={{ color: "#0057b8" }}>Blue = product is in recipe/location, but missing from the matching venue template.</div>
           </div>
         </div>
 
@@ -3994,10 +4149,17 @@ export default function App() {
                 <h4 style={styles.venueTitle}>
                   {venueItem.displayName}
                   <span style={styles.badgeGroup}>
+                    {venueItem.requiredFromTemplate && <span style={styles.chargeBadge}>Template Charge</span>}
                     {venueItem.missingFromTemplate && <span style={styles.templateBadge}>Missing Template</span>}
                     {venueItem.missingShips.length > 0 && <span style={styles.missingBadge}>Missing: {venueItem.missingShips.join(", ")}</span>}
                   </span>
                 </h4>
+
+                {venueItem.requiredFromTemplate && (
+                  <div style={styles.templateFound}>
+                    Template charge location: {venueItem.templateMatches.join(", ") || "Template"}
+                  </div>
+                )}
 
                 {venueItem.missingFromTemplate && (
                   <div style={styles.templateWarningText}>
@@ -4019,7 +4181,11 @@ export default function App() {
                 </div>
 
                 {venueItem.missingShips.length > 0 && (
-                  <div style={styles.warningSmall}>Product appears in recipe/location file for this venue, but usage is 0 for highlighted ship(s).</div>
+                  <div style={styles.warningSmall}>
+                    {venueItem.requiredFromTemplate
+                      ? "Product appears in the template charge location, but usage is 0 for highlighted ship(s)."
+                      : "Product appears in recipe/location file for this venue, but usage is 0 for highlighted ship(s)."}
+                  </div>
                 )}
               </div>
             ))}
@@ -4137,6 +4303,7 @@ const styles = {
   badgeGroup: { display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "flex-end" },
   missingBadge: { fontSize: 12, color: "#fff", background: "#b00020", borderRadius: 999, padding: "4px 8px" },
   templateBadge: { fontSize: 12, color: "#fff", background: "#0057b8", borderRadius: 999, padding: "4px 8px" },
+  chargeBadge: { fontSize: 12, color: "#111", background: "#e8f5e9", borderRadius: 999, padding: "4px 8px", border: "1px solid #2e7d32" },
   templateFound: { color: "#0057b8", fontSize: 13, fontWeight: "bold", marginBottom: 10 },
   templateWarningText: { color: "#0057b8", fontSize: 13, fontWeight: "bold", marginBottom: 10 },
   shipGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(70px, 1fr))", gap: 6 },
