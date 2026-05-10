@@ -3869,26 +3869,31 @@ export default function App() {
               </div>
             </div>
 
-            <h1 style={styles.welcomeTitle}>Press your ship to start</h1>
-            <p style={styles.welcomeSubtitle}>Choose your vessel and open the Virgin Voyages dashboard.</p>
+            <div style={styles.shipPhotoStartBox}>
+              <img src="/ships-start.png" alt="Virgin Voyages ships" style={styles.shipPhotoStartImage} />
 
-            <div style={styles.shipStartGrid}>
-              {SHIPS.map((ship) => (
-                <button
-                  key={ship}
-                  style={styles.shipStartButton}
-                  onClick={() => {
-                    setUserShip(ship);
-                    setLoggedIn(true);
-                  }}
-                >
-                  <span style={styles.shipStartIcon}>🚢</span>
-                  <span style={styles.shipStartCode}>{ship}</span>
-                  <span style={styles.shipStartHint}>Start dashboard</span>
-                </button>
-              ))}
+              <div style={styles.shipPhotoOverlay}>
+                <div style={styles.shipPhotoTitle}>Press the ships to start</div>
+
+                <div style={styles.shipPhotoButtons}>
+                  {SHIPS.map((ship) => (
+                    <button
+                      key={ship}
+                      style={styles.shipPhotoButton}
+                      onClick={() => {
+                        setUserShip(ship);
+                        setLoggedIn(true);
+                      }}
+                    >
+                      <span style={styles.shipPhotoButtonShip}>🚢 {ship}</span>
+                      <span style={styles.shipPhotoButtonHint}>Start</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
+            <p style={styles.welcomeSubtitle}>Choose your vessel and open the Virgin Voyages dashboard.</p>
             <div style={styles.welcomeFooterNote}>Product • Equipment • Inventory • People & Schedule</div>
           </div>
         </section>
@@ -5674,6 +5679,14 @@ const styles = {
   runningLineText: { color: "#e00000", fontFamily: "Brush Script MT, Segoe Script, Lucida Handwriting, Apple Chancery, cursive", fontSize: 44, fontWeight: 400, letterSpacing: 1.1, paddingRight: 70, textShadow: "0 1px 0 rgba(176,0,32,0.10)", lineHeight: 1.15 },
   welcomeTitle: { margin: "8px 0 0", fontSize: 34, lineHeight: 1.1, fontWeight: 900 },
   welcomeSubtitle: { margin: 0, color: "#555", fontSize: 16 },
+  shipPhotoStartBox: { position: "relative", width: "100%", minHeight: 330, borderRadius: 26, overflow: "hidden", border: "1px solid rgba(0,0,0,0.10)", boxShadow: "0 16px 42px rgba(0,0,0,0.18)", background: "#111" },
+  shipPhotoStartImage: { width: "100%", height: 350, objectFit: "cover", display: "block", filter: "saturate(1.12) contrast(1.04)" },
+  shipPhotoOverlay: { position: "absolute", inset: 0, padding: 22, display: "flex", flexDirection: "column", justifyContent: "space-between", background: "linear-gradient(180deg, rgba(0,0,0,0.16) 0%, rgba(0,0,0,0.05) 43%, rgba(0,0,0,0.62) 100%)" },
+  shipPhotoTitle: { alignSelf: "center", padding: "11px 22px", borderRadius: 999, background: "rgba(255,255,255,0.92)", color: "#111", fontSize: 28, fontWeight: 900, boxShadow: "0 8px 20px rgba(0,0,0,0.20)", letterSpacing: 0.2 },
+  shipPhotoButtons: { display: "grid", gridTemplateColumns: "repeat(4, minmax(90px, 1fr))", gap: 12, width: "100%" },
+  shipPhotoButton: { minHeight: 82, border: "1px solid rgba(255,255,255,0.75)", borderRadius: 18, background: "rgba(17,17,17,0.88)", color: "#fff", cursor: "pointer", display: "grid", alignContent: "center", justifyItems: "center", gap: 5, boxShadow: "0 8px 24px rgba(0,0,0,0.28)", backdropFilter: "blur(4px)", fontWeight: "bold" },
+  shipPhotoButtonShip: { fontSize: 22, fontWeight: 900, letterSpacing: 0.8 },
+  shipPhotoButtonHint: { fontSize: 12, opacity: 0.82, textTransform: "uppercase", letterSpacing: 1 },
   shipStartGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 14, marginTop: 8 },
   shipStartButton: { minHeight: 142, border: "1px solid #ddd", borderRadius: 22, background: "linear-gradient(180deg, #ffffff 0%, #f7f7f7 100%)", cursor: "pointer", display: "grid", alignContent: "center", justifyItems: "center", gap: 8, boxShadow: "0 8px 22px rgba(0,0,0,0.08)", transition: "transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease", color: "#111" },
   shipStartIcon: { fontSize: 34 },
