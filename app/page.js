@@ -5507,8 +5507,16 @@ export default function App() {
                           <span style={styles.shipName}>{ship}</span>
                           <strong>{formatQty(shipData.qty)}</strong>
                           <span>{formatMoney(shipData.cost)}</span>
-                          {shipData.unitPrice > 0 && <small>{formatMoney(shipData.unitPrice)} / unit</small>}
-                          {shipData.isLowestUnitPrice && <div style={styles.lowestPriceBadge}>Lowest unit price</div>}
+                          {shipData.unitPrice > 0 ? (
+                            <small>{formatMoney(shipData.unitPrice)} / unit</small>
+                          ) : (
+                            <small style={styles.costUnitPricePlaceholder}>—</small>
+                          )}
+                          {shipData.isLowestUnitPrice ? (
+                            <div style={styles.lowestPriceBadge}>Lowest unit price</div>
+                          ) : (
+                            <div style={styles.lowestPriceBadgeSpacer} />
+                          )}
                         </div>
                       );
                     })}
@@ -5890,18 +5898,20 @@ const styles = {
   nextOrderStatusBlue: { padding: 6, borderRadius: 8, background: "#0057b8", color: "#fff", fontWeight: "bold", textAlign: "center", fontSize: 12 },
   nextOrderStatusRed: { padding: 6, borderRadius: 8, background: "#b00020", color: "#fff", fontWeight: "bold", textAlign: "center", fontSize: 12 },
   nextOrderStatusNeutral: { padding: 6, borderRadius: 8, background: "#f2f2f2", color: "#555", fontWeight: "bold", textAlign: "center", fontSize: 12 },
-  costReportGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14, marginTop: 14 },
-  costReportCard: { border: "1px solid #ddd", borderRadius: 14, padding: 12, background: "#fafafa", display: "grid", gap: 10, textAlign: "left" },
-  costReportHeader: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" },
+  costReportGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 14, marginTop: 14, alignItems: "stretch" },
+  costReportCard: { border: "1px solid #ddd", borderRadius: 14, padding: 12, background: "#fafafa", display: "grid", gap: 10, textAlign: "left", alignContent: "start" },
+  costReportHeader: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", minHeight: 58 },
   costReportTotals: { minWidth: 86, padding: 8, borderRadius: 10, background: "#111", color: "#fff", display: "grid", gap: 2, textAlign: "center", fontSize: 12 },
-  costVenueBlock: { border: "1px solid #e1e1e1", borderRadius: 12, padding: 10, background: "#fff", display: "grid", gap: 8 },
-  costVenueTitle: { fontWeight: "bold", fontSize: 14 },
-  costShipGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(92px, 1fr))", gap: 6 },
-  costShipBox: { border: "1px solid #ddd", borderRadius: 10, padding: 8, background: "#fff", display: "grid", gap: 3, textAlign: "center", fontSize: 12 },
+  costVenueBlock: { border: "1px solid #e1e1e1", borderRadius: 12, padding: 10, background: "#fff", display: "grid", gap: 8, alignContent: "start" },
+  costVenueTitle: { fontWeight: "bold", fontSize: 14, minHeight: 18 },
+  costShipGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))", gap: 8, alignItems: "stretch" },
+  costShipBox: { border: "1px solid #ddd", borderRadius: 10, padding: 8, background: "#fff", display: "grid", gridTemplateRows: "16px 22px 22px 18px 34px", gap: 4, textAlign: "center", fontSize: 12, minHeight: 136, boxSizing: "border-box", alignContent: "center" },
   costShipLowestPrice: { border: "2px solid #2e7d32", background: "#e8f5e9", color: "#2e7d32", fontWeight: "bold" },
   costShipEmpty: { opacity: 0.5 },
-  lowestPriceBadge: { marginTop: 4, padding: "3px 5px", borderRadius: 999, background: "#2e7d32", color: "#fff", fontSize: 10, fontWeight: "bold" },
-  priceDifferenceNote: { color: "#2e7d32", fontSize: 12, fontWeight: "bold" },
+  costUnitPricePlaceholder: { visibility: "hidden" },
+  lowestPriceBadge: { marginTop: 4, padding: "4px 6px", borderRadius: 999, background: "#2e7d32", color: "#fff", fontSize: 10, fontWeight: "bold", minHeight: 24, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1.1 },
+  lowestPriceBadgeSpacer: { minHeight: 32 },
+  priceDifferenceNote: { color: "#2e7d32", fontSize: 12, fontWeight: "bold", minHeight: 28 },
   equipmentCategory: { marginBottom: 24 },
   equipmentGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 },
   equipmentCard: { border: "1px solid #ddd", borderRadius: 14, padding: 14, background: "#fafafa", display: "grid", gap: 8, cursor: "pointer", textAlign: "left" },
