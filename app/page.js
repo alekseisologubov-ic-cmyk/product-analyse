@@ -460,6 +460,9 @@ const [showProductMissingReport, setShowProductMissingReport] = useState(false);
 const [productMissingReportRows, setProductMissingReportRows] = useState([]);
 const [productMissingReportLoading, setProductMissingReportLoading] = useState(false);
 const [productMissingReportMessage, setProductMissingReportMessage] = useState("");
+  const topNotInUseReport = Array.isArray(productMissingReportRows)
+  ? productMissingReportRows
+  : [];
   const [nextOrderSourceRows, setNextOrderSourceRows] = useState([]);
   const [nextOrderMeta, setNextOrderMeta] = useState({});
   const [nextOrderFileName, setNextOrderFileName] = useState("");
