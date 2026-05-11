@@ -423,6 +423,7 @@ export default function App() {
 
   const [module, setModule] = useState("");
   const [productMode, setProductMode] = useState("");
+  const [equipmentDepartment, setEquipmentDepartment] = useState("");
   const [equipmentMode, setEquipmentMode] = useState("");
 
   const [musterItems, setMusterItems] = useState([]);
@@ -2947,7 +2948,7 @@ export default function App() {
                       <td>${formatQty(item.futureOrders)}</td>
                       <td>${formatQty(item.pastConsumption)}</td>
                       <td>${formatQty(item.averageConsumptionPerDay)}</td>
-                                            <td>${formatQty(item.consumptionUntilArrival)}</td>
+                      <td>${formatQty(item.consumptionUntilArrival)}</td>
                       <td>${formatQty(item.availableAtArrival)}</td>
                       <td>${formatQty(item.projectedNeed)}</td>
                       <td class="qty">${formatQty(item.suggestedOrder)}</td>
@@ -3314,6 +3315,8 @@ export default function App() {
               style={styles.moduleCard}
               onClick={() => {
                 setModule("equipment");
+                setEquipmentDepartment("");
+                setEquipmentMode("");
                 logUsageEvent("module_opened", { module: "equipment", ship: userShip });
               }}
             >
@@ -3584,19 +3587,105 @@ export default function App() {
     );
   }
 
-  if (module === "equipment" && !equipmentMode) {
+  if (module === "equipment" && !equipmentDepartment) {
     return (
       <main style={styles.page}>
         <header style={styles.header}>
           <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
           <div style={styles.headerActions}>
-            <button style={styles.backButton} onClick={() => setModule("")}>← Back</button>
+            <button style={styles.backButton} onClick={() => setModule("")}>← Modules</button>
             <div style={styles.shipBadge}>🚢 {userShip}</div>
           </div>
         </header>
 
         <section style={styles.card}>
-          <h2 style={styles.cardTitle}>🍽️ Equipment Options</h2>
+          <h2 style={styles.cardTitle}>🍽️ Equipment Department</h2>
+          <p style={styles.emptyText}>Choose which operation area you want to work with.</p>
+
+          <div style={styles.moduleGrid}>
+            <button
+              style={styles.moduleCard}
+              onClick={() => {
+                setEquipmentDepartment("culinary");
+                setEquipmentMode("");
+                logUsageEvent("equipment_department_opened", { module: "equipment_culinary", ship: userShip });
+              }}
+            >
+              <div style={styles.moduleIcon}>👨‍🍳</div>
+              <strong>Culinary</strong>
+              <span>Current equipment tools: muster list, inventory in use, warehouse and make inventory.</span>
+            </button>
+
+            <button
+              style={styles.moduleCard}
+              onClick={() => {
+                setEquipmentDepartment("bar");
+                setEquipmentMode("");
+                logUsageEvent("equipment_department_opened", { module: "equipment_bar", ship: userShip });
+              }}
+            >
+              <div style={styles.moduleIcon}>🍸</div>
+              <strong>Bar</strong>
+              <span>Bar equipment tools will be added here.</span>
+            </button>
+
+            <button
+              style={styles.moduleCard}
+              onClick={() => {
+                setEquipmentDepartment("restaurant");
+                setEquipmentMode("");
+                logUsageEvent("equipment_department_opened", { module: "equipment_restaurant", ship: userShip });
+              }}
+            >
+              <div style={styles.moduleIcon}>🍽️</div>
+              <strong>Restaurant</strong>
+              <span>Restaurant equipment tools will be added here.</span>
+            </button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (module === "equipment" && equipmentDepartment && equipmentDepartment !== "culinary") {
+    const departmentLabel = equipmentDepartment === "bar" ? "Bar" : "Restaurant";
+    const departmentIcon = equipmentDepartment === "bar" ? "🍸" : "🍽️";
+
+    return (
+      <main style={styles.page}>
+        <header style={styles.header}>
+          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
+          <div style={styles.headerActions}>
+            <button style={styles.backButton} onClick={() => setEquipmentDepartment("")}>← Equipment Department</button>
+            <div style={styles.shipBadge}>🚢 {userShip}</div>
+          </div>
+        </header>
+
+        <section style={styles.card}>
+          <h2 style={styles.cardTitle}>{departmentIcon} {departmentLabel} Equipment</h2>
+          <div style={styles.infoBox}>
+            <div><strong>{departmentLabel}</strong> equipment workflow is ready as a separate area.</div>
+            <div>Current existing equipment tools are under <strong>Culinary</strong>.</div>
+            <div>Next we can add {departmentLabel.toLowerCase()} master lists, counts, and warehouse reports here.</div>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (module === "equipment" && equipmentDepartment === "culinary" && !equipmentMode) {
+    return (
+      <main style={styles.page}>
+        <header style={styles.header}>
+          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
+          <div style={styles.headerActions}>
+            <button style={styles.backButton} onClick={() => setEquipmentDepartment("")}>← Equipment Department</button>
+            <div style={styles.shipBadge}>🚢 {userShip}</div>
+          </div>
+        </header>
+
+        <section style={styles.card}>
+          <h2 style={styles.cardTitle}>👨‍🍳 Culinary Equipment Options</h2>
 
           <div style={styles.moduleGrid}>
             <button
@@ -3628,7 +3717,7 @@ export default function App() {
     );
   }
 
-  if (module === "equipment" && equipmentMode === "inventory") {
+  if (module === "equipment" && equipmentDepartment === "culinary" && equipmentMode === "inventory") {
     return (
       <main style={styles.page}>
         <header style={styles.header}>
@@ -3684,7 +3773,7 @@ export default function App() {
     );
   }
 
-  if (module === "equipment" && equipmentMode === "makeinventory") {
+  if (module === "equipment" && equipmentDepartment === "culinary" && equipmentMode === "makeinventory") {
     const filteredMakeInventoryItems = getFilteredMakeInventoryItems();
     const myReportRows = getMyInventoryRows();
     const summaryReportRows = getShipSummaryRows();
@@ -4141,7 +4230,7 @@ export default function App() {
     );
   }
 
-  if (module === "equipment" && equipmentMode === "inuse") {
+  if (module === "equipment" && equipmentDepartment === "culinary" && equipmentMode === "inuse") {
     const inUseItems = parseInUseItems();
     const missingItems = inUseItems.filter((item) => item.status === "Missing");
     const zeroItems = inUseItems.filter((item) => item.status === "Zero Count");
@@ -4254,7 +4343,7 @@ export default function App() {
     );
   }
 
-  if (module === "equipment" && equipmentMode === "warehouse") {
+  if (module === "equipment" && equipmentDepartment === "culinary" && equipmentMode === "warehouse") {
     const allWarehouseItems = parseWarehouseItems();
     const isWarehouseOverstock = (item) => Number(item.onHand || 0) - Number(item.par || 0) > 10;
     const needsWarehouseOrder = (item) => Number(item.suggested || 0) > 0;
@@ -4452,7 +4541,7 @@ export default function App() {
     );
   }
 
-  if (module === "equipment" && equipmentMode === "muster") {
+  if (module === "equipment" && equipmentDepartment === "culinary" && equipmentMode === "muster") {
     const groupedMuster = parseMusterItems();
     const totalItems = Object.values(groupedMuster).reduce((sum, items) => sum + items.length, 0);
 
