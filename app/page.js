@@ -450,6 +450,10 @@ export default function App() {
   const [emailConfirmed, setEmailConfirmed] = useState(false);
   const [rememberEmail, setRememberEmail] = useState(false);
   const [emailError, setEmailError] = useState("");
+  const [emailOtpCode, setEmailOtpCode] = useState("");
+const [emailCodeSent, setEmailCodeSent] = useState(false);
+const [emailMessage, setEmailMessage] = useState("");
+const [otpLoading, setOtpLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [viewMode, setViewMode] = useState("all");
   const [showProductMissingReport, setShowProductMissingReport] = useState(false);
