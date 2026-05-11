@@ -42,7 +42,6 @@ const isVirginVoyagesEmail = (value) => {
 
 const USER_EMAIL_STORAGE_KEY = "vv_app_user_email";
 
-const SHIPS = ["BRL", "RL", "SC", "VL"];
 
 const SHIP_DISPLAY_NAMES = {
   BRL: "Brilliant Lady",
