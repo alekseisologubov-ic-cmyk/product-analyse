@@ -554,7 +554,7 @@ export default function App() {
           event: "*",
           schema: "public",
           table: "inventory_master_items",
-          filter: `ship=eq.${MASTER_INVENTORY_SCOPE}`,
+          filter: `ship=.eq("ship", getMasterInventoryScope(equipmentDepartment))
         },
         () => {
           scheduleRealtimeRefresh("master", makeInventoryShip || userShip);
@@ -1463,7 +1463,7 @@ let sourceText = `Shared ${activeEquipmentDepartmentLabel} master list loaded fo
     const deleteResult = await supabase
       .from("inventory_master_items")
       .delete()
-      .eq("ship", MASTER_INVENTORY_SCOPE);
+      .eq("ship", getMasterInventoryScope(equipmentDepartment))
 
     if (deleteResult.error) {
       const text = `Could not replace shared master inventory: ${deleteResult.error.message}`;
@@ -1481,7 +1481,7 @@ let sourceText = `Shared ${activeEquipmentDepartmentLabel} master list loaded fo
       if (!itemKey || rowMap.has(itemKey)) return;
 
       rowMap.set(itemKey, {
-        ship: MASTER_INVENTORY_SCOPE,
+        ship: getMasterInventoryScope(equipmentDepartment),
         item_key: itemKey,
         code: item.code || "",
         item_name: item.name || "",
