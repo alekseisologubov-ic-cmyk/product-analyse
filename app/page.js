@@ -1356,8 +1356,14 @@ const parseEquipmentMasterFile = async (file) => {
     return position ? `${name} - ${position}` : name;
   };
 
-  const getInventoryItemKey = (item) =>
-    cleanText(`${item?.sheetName || ""}|${item?.category || ""}|${item?.code || ""}|${item?.name || ""}|${item?.sourceRow || ""}`);
+  const getInventoryItemKey = (item) => {
+  const departmentKey = cleanText(item?.equipmentDepartment || equipmentDepartment || "culinary")
+    .replace(/[^A-Z0-9]/g, "_");
+
+  return cleanText(
+    `${departmentKey}|${item?.sheetName || ""}|${item?.category || ""}|${item?.code || ""}|${item?.name || ""}|${item?.sourceRow || ""}`
+  );
+};
 
   const normalizeInventoryRecord = (record) => ({
     id: record.id,
