@@ -2948,7 +2948,7 @@ export default function App() {
                       <td>${formatQty(item.pastConsumption)}</td>
                       <td>${formatQty(item.averageConsumptionPerDay)}</td>
                       <td>${formatQty(item.consumptionUntilArrival)}</td>
-                      <td>${formatQty(item.availableAtArrival)}</td>
+                                            <td>${formatQty(item.availableAtArrival)}</td>
                       <td>${formatQty(item.projectedNeed)}</td>
                       <td class="qty">${formatQty(item.suggestedOrder)}</td>
                       <td class="${item.alertType === "red" ? "red" : item.alertType === "blue" || item.alertType === "order" ? "blue" : ""}">${escapeHtml(item.alertLabel || "")}</td>
@@ -3168,23 +3168,20 @@ export default function App() {
               </div>
             </div>
 
-            <div style={styles.shipPhotoStartBox}>
-              <img src="/ships-start.png" alt="Virgin Voyages ships" style={styles.shipPhotoStartImage} />
-
-              <div style={styles.shipPhotoOverlayBottom}>
-                <button
-                  style={styles.welcomeStartButton}
-                  onClick={() => {
-                    logUsageEvent("welcome_start_clicked", { module: "welcome" });
-                    setWelcomeStarted(true);
-                  }}
-                >
-                  Start
-                </button>
-              </div>
+            <div style={styles.ahoyStartBox}>
+              <button
+                style={styles.ahoyStartButton}
+                onClick={() => {
+                  logUsageEvent("welcome_start_clicked", { module: "welcome" });
+                  setWelcomeStarted(true);
+                }}
+                aria-label="Start"
+              >
+                AHOY
+              </button>
             </div>
 
-            <p style={styles.welcomeSubtitle}>Press Start, choose your ship, and open the Virgin Voyages dashboard.</p>
+            <p style={styles.welcomeSubtitle}>Press AHOY, enter your email, choose your ship, and open the Virgin Voyages dashboard.</p>
             <div style={styles.welcomeFooterNote}>Product • Equipment • Inventory • People & Schedule</div>
           </div>
         </section>
@@ -4908,6 +4905,8 @@ const styles = {
   runningLineText: { color: "#e00000", fontFamily: "Brush Script MT, Segoe Script, Lucida Handwriting, Apple Chancery, cursive", fontSize: 44, fontWeight: 400, letterSpacing: 1.1, paddingRight: 70, textShadow: "0 1px 0 rgba(176,0,32,0.10)", lineHeight: 1.15 },
   welcomeTitle: { margin: "8px 0 0", fontSize: 34, lineHeight: 1.1, fontWeight: 900 },
   welcomeSubtitle: { margin: 0, color: "#555", fontSize: 16 },
+  ahoyStartBox: { position: "relative", width: "100%", minHeight: 330, borderRadius: 28, overflow: "hidden", border: "1px solid rgba(224,0,0,0.16)", boxShadow: "0 16px 42px rgba(0,0,0,0.10)", background: "radial-gradient(circle at center, #ffffff 0%, #fffafa 45%, #fff0f0 100%)", display: "flex", alignItems: "center", justifyContent: "center" },
+  ahoyStartButton: { padding: "18px 42px", border: 0, background: "transparent", color: "#e00000", fontFamily: "Brush Script MT, Segoe Script, Lucida Handwriting, Apple Chancery, cursive", fontSize: "clamp(96px, 18vw, 190px)", fontWeight: 400, cursor: "pointer", lineHeight: 0.9, letterSpacing: 1.2, textShadow: "0 4px 0 rgba(255,255,255,0.95), 0 0 24px rgba(255,255,255,0.95), 0 4px 12px rgba(176,0,32,0.18)" },
   shipPhotoStartBox: { position: "relative", width: "100%", minHeight: 330, borderRadius: 26, overflow: "hidden", border: "1px solid rgba(0,0,0,0.10)", boxShadow: "0 16px 42px rgba(0,0,0,0.18)", background: "#111" },
   shipPhotoStartImage: { width: "100%", height: 350, objectFit: "cover", display: "block", filter: "saturate(1.12) contrast(1.04)" },
   shipPhotoOverlay: { position: "absolute", inset: 0, padding: 22, display: "flex", flexDirection: "column", justifyContent: "space-between", background: "linear-gradient(180deg, rgba(0,0,0,0.16) 0%, rgba(0,0,0,0.05) 43%, rgba(0,0,0,0.62) 100%)" },
