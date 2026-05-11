@@ -1036,7 +1036,7 @@ const extractEmbeddedImagesByCell = async (arrayBuffer, sheetName) => {
       const colNumber = Number(colNode?.textContent || 0);
       const rowNumber = Number(rowNode?.textContent || 0);
 
-      const cellAddress = `${columnNumberToLetters(colNumber)}${rowNumber + 1}`;
+      const cellAddress = columnNumberToLetters(colNumber) + String(rowNumber + 1);
 
       let dataUrl = "";
 
