@@ -564,16 +564,16 @@ export default function App() {
 
     channels.push(masterChannel);
 
-    if (equipmentMode === "makeinventory" && makeInventoryShip) {
+        if (equipmentMode === "makeinventory" && makeInventoryShip) {
       const countsChannel = supabase
-        .channel(`inventory-counts-${makeInventoryShip}`)
+        .channel("inventory-counts-" + makeInventoryShip)
         .on(
           "postgres_changes",
           {
             event: "*",
             schema: "public",
             table: "inventory_counts",
-            filter: `ship=eq.${makeInventoryShip}`,
+            filter: "ship=eq." + makeInventoryShip,
           },
           () => {
             scheduleRealtimeRefresh("counts", makeInventoryShip);
