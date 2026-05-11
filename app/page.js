@@ -2,21 +2,18 @@
 
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
-import { supabase } from "./lib/supabaseClient";
-import {
-  SHIPS,
-  MAKE_INVENTORY_STATIONS,
-  ALLERGEN_RULES,
-  EQUIPMENT_DEPARTMENTS,
-} from "./constants/appConstants";
-
-import WelcomePage from "./components/welcome/WelcomePage";
-import EmailGate from "./components/welcome/EmailGate";
-import ShipSelect from "./components/welcome/ShipSelect";
+import { createClient } from "@supabase/supabase-js";
 
 const loadPeopleScheduleModule = () => import("./components/PeopleScheduleModule");
 const PeopleScheduleModule = lazy(loadPeopleScheduleModule);
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+
+const supabase =
+  supabaseUrl && supabaseAnonKey
+    ? createClient(supabaseUrl, supabaseAnonKey)
+    : null;
 
 const getOrCreateVisitorId = () => {
   if (typeof window === "undefined") return "";
@@ -44,6 +41,7 @@ const isVirginVoyagesEmail = (value) => {
 
 const USER_EMAIL_STORAGE_KEY = "vv_app_user_email";
 
+const SHIPS = ["BRL", "RL", "SC", "VL"];
 
 const SHIP_DISPLAY_NAMES = {
   BRL: "Brilliant Lady",
@@ -72,6 +70,33 @@ const getShipDisplayName = (shipCode) => SHIP_DISPLAY_NAMES[shipCode] || shipCod
 const getScheduleShipDisplayName = (shipCode) =>
   shipCode === SCHEDULE_ALL_SHIPS ? "All Ships" : getShipDisplayName(shipCode);
 
+const STATIONS = [
+  "VEG PREP",
+  "BUTCHER PREP",
+  "FISH PREP",
+  "BAKERY",
+  "Pink Agave",
+  "Pastry deck 5",
+  "Razzle Dazzle",
+  "Kitchen Table",
+  "Test Kitchen",
+  "Pastry deck 6",
+  "The Wake",
+  "Garde Manger",
+  "Extra Virgin",
+  "Manor",
+  "The Dock House",
+  "Social Club",
+  "Pizza Place",
+  "The Galley",
+  "Gunbae",
+  "Sun Club",
+  "Locker deck 6",
+  "POT WASH DECK 4",
+  "POT WASH DECK 5",
+  "POT WASH DECK 6",
+  "POT WASH DECK 15",
+];
 
 const SCHEDULE_ROLES = [
   "Cook",
@@ -107,6 +132,19 @@ const SCHEDULE_ROTATION_RULES = {
   PASTRY: { contractMonths: 4, vacationMonths: 2, label: "4 month contract / 2 month rotation" },
 };
 
+const ALLERGEN_RULES = [
+  { allergen: "Tree Nuts", keywords: ["almond", "walnut", "pecan", "cashew", "hazelnut", "pistachio", "macadamia"] },
+  { allergen: "Peanuts", keywords: ["peanut"] },
+  { allergen: "Seeds", keywords: ["seed", "seeds", "sunflower seed", "pumpkin seed", "chia", "flax", "hemp seed"], exclude: ["seedless", "seedless cucumber"] },
+  { allergen: "Soy", keywords: ["soy", "tofu", "edamame", "miso", "tamari"] },
+  { allergen: "Gluten", keywords: ["wheat", "flour", "gluten", "bread", "pasta", "semolina", "barley", "rye", "panko"] },
+  { allergen: "Milk / Dairy", keywords: ["milk", "cream", "butter", "cheese", "yogurt", "parmesan", "mozzarella", "ricotta", "cream cheese"] },
+  { allergen: "Egg", keywords: ["egg", "eggs", "mayonnaise", "aioli"], exclude: ["eggplant"] },
+  { allergen: "Fish", keywords: ["salmon", "tuna", "cod", "anchovy", "fish", "sardine"] },
+  { allergen: "Shellfish", keywords: ["shrimp", "crab", "lobster", "mussel", "oyster", "scallop"], exclude: ["clam shell", "clamshell", "packed in a clam shell"] },
+  { allergen: "Sesame", keywords: ["sesame", "tahini"] },
+  { allergen: "Mustard", keywords: ["mustard"] },
+];
 
 const cleanText = (value) =>
   String(value || "").toUpperCase().replace(/\s+/g, " ").trim();
@@ -3103,62 +3141,148 @@ export default function App() {
     return { totals, allShips };
   })();
 
-    if (!loggedIn && !welcomeStarted) {
+  if (!loggedIn && !welcomeStarted) {
     return (
-      <WelcomePage
-        styles={styles}
-        onStart={() => {
-          logUsageEvent("welcome_start_clicked", {
-            module: "welcome",
-            userEmail: normalizeAppEmail(userEmail),
-          });
-          setWelcomeStarted(true);
-        }}
-      />
+      <main style={styles.welcomePage}>
+        <style>{`
+          @keyframes vvMarquee {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+          }
+
+          @keyframes vvGlow {
+            0%, 100% { box-shadow: 0 18px 50px rgba(0,0,0,0.18); }
+            50% { box-shadow: 0 22px 70px rgba(176,0,32,0.28); }
+          }
+        `}</style>
+
+        <section style={styles.welcomeHero}>
+          <div style={styles.welcomeGlowCard}>
+            <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.welcomeLogo} />
+
+            <div style={styles.runningLineWrapper}>
+              <div style={styles.runningLineTrack}>
+                <span style={styles.runningLineText}>Use it • Save Time • Be the Reason Someone Smiles Today • </span>
+                <span style={styles.runningLineText}>Use it • Save Time • Be the Reason Someone Smiles Today • </span>
+                <span style={styles.runningLineText}>Use it • Save Time • Be the Reason Someone Smiles Today • </span>
+                <span style={styles.runningLineText}>Use it • Save Time • Be the Reason Someone Smiles Today • </span>
+              </div>
+            </div>
+
+            <div style={styles.ahoyStartBox}>
+              <button
+                style={styles.ahoyStartButton}
+                onClick={() => {
+                  logUsageEvent("welcome_start_clicked", { module: "welcome" });
+                  setWelcomeStarted(true);
+                }}
+                aria-label="Start"
+              >
+                AHOY
+              </button>
+            </div>
+
+            <p style={styles.welcomeSubtitle}>Press AHOY, enter your email, choose your ship, and open the Virgin Voyages dashboard.</p>
+            <div style={styles.welcomeFooterNote}>Product • Equipment • Inventory • People & Schedule</div>
+          </div>
+        </section>
+      </main>
     );
   }
 
   if (!loggedIn && welcomeStarted && !emailConfirmed) {
     return (
-      <EmailGate
-        styles={styles}
-        userEmail={userEmail}
-        setUserEmail={setUserEmail}
-        emailError={emailError}
-        setEmailError={setEmailError}
-        rememberEmail={rememberEmail}
-        setRememberEmail={setRememberEmail}
-        onContinue={confirmUserEmail}
-        onBack={() => {
-          setWelcomeStarted(false);
-          setEmailError("");
-        }}
-      />
+      <main style={styles.page}>
+        <section style={styles.loginCard}>
+          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.logo} />
+          <h1 style={styles.title}>Enter Your Email</h1>
+          <p style={styles.subtitle}>Use your Virgin Voyages email to continue.</p>
+
+          <label style={styles.label}>✉️ Virgin Voyages email</label>
+          <input
+            type="email"
+            value={userEmail}
+            onChange={(e) => {
+              setUserEmail(e.target.value);
+              setEmailError("");
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") confirmUserEmail();
+            }}
+            placeholder="name@virginvoyages.com"
+            style={styles.searchInput}
+            autoComplete="email"
+          />
+
+          {emailError && <div style={styles.emailError}>{emailError}</div>}
+
+          <label style={styles.checkboxRow}>
+            <input
+              type="checkbox"
+              checked={rememberEmail}
+              onChange={(e) => setRememberEmail(e.target.checked)}
+            />
+            <span>Remember me on this device</span>
+          </label>
+
+          <div style={styles.infoBox}>
+            <div>🔒 Only emails ending with <strong>@virginvoyages.com</strong> are allowed.</div>
+            <div>📊 Usage tracking will be connected to this email.</div>
+          </div>
+
+          <button style={styles.primaryButton} onClick={confirmUserEmail}>
+            Continue
+          </button>
+
+          <button
+            style={styles.backButton}
+            onClick={() => {
+              setWelcomeStarted(false);
+              setEmailError("");
+            }}
+          >
+            ← Back to Start
+          </button>
+        </section>
+      </main>
     );
   }
 
   if (!loggedIn && welcomeStarted && emailConfirmed) {
     return (
-      <ShipSelect
-        styles={styles}
-        ships={SHIPS}
-        userEmail={normalizeAppEmail(userEmail)}
-        userShip={userShip}
-        setUserShip={setUserShip}
-        onUseDifferentEmail={resetUserEmail}
-        onBack={() => setWelcomeStarted(false)}
-        onContinue={() => {
-          if (!userShip) return;
+      <main style={styles.page}>
+        <section style={styles.loginCard}>
+          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.logo} />
+          <h1 style={styles.title}>Choose Your Ship</h1>
+          <p style={styles.subtitle}>Select your vessel to start the dashboard.</p>
 
-          logUsageEvent("ship_selected", {
-            ship: userShip,
-            module: "welcome",
-            userEmail: normalizeAppEmail(userEmail),
-          });
+          <div style={styles.infoBox}>
+            <div>👤 Signed in as: <strong>{normalizeAppEmail(userEmail)}</strong></div>
+            <button style={styles.inlineLinkButton} onClick={resetUserEmail}>Use different email</button>
+          </div>
 
-          setLoggedIn(true);
-        }}
-      />
+          <label style={styles.label}>🚢 Select your ship</label>
+          <select value={userShip} onChange={(e) => setUserShip(e.target.value)} style={styles.select}>
+            <option value="">Choose ship</option>
+            {SHIPS.map((ship) => <option key={ship} value={ship}>{ship}</option>)}
+          </select>
+
+          <button
+            style={styles.primaryButton}
+            onClick={() => {
+              if (!userShip) return;
+              logUsageEvent("ship_selected", { ship: userShip, module: "welcome", userEmail: normalizeAppEmail(userEmail) });
+              setLoggedIn(true);
+            }}
+          >
+            Continue
+          </button>
+
+          <button style={styles.backButton} onClick={() => setWelcomeStarted(false)}>
+            ← Back to Start
+          </button>
+        </section>
+      </main>
     );
   }
 
@@ -3502,7 +3626,7 @@ export default function App() {
             >
               <div style={styles.moduleIcon}>🍸</div>
               <strong>Bar</strong>
-              <span>Bar equipment tools will be added here.</span>
+              <span>Muster list and inventory tools for Bar equipment.</span>
             </button>
 
             <button
@@ -3515,7 +3639,7 @@ export default function App() {
             >
               <div style={styles.moduleIcon}>🍽️</div>
               <strong>Restaurant</strong>
-              <span>Restaurant equipment tools will be added here.</span>
+              <span>Muster list and inventory tools for Restaurant equipment.</span>
             </button>
           </div>
         </section>
@@ -3523,10 +3647,27 @@ export default function App() {
     );
   }
 
-  if (module === "equipment" && equipmentDepartment && equipmentDepartment !== "culinary") {
-    const departmentLabel = equipmentDepartment === "bar" ? "Bar" : "Restaurant";
-    const departmentIcon = equipmentDepartment === "bar" ? "🍸" : "🍽️";
+  const equipmentDepartmentConfig = {
+    culinary: {
+      label: "Culinary",
+      icon: "👨‍🍳",
+    },
+    bar: {
+      label: "Bar",
+      icon: "🍸",
+    },
+    restaurant: {
+      label: "Restaurant",
+      icon: "🍽️",
+    },
+  };
 
+  const activeEquipmentDepartment = equipmentDepartmentConfig[equipmentDepartment];
+  const activeEquipmentDepartmentLabel = activeEquipmentDepartment?.label || "Equipment";
+  const activeEquipmentDepartmentIcon = activeEquipmentDepartment?.icon || "🍽️";
+  const hasEquipmentDepartment = Boolean(activeEquipmentDepartment);
+
+  if (module === "equipment" && hasEquipmentDepartment && !equipmentMode) {
     return (
       <main style={styles.page}>
         <header style={styles.header}>
@@ -3538,37 +3679,18 @@ export default function App() {
         </header>
 
         <section style={styles.card}>
-          <h2 style={styles.cardTitle}>{departmentIcon} {departmentLabel} Equipment</h2>
-          <div style={styles.infoBox}>
-            <div><strong>{departmentLabel}</strong> equipment workflow is ready as a separate area.</div>
-            <div>Current existing equipment tools are under <strong>Culinary</strong>.</div>
-            <div>Next we can add {departmentLabel.toLowerCase()} master lists, counts, and warehouse reports here.</div>
-          </div>
-        </section>
-      </main>
-    );
-  }
-
-  if (module === "equipment" && equipmentDepartment === "culinary" && !equipmentMode) {
-    return (
-      <main style={styles.page}>
-        <header style={styles.header}>
-          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
-          <div style={styles.headerActions}>
-            <button style={styles.backButton} onClick={() => setEquipmentDepartment("")}>← Equipment Department</button>
-            <div style={styles.shipBadge}>🚢 {userShip}</div>
-          </div>
-        </header>
-
-        <section style={styles.card}>
-          <h2 style={styles.cardTitle}>👨‍🍳 Culinary Equipment Options</h2>
+          <h2 style={styles.cardTitle}>{activeEquipmentDepartmentIcon} {activeEquipmentDepartmentLabel} Equipment Options</h2>
 
           <div style={styles.moduleGrid}>
             <button
               style={styles.moduleCard}
               onClick={() => {
                 setEquipmentMode("muster");
-                logUsageEvent("equipment_option_opened", { module: "equipment_muster", ship: userShip });
+                logUsageEvent("equipment_option_opened", {
+                  module: `equipment_${equipmentDepartment}_muster`,
+                  equipmentDepartment,
+                  ship: userShip,
+                });
               }}
             >
               <div style={styles.moduleIcon}>📋</div>
@@ -3580,7 +3702,11 @@ export default function App() {
               style={styles.moduleCard}
               onClick={() => {
                 setEquipmentMode("inventory");
-                logUsageEvent("equipment_option_opened", { module: "equipment_inventory", ship: userShip });
+                logUsageEvent("equipment_option_opened", {
+                  module: `equipment_${equipmentDepartment}_inventory`,
+                  equipmentDepartment,
+                  ship: userShip,
+                });
               }}
             >
               <div style={styles.moduleIcon}>📊</div>
@@ -3593,7 +3719,7 @@ export default function App() {
     );
   }
 
-  if (module === "equipment" && equipmentDepartment === "culinary" && equipmentMode === "inventory") {
+  if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "inventory") {
     return (
       <main style={styles.page}>
         <header style={styles.header}>
@@ -3605,7 +3731,7 @@ export default function App() {
         </header>
 
         <section style={styles.card}>
-          <h2 style={styles.cardTitle}>📊 Equipment Inventory</h2>
+          <h2 style={styles.cardTitle}>📊 {activeEquipmentDepartmentLabel} Equipment Inventory</h2>
 
           <div style={styles.moduleGrid}>
             <button
@@ -3649,7 +3775,7 @@ export default function App() {
     );
   }
 
-  if (module === "equipment" && equipmentDepartment === "culinary" && equipmentMode === "makeinventory") {
+  if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "makeinventory") {
     const filteredMakeInventoryItems = getFilteredMakeInventoryItems();
     const myReportRows = getMyInventoryRows();
     const summaryReportRows = getShipSummaryRows();
@@ -3675,7 +3801,7 @@ export default function App() {
 
         <section style={styles.grid}>
           <div style={styles.card}>
-            <h2 style={styles.cardTitle}>📝 Make Inventory</h2>
+            <h2 style={styles.cardTitle}>📝 {activeEquipmentDepartmentLabel} Make Inventory</h2>
 
             <label style={styles.label}>Choose ship for this inventory</label>
             <select
@@ -4106,7 +4232,7 @@ export default function App() {
     );
   }
 
-  if (module === "equipment" && equipmentDepartment === "culinary" && equipmentMode === "inuse") {
+  if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "inuse") {
     const inUseItems = parseInUseItems();
     const missingItems = inUseItems.filter((item) => item.status === "Missing");
     const zeroItems = inUseItems.filter((item) => item.status === "Zero Count");
@@ -4219,7 +4345,7 @@ export default function App() {
     );
   }
 
-  if (module === "equipment" && equipmentDepartment === "culinary" && equipmentMode === "warehouse") {
+  if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "warehouse") {
     const allWarehouseItems = parseWarehouseItems();
     const isWarehouseOverstock = (item) => Number(item.onHand || 0) - Number(item.par || 0) > 10;
     const needsWarehouseOrder = (item) => Number(item.suggested || 0) > 0;
@@ -4303,7 +4429,7 @@ export default function App() {
         </section>
 
         <section style={styles.card}>
-          <h2 style={styles.productTitle}>🏬 Inventory Warehouse</h2>
+          <h2 style={styles.productTitle}>🏬 {activeEquipmentDepartmentLabel} Inventory Warehouse</h2>
 
           {warehouseRows.length === 0 && <p style={styles.emptyText}>Upload the warehouse inventory file to begin.</p>}
           {warehouseRows.length > 0 && warehouseItems.length === 0 && (
@@ -4417,7 +4543,7 @@ export default function App() {
     );
   }
 
-  if (module === "equipment" && equipmentDepartment === "culinary" && equipmentMode === "muster") {
+  if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "muster") {
     const groupedMuster = parseMusterItems();
     const totalItems = Object.values(groupedMuster).reduce((sum, items) => sum + items.length, 0);
 
@@ -4464,7 +4590,7 @@ export default function App() {
         </section>
 
         <section style={styles.card}>
-          <h2 style={styles.productTitle}>📋 Equipment Muster List</h2>
+          <h2 style={styles.productTitle}>📋 {activeEquipmentDepartmentLabel} Equipment Muster List</h2>
 
           {musterItems.length === 0 && <p style={styles.emptyText}>Upload the Equipment Muster List file to begin.</p>}
 
