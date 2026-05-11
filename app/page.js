@@ -3583,8 +3583,10 @@ const verifyAccessCode = async () => {
   });
 };
 
-  const resetUserEmail = async () => {
-  localStorage.removeItem("vv_user_email");
+  const resetUserEmail = () => {
+  try {
+    localStorage.removeItem("vv_user_email");
+  } catch {}
 
   setUserEmail("");
   setEmailConfirmed(false);
@@ -3593,10 +3595,18 @@ const verifyAccessCode = async () => {
   setEmailOtpCode("");
   setEmailCodeSent(false);
   setRememberEmail(false);
+  setUserShip("");
+  setLoggedIn(false);
+  setWelcomeStarted(true);
 
-  if (supabase) {
-    await supabase.auth.signOut();
+  if (supabase?.auth?.signOut) {
+    supabase.auth.signOut().catch(() => {});
   }
+
+  logUsageEvent("email_reset", {
+    module: "welcome",
+  });
+};
 
   logUsageEvent("email_reset", {
     module: "welcome",
