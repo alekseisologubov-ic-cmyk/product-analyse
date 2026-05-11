@@ -1013,9 +1013,9 @@ const extractEmbeddedImagesByCell = async (arrayBuffer, sheetName) => {
     const drawingDoc = new DOMParser().parseFromString(drawingXml, "application/xml");
     const drawingFileName = drawingPath.split("/").pop();
     const drawingRelsPath = drawingPath.replace(
-      `/drawings/${drawingFileName}`,
-      `/drawings/_rels/${drawingFileName}.rels`
-    );
+  "/drawings/" + drawingFileName,
+  "/drawings/_rels/" + drawingFileName + ".rels"
+);
 
     const drawingRelsXml = await zip.file(drawingRelsPath)?.async("text");
     const drawingRels = drawingRelsXml ? getXmlRelationships(drawingRelsXml) : {};
