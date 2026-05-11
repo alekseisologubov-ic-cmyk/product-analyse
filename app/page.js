@@ -451,18 +451,16 @@ export default function App() {
   const [rememberEmail, setRememberEmail] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [emailOtpCode, setEmailOtpCode] = useState("");
-const [emailCodeSent, setEmailCodeSent] = useState(false);
-const [emailMessage, setEmailMessage] = useState("");
-const [otpLoading, setOtpLoading] = useState(false);
+  const [emailCodeSent, setEmailCodeSent] = useState(false);
+  const [emailMessage, setEmailMessage] = useState("");
+  const [otpLoading, setOtpLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [viewMode, setViewMode] = useState("all");
-const [showProductMissingReport, setShowProductMissingReport] = useState(false);
-const [productMissingReportRows, setProductMissingReportRows] = useState([]);
-const [productMissingReportLoading, setProductMissingReportLoading] = useState(false);
-const [productMissingReportMessage, setProductMissingReportMessage] = useState("");
-  const topNotInUseReport = Array.isArray(productMissingReportRows)
-  ? productMissingReportRows
-  : [];
+  const [showProductMissingReport, setShowProductMissingReport] = useState(false);
+  const [productMissingReportRows, setProductMissingReportRows] = useState([]);
+  const [productMissingReportLoading, setProductMissingReportLoading] = useState(false);
+  const [productMissingReportMessage, setProductMissingReportMessage] = useState("");
+  const [nextOrderRows, setNextOrderRows] = useState([]);
   const [nextOrderSourceRows, setNextOrderSourceRows] = useState([]);
   const [nextOrderMeta, setNextOrderMeta] = useState({});
   const [nextOrderFileName, setNextOrderFileName] = useState("");
@@ -3493,121 +3491,124 @@ const [productMissingReportMessage, setProductMissingReportMessage] = useState("
   const filteredProducts = products.filter((p) => p.toLowerCase().includes(search.toLowerCase()));
 
   const sendAccessCode = async () => {
-  const email = normalizeAppEmail(userEmail);
+    const email = normalizeAppEmail(userEmail);
 
-  if (!supabase) {
-    setEmailError("Supabase is not connected.");
-    return;
-  }
+    if (!supabase) {
+      setEmailError("Supabase is not connected.");
+      return;
+    }
 
-  if (!email.endsWith("@virginvoyages.com")) {
-    setEmailError("Only @virginvoyages.com emails are allowed.");
-    return;
-  }
+    if (!isVirginVoyagesEmail(email)) {
+      setEmailError("Please use your Virgin Voyages email ending with @virginvoyages.com.");
+      return;
+    }
 
-  setEmailError("");
-  setEmailMessage("");
-  setOtpLoading(true);
+    setEmailError("");
+    setEmailMessage("");
+    setOtpLoading(true);
 
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: {
-      shouldCreateUser: true,
-    },
-  });
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: true,
+      },
+    });
 
-  setOtpLoading(false);
+    setOtpLoading(false);
 
-  if (error) {
-    setEmailError(error.message);
-    return;
-  }
+    if (error) {
+      setEmailError(error.message || "Could not send access code.");
+      return;
+    }
 
-  setEmailCodeSent(true);
-  setEmailMessage("Access code sent. Please check your email.");
+    setUserEmail(email);
+    setEmailCodeSent(true);
+    setEmailMessage("Access code sent. Please check your email.");
 
-  logUsageEvent("access_code_sent", {
-    module: "welcome",
-    userEmail: email,
-  });
-};
+    logUsageEvent("access_code_sent", {
+      module: "welcome",
+      userEmail: email,
+    });
+  };
 
-const verifyAccessCode = async () => {
-  const email = normalizeAppEmail(userEmail);
-  const token = String(emailOtpCode || "").replace(/\s+/g, "").trim();
+  const verifyAccessCode = async () => {
+    const email = normalizeAppEmail(userEmail);
+    const token = String(emailOtpCode || "").replace(/\s+/g, "").trim();
 
-  if (!supabase) {
-    setEmailError("Supabase is not connected.");
-    return;
-  }
+    if (!supabase) {
+      setEmailError("Supabase is not connected.");
+      return;
+    }
 
-  if (!email.endsWith("@virginvoyages.com")) {
-    setEmailError("Only @virginvoyages.com emails are allowed.");
-    return;
-  }
+    if (!isVirginVoyagesEmail(email)) {
+      setEmailError("Please use your Virgin Voyages email ending with @virginvoyages.com.");
+      return;
+    }
 
-  if (!token) {
-    setEmailError("Enter the access code from your email.");
-    return;
-  }
+    if (!token) {
+      setEmailError("Enter the access code from your email.");
+      return;
+    }
 
-  setEmailError("");
-  setEmailMessage("");
-  setOtpLoading(true);
+    setEmailError("");
+    setEmailMessage("");
+    setOtpLoading(true);
 
-  const { error } = await supabase.auth.verifyOtp({
-    email,
-    token,
-    type: "email",
-  });
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: "email",
+    });
 
-  setOtpLoading(false);
+    setOtpLoading(false);
 
-  if (error) {
-    setEmailError(error.message);
-    return;
-  }
+    if (error) {
+      setEmailError(error.message || "Invalid or expired code.");
+      return;
+    }
 
-  if (rememberEmail) {
-    localStorage.setItem("vv_user_email", email);
-  } else {
-    localStorage.removeItem("vv_user_email");
-  }
+    if (typeof window !== "undefined") {
+      if (rememberEmail) {
+        window.localStorage.setItem(USER_EMAIL_STORAGE_KEY, email);
+      } else {
+        window.localStorage.removeItem(USER_EMAIL_STORAGE_KEY);
+      }
+    }
 
-  setUserEmail(email);
-  setEmailConfirmed(true);
-  setEmailCodeSent(false);
-  setEmailOtpCode("");
+    setUserEmail(email);
+    setEmailConfirmed(true);
+    setEmailCodeSent(false);
+    setEmailOtpCode("");
 
-  logUsageEvent("email_verified", {
-    module: "welcome",
-    userEmail: email,
-  });
-};
+    logUsageEvent("email_verified", {
+      module: "welcome",
+      userEmail: email,
+      remembered: rememberEmail,
+    });
+  };
 
   const resetUserEmail = () => {
-  try {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("vv_user_email");
-    }
-  } catch {}
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(USER_EMAIL_STORAGE_KEY);
+      }
+    } catch {}
 
-  setUserEmail("");
-  setEmailConfirmed(false);
-  setEmailError("");
-  setEmailMessage("");
-  setEmailOtpCode("");
-  setEmailCodeSent(false);
-  setRememberEmail(false);
-  setUserShip("");
-  setLoggedIn(false);
-  setWelcomeStarted(true);
-};
+    setUserEmail("");
+    setEmailConfirmed(false);
+    setEmailError("");
+    setEmailMessage("");
+    setEmailOtpCode("");
+    setEmailCodeSent(false);
+    setRememberEmail(false);
+    setUserShip("");
+    setLoggedIn(false);
+    setWelcomeStarted(true);
+  };
 
-  logUsageEvent("email_reset", {
-    module: "welcome",
-  });
-};
+  const topNotInUseReport = Array.isArray(productMissingReportRows)
+    ? productMissingReportRows
+    : [];
 
   const totalConsumption = (() => {
     const totals = { BRL: 0, RL: 0, SC: 0, VL: 0 };
@@ -3677,26 +3678,52 @@ const verifyAccessCode = async () => {
       <main style={styles.page}>
         <section style={styles.loginCard}>
           <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.logo} />
-          <h1 style={styles.title}>Enter Your Email</h1>
-          <p style={styles.subtitle}>Use your Virgin Voyages email to continue.</p>
+          <h1 style={styles.title}>Email Access Code</h1>
+          <p style={styles.subtitle}>Enter your Virgin Voyages email and verify the access code.</p>
 
           <label style={styles.label}>✉️ Virgin Voyages email</label>
           <input
             type="email"
             value={userEmail}
+            disabled={otpLoading || emailCodeSent}
             onChange={(e) => {
               setUserEmail(e.target.value);
               setEmailError("");
+              setEmailMessage("");
             }}
             onKeyDown={(e) => {
-              if (e.key === "Enter") confirmUserEmail();
+              if (e.key === "Enter" && !emailCodeSent) sendAccessCode();
             }}
             placeholder="name@virginvoyages.com"
             style={styles.searchInput}
             autoComplete="email"
           />
 
+          {emailCodeSent && (
+            <>
+              <label style={styles.label}>🔐 Access code</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={emailOtpCode}
+                disabled={otpLoading}
+                onChange={(e) => {
+                  setEmailOtpCode(e.target.value);
+                  setEmailError("");
+                  setEmailMessage("");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") verifyAccessCode();
+                }}
+                placeholder="Enter code from email..."
+                style={styles.searchInput}
+                autoComplete="one-time-code"
+              />
+            </>
+          )}
+
           {emailError && <div style={styles.emailError}>{emailError}</div>}
+          {emailMessage && <div style={{ ...styles.infoBox, color: "#2e7d32", fontWeight: "bold" }}>{emailMessage}</div>}
 
           <label style={styles.checkboxRow}>
             <input
@@ -3709,21 +3736,49 @@ const verifyAccessCode = async () => {
 
           <div style={styles.infoBox}>
             <div>🔒 Only emails ending with <strong>@virginvoyages.com</strong> are allowed.</div>
-            <div>📊 Usage tracking will be connected to this email.</div>
+            <div>📩 A one-time access code will be sent to your email.</div>
+            <div>📊 Usage tracking will be connected to your verified email.</div>
           </div>
 
-          <button style={styles.primaryButton} onClick={confirmUserEmail}>
-            Continue
-          </button>
+          {!emailCodeSent ? (
+            <button style={styles.primaryButton} onClick={sendAccessCode} disabled={otpLoading}>
+              {otpLoading ? "Sending..." : "Send Access Code"}
+            </button>
+          ) : (
+            <>
+              <button style={styles.primaryButton} onClick={verifyAccessCode} disabled={otpLoading}>
+                {otpLoading ? "Verifying..." : "Verify Code"}
+              </button>
+              <button
+                style={styles.backButton}
+                onClick={() => {
+                  setEmailCodeSent(false);
+                  setEmailOtpCode("");
+                  setEmailError("");
+                  setEmailMessage("");
+                }}
+                disabled={otpLoading}
+              >
+                Change Email
+              </button>
+              <button style={styles.backButton} onClick={sendAccessCode} disabled={otpLoading}>
+                Resend Code
+              </button>
+            </>
+          )}
 
           <button
             style={styles.backButton}
             onClick={() => {
               setWelcomeStarted(false);
               setEmailError("");
+              setEmailMessage("");
+              setEmailOtpCode("");
+              setEmailCodeSent(false);
             }}
+            disabled={otpLoading}
           >
-            ← Back to Start
+            ← Back to AHOY
           </button>
         </section>
       </main>
@@ -3739,18 +3794,9 @@ const verifyAccessCode = async () => {
           <p style={styles.subtitle}>Select your vessel to start the dashboard.</p>
 
           <div style={styles.infoBox}>
-  <div>
-    👤 Signed in as: <strong>{normalizeAppEmail(userEmail)}</strong>
-  </div>
-
-  <button
-    type="button"
-    style={styles.inlineLinkButton}
-    onClick={resetUserEmail}
-  >
-    Use different email
-  </button>
-</div>
+            <div>👤 Signed in as: <strong>{normalizeAppEmail(userEmail)}</strong></div>
+            <button type="button" style={styles.inlineLinkButton} onClick={resetUserEmail}>Use different email</button>
+          </div>
 
           <label style={styles.label}>🚢 Select your ship</label>
           <select value={userShip} onChange={(e) => setUserShip(e.target.value)} style={styles.select}>
@@ -5284,7 +5330,7 @@ const verifyAccessCode = async () => {
               <div>🚢 View: <strong>{viewMode === "single" ? userShip : "All Ships"}</strong></div>
               <div>🔎 Rows found: <strong>{topNotInUseReport.length}</strong></div>
               {productMissingReportLoading && <div>Preparing report, please wait...</div>}
-              {productMissingReportMessage && <div style={{ color: productMissingReportRows.length ? "#555" : "#8a5a00" }}>{productMissingReportMessage}</div>}
+              {productMissingReportMessage && <div style={{ color: topNotInUseReport.length ? "#555" : "#8a5a00" }}>{productMissingReportMessage}</div>}
               <div style={{ color: "#b00020" }}>
                 Shows products that are expected by recipe/location or template charge location, but usage is 0 for one or more visible ship(s).
               </div>
@@ -5481,6 +5527,7 @@ const verifyAccessCode = async () => {
       )}
     </main>
   );
+}
 
 const styles = {
   page: { minHeight: "100vh", padding: 24, background: "#f5f5f5", fontFamily: "Arial, sans-serif", color: "#111" },
