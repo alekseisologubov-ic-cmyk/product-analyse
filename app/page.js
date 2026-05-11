@@ -1071,6 +1071,75 @@ const extractEmbeddedImagesByCell = async (arrayBuffer, sheetName) => {
 
   return imageMap;
 };
+  const parseBarInventoryWorkbook = async (file) => {
+  const arrayBuffer = await file.arrayBuffer();
+  const workbook = XLSX.read(arrayBuffer, { type: "array" });
+
+  const oldSheetName =
+    workbook.SheetNames.find((name) => cleanText(name) === "OLD") ||
+    workbook.SheetNames.find((name) => cleanText(name).includes("OLD")) ||
+    workbook.SheetNames[0];
+
+  const worksheet = workbook.Sheets[oldSheetName];
+  const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+
+  const imageMap = await extractEmbeddedImagesByCell(arrayBuffer, oldSheetName);
+
+  const items = rows
+    .slice(1)
+    .map((row, index) => {
+      const sourceRow = index + 2;
+
+      const code = String(row[0] || "").trim();
+      const name = String(row[1] || "").replace(/\s+/g, " ").trim();
+      const unit = String(row[2] || "").trim();
+
+      const imageFromCell = String(row[3] || "").trim();
+      const imageFromEmbeddedPicture = imageMap[`D${sourceRow}`] || "";
+      const image = imageFromCell || imageFromEmbeddedPicture;
+
+      return {
+        equipmentDepartment: "bar",
+        sheetName: oldSheetName,
+        category: "Bar",
+        code,
+        name,
+        unit,
+        um: unit,
+        image,
+        sourceRow,
+      };
+    })
+    .filter((item) => item.name && cleanText(item.name) !== "PRODUCT NAME")
+    .filter((item) => cleanText(item.code) !== "PRODUCT CODE")
+    .filter((item) => item.code || item.name);
+
+  return {
+    workbook,
+    items,
+    sourceSheetName: oldSheetName,
+  };
+};
+
+const parseEquipmentMasterFile = async (file) => {
+  if (equipmentDepartment === "bar") {
+    return parseBarInventoryWorkbook(file);
+  }
+
+  const arrayBuffer = await file.arrayBuffer();
+  const workbook = XLSX.read(arrayBuffer, { type: "array" });
+  const items = parseMusterWorkbook(workbook).map((item) => ({
+    ...item,
+    equipmentDepartment: equipmentDepartment || "culinary",
+  }));
+
+  return {
+    workbook,
+    items,
+    sourceSheetName: workbook.SheetNames[0],
+  };
+};
+  
   const parseMusterWorkbook = (workbook) => {
     const items = [];
 
