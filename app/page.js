@@ -342,6 +342,7 @@ const getProductReportKey = (value) => {
 };
 
 const formatQty = (value) => Number(value || 0).toFixed(2);
+const formatMoney = (value) => "$" + Number(value || 0).toFixed(2);
 
 const getImageUrl = (url) => {
   const value = String(url || "").trim();
@@ -456,6 +457,7 @@ export default function App() {
   const [otpLoading, setOtpLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [viewMode, setViewMode] = useState("all");
+  const [productCostReportSearch, setProductCostReportSearch] = useState("");
   const [showProductMissingReport, setShowProductMissingReport] = useState(false);
   const [productMissingReportRows, setProductMissingReportRows] = useState([]);
   const [productMissingReportLoading, setProductMissingReportLoading] = useState(false);
@@ -513,6 +515,8 @@ export default function App() {
   const saveBusyRef = useRef(false);
 
   const shipColumns = { BRL: 8, RL: 11, SC: 14, VL: 17 };
+  const shipCostColumns = { BRL: 9, RL: 12, SC: 15, VL: 18 };
+  const shipUnitPriceColumns = { BRL: 7, RL: 10, SC: 13, VL: 16 };
 
   const logUsageEvent = async (eventType, details = {}) => {
     try {
@@ -2849,6 +2853,135 @@ export default function App() {
     return tokens.length ? tokens.join("|") : cleanText(product);
   };
 
+  const getConsumptionCostReportRows = () => {
+    let currentVenue = "";
+    const productMap = new Map();
+
+    const getBlankShipCost = () => ({
+      qty: 0,
+      cost: 0,
+      unitPriceSum: 0,
+      unitPriceCount: 0,
+      unitPrice: 0,
+      isLowestUnitPrice: false,
+    });
+
+    consumptionData.forEach((row) => {
+      if (row[2]) currentVenue = String(row[2]).trim();
+
+      const product = String(row[6] || "").replace(/\s+/g, " ").trim();
+      if (!product) return;
+
+      const productKey = getReportProductKey(product);
+      const venueDisplay = currentVenue || "Unknown";
+      const venueKey = normalizeVenue(venueDisplay);
+      if (!productKey || !venueKey) return;
+
+      const code = String(row[5] || "").trim();
+
+      if (!productMap.has(productKey)) {
+        productMap.set(productKey, {
+          productKey,
+          product,
+          code,
+          totalQty: 0,
+          totalCost: 0,
+          venuesMap: new Map(),
+          firstOrder: productMap.size + 1,
+        });
+      }
+
+      const productRecord = productMap.get(productKey);
+      if (!productRecord.code && code) productRecord.code = code;
+
+      if (!productRecord.venuesMap.has(venueKey)) {
+        productRecord.venuesMap.set(venueKey, {
+          venueKey,
+          location: venueDisplay,
+          ships: {},
+          totalQty: 0,
+          totalCost: 0,
+          hasPriceDifference: false,
+        });
+      }
+
+      const venueRecord = productRecord.venuesMap.get(venueKey);
+
+      SHIPS.forEach((ship) => {
+        if (!venueRecord.ships[ship]) venueRecord.ships[ship] = getBlankShipCost();
+
+        const qty = Number(row[shipColumns[ship]] || 0);
+        const cost = Number(row[shipCostColumns[ship]] || 0);
+        const unitPriceFromFile = Number(row[shipUnitPriceColumns[ship]] || 0);
+
+        venueRecord.ships[ship].qty += qty;
+        venueRecord.ships[ship].cost += cost;
+
+        if (unitPriceFromFile > 0) {
+          venueRecord.ships[ship].unitPriceSum += unitPriceFromFile;
+          venueRecord.ships[ship].unitPriceCount += 1;
+        }
+
+        productRecord.totalQty += qty;
+        productRecord.totalCost += cost;
+      });
+    });
+
+    return Array.from(productMap.values())
+      .map((productRecord) => {
+        const venues = Array.from(productRecord.venuesMap.values())
+          .map((venueRecord) => {
+            SHIPS.forEach((ship) => {
+              const shipData = venueRecord.ships[ship] || getBlankShipCost();
+
+              if (shipData.qty > 0 && shipData.cost > 0) {
+                shipData.unitPrice = shipData.cost / shipData.qty;
+              } else if (shipData.unitPriceCount > 0) {
+                shipData.unitPrice = shipData.unitPriceSum / shipData.unitPriceCount;
+              } else {
+                shipData.unitPrice = 0;
+              }
+
+              venueRecord.ships[ship] = shipData;
+            });
+
+            const visibleShipData = visibleShips.map((ship) => venueRecord.ships[ship] || getBlankShipCost());
+            const visiblePrices = visibleShipData
+              .map((shipData) => Number(shipData.unitPrice || 0))
+              .filter((price) => price > 0);
+
+            const minPrice = visiblePrices.length ? Math.min(...visiblePrices) : 0;
+            const maxPrice = visiblePrices.length ? Math.max(...visiblePrices) : 0;
+            const hasPriceDifference = visiblePrices.length > 1 && maxPrice - minPrice > 0.009;
+
+            visibleShips.forEach((ship) => {
+              const shipData = venueRecord.ships[ship] || getBlankShipCost();
+              shipData.isLowestUnitPrice = hasPriceDifference && Number(shipData.unitPrice || 0) > 0 && Math.abs(Number(shipData.unitPrice || 0) - minPrice) <= 0.009;
+              venueRecord.ships[ship] = shipData;
+            });
+
+            venueRecord.totalQty = visibleShips.reduce((sum, ship) => sum + Number(venueRecord.ships[ship]?.qty || 0), 0);
+            venueRecord.totalCost = visibleShips.reduce((sum, ship) => sum + Number(venueRecord.ships[ship]?.cost || 0), 0);
+            venueRecord.hasPriceDifference = hasPriceDifference;
+
+            return venueRecord;
+          })
+          .filter((venueRecord) => venueRecord.totalQty > 0 || venueRecord.totalCost > 0);
+
+        const visibleTotalQty = venues.reduce((sum, venue) => sum + Number(venue.totalQty || 0), 0);
+        const visibleTotalCost = venues.reduce((sum, venue) => sum + Number(venue.totalCost || 0), 0);
+
+        return {
+          ...productRecord,
+          venues,
+          visibleTotalQty,
+          visibleTotalCost,
+        };
+      })
+      .filter((productRecord) => productRecord.venues.length > 0)
+      .sort((a, b) => a.firstOrder - b.firstOrder);
+  };
+
   const getTopNotInUseByLocationReport = (limit = 50) => {
     const expectedMap = new Map();
     const usageMap = new Map();
@@ -3519,6 +3652,17 @@ export default function App() {
   const productsInRecipe = selectedRecipe ? getProductsInRecipe(selectedRecipe) : [];
   const allergenWarnings = selectedRecipe ? detectAllergens(productsInRecipe) : [];
   const filteredProducts = products.filter((p) => p.toLowerCase().includes(search.toLowerCase()));
+
+  const productCostReportRows = useMemo(() => getConsumptionCostReportRows(), [consumptionData, viewMode, userShip]);
+  const filteredProductCostReportRows = useMemo(() => {
+    const term = productCostReportSearch.toLowerCase().trim();
+    if (!term) return productCostReportRows;
+
+    return productCostReportRows.filter((item) => {
+      const venueText = item.venues.map((venue) => venue.location).join(" ");
+      return (item.product + " " + (item.code || "") + " " + venueText).toLowerCase().includes(term);
+    });
+  }, [productCostReportRows, productCostReportSearch]);
 
   const sendAccessCode = () => {
     const email = normalizeAppEmail(userEmail);
@@ -5298,6 +5442,89 @@ export default function App() {
       </section>
 
       <section style={styles.card}>
+        <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 18 }}>
+          <div>
+            <h2 style={styles.productTitle}>💰 Main Consumption & Cost Report</h2>
+            <p style={{ ...styles.emptyText, margin: 0 }}>
+              Automatically generated from the consumption file. Lowest unit price is highlighted when ship prices differ.
+            </p>
+          </div>
+        </div>
+
+        <div style={styles.infoBox}>
+          <div>📦 Products in report: <strong>{filteredProductCostReportRows.length}</strong> / {productCostReportRows.length}</div>
+          <div>🚢 View: <strong>{viewMode === "single" ? userShip : "All Ships"}</strong></div>
+          <div>📘 Source columns: C Venue, I/L/O/R Quantity, J/M/P/S Total Cost, H/K/N/Q Unit Price.</div>
+        </div>
+
+        <input
+          placeholder="Search product, code, or venue..."
+          value={productCostReportSearch}
+          onChange={(e) => setProductCostReportSearch(e.target.value)}
+          style={{ ...styles.searchInput, marginTop: 14 }}
+        />
+
+        {consumptionRows.length === 0 && (
+          <p style={styles.emptyText}>Upload the consumption file to generate this report.</p>
+        )}
+
+        {consumptionRows.length > 0 && filteredProductCostReportRows.length === 0 && (
+          <p style={styles.emptyText}>No products found for this search.</p>
+        )}
+
+        <div style={styles.costReportGrid}>
+          {filteredProductCostReportRows.map((item) => (
+            <div key={item.productKey} style={styles.costReportCard}>
+              <div style={styles.costReportHeader}>
+                <div>
+                  <div style={styles.nextOrderName}>{item.product}</div>
+                  {item.code && <div style={styles.nextOrderMeta}>Code: {item.code}</div>}
+                </div>
+                <div style={styles.costReportTotals}>
+                  <strong>{formatQty(item.visibleTotalQty)}</strong>
+                  <span>{formatMoney(item.visibleTotalCost)}</span>
+                </div>
+              </div>
+
+              {item.venues.map((venue) => (
+                <div key={venue.venueKey} style={styles.costVenueBlock}>
+                  <div style={styles.costVenueTitle}>{venue.location}</div>
+
+                  <div style={styles.costShipGrid}>
+                    {visibleShips.map((ship) => {
+                      const shipData = venue.ships[ship] || { qty: 0, cost: 0, unitPrice: 0, isLowestUnitPrice: false };
+                      const hasData = Number(shipData.qty || 0) !== 0 || Number(shipData.cost || 0) !== 0;
+
+                      return (
+                        <div
+                          key={ship}
+                          style={{
+                            ...styles.costShipBox,
+                            ...(shipData.isLowestUnitPrice ? styles.costShipLowestPrice : {}),
+                            ...(!hasData ? styles.costShipEmpty : {}),
+                          }}
+                        >
+                          <span style={styles.shipName}>{ship}</span>
+                          <strong>{formatQty(shipData.qty)}</strong>
+                          <span>{formatMoney(shipData.cost)}</span>
+                          {shipData.unitPrice > 0 && <small>{formatMoney(shipData.unitPrice)} / unit</small>}
+                          {shipData.isLowestUnitPrice && <div style={styles.lowestPriceBadge}>Lowest unit price</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {venue.hasPriceDifference && (
+                    <div style={styles.priceDifferenceNote}>Unit price differs by ship. Lowest price is highlighted.</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section style={styles.card}>
         <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: showProductMissingReport ? 18 : 0 }}>
           <div>
             <h2 style={styles.productTitle}>📊 Product Reports</h2>
@@ -5663,6 +5890,18 @@ const styles = {
   nextOrderStatusBlue: { padding: 6, borderRadius: 8, background: "#0057b8", color: "#fff", fontWeight: "bold", textAlign: "center", fontSize: 12 },
   nextOrderStatusRed: { padding: 6, borderRadius: 8, background: "#b00020", color: "#fff", fontWeight: "bold", textAlign: "center", fontSize: 12 },
   nextOrderStatusNeutral: { padding: 6, borderRadius: 8, background: "#f2f2f2", color: "#555", fontWeight: "bold", textAlign: "center", fontSize: 12 },
+  costReportGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 14, marginTop: 14 },
+  costReportCard: { border: "1px solid #ddd", borderRadius: 14, padding: 12, background: "#fafafa", display: "grid", gap: 10, textAlign: "left" },
+  costReportHeader: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" },
+  costReportTotals: { minWidth: 86, padding: 8, borderRadius: 10, background: "#111", color: "#fff", display: "grid", gap: 2, textAlign: "center", fontSize: 12 },
+  costVenueBlock: { border: "1px solid #e1e1e1", borderRadius: 12, padding: 10, background: "#fff", display: "grid", gap: 8 },
+  costVenueTitle: { fontWeight: "bold", fontSize: 14 },
+  costShipGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(92px, 1fr))", gap: 6 },
+  costShipBox: { border: "1px solid #ddd", borderRadius: 10, padding: 8, background: "#fff", display: "grid", gap: 3, textAlign: "center", fontSize: 12 },
+  costShipLowestPrice: { border: "2px solid #2e7d32", background: "#e8f5e9", color: "#2e7d32", fontWeight: "bold" },
+  costShipEmpty: { opacity: 0.5 },
+  lowestPriceBadge: { marginTop: 4, padding: "3px 5px", borderRadius: 999, background: "#2e7d32", color: "#fff", fontSize: 10, fontWeight: "bold" },
+  priceDifferenceNote: { color: "#2e7d32", fontSize: 12, fontWeight: "bold" },
   equipmentCategory: { marginBottom: 24 },
   equipmentGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 },
   equipmentCard: { border: "1px solid #ddd", borderRadius: 14, padding: 14, background: "#fafafa", display: "grid", gap: 8, cursor: "pointer", textAlign: "left" },
