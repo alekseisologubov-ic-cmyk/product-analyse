@@ -3603,6 +3603,11 @@ const verifyAccessCode = async () => {
     supabase.auth.signOut().catch(() => {});
   }
 
+  logUsageEvent("email_reset", {
+    module: "welcome",
+  });
+};
+
   const topNotInUseReport = productMissingReportRows;
 
   const totalConsumption = (() => {
