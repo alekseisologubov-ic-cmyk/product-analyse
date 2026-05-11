@@ -879,6 +879,198 @@ export default function App() {
     return map;
   };
 
+  const normalizeZipPath = (path) => {
+  const parts = [];
+
+  String(path || "")
+    .replace(/^\/+/, "")
+    .split("/")
+    .forEach((part) => {
+      if (!part || part === ".") return;
+      if (part === "..") {
+        parts.pop();
+        return;
+      }
+      parts.push(part);
+    });
+
+  return parts.join("/");
+};
+
+const resolveZipPath = (basePath, target) => {
+  const value = String(target || "");
+  if (!value) return "";
+
+  if (value.startsWith("/")) {
+    return normalizeZipPath(value);
+  }
+
+  const baseDir = String(basePath || "").split("/").slice(0, -1).join("/");
+  return normalizeZipPath(`${baseDir}/${value}`);
+};
+
+const getXmlRelationships = (xmlText) => {
+  const doc = new DOMParser().parseFromString(xmlText, "application/xml");
+  const rels = {};
+
+  Array.from(doc.getElementsByTagName("*"))
+    .filter((node) => node.localName === "Relationship")
+    .forEach((node) => {
+      rels[node.getAttribute("Id")] = node.getAttribute("Target");
+    });
+
+  return rels;
+};
+
+const getElementsByLocalName = (node, localName) =>
+  Array.from(node.getElementsByTagName("*")).filter((el) => el.localName === localName);
+
+const columnNumberToLetters = (columnNumberZeroBased) => {
+  let number = Number(columnNumberZeroBased || 0) + 1;
+  let letters = "";
+
+  while (number > 0) {
+    const remainder = (number - 1) % 26;
+    letters = String.fromCharCode(65 + remainder) + letters;
+    number = Math.floor((number - 1) / 26);
+  }
+
+  return letters;
+};
+
+const getWorkbookSheetPath = async (zip, sheetNameToFind) => {
+  const workbookXml = await zip.file("xl/workbook.xml")?.async("text");
+  const workbookRelsXml = await zip.file("xl/_rels/workbook.xml.rels")?.async("text");
+
+  if (!workbookXml || !workbookRelsXml) return "";
+
+  const workbookDoc = new DOMParser().parseFromString(workbookXml, "application/xml");
+  const workbookRels = getXmlRelationships(workbookRelsXml);
+
+  const sheets = getElementsByLocalName(workbookDoc, "sheet");
+  const wanted = cleanText(sheetNameToFind);
+
+  const sheetNode =
+    sheets.find((sheet) => cleanText(sheet.getAttribute("name")) === wanted) ||
+    sheets.find((sheet) => cleanText(sheet.getAttribute("name")).includes(wanted));
+
+  if (!sheetNode) return "";
+
+  const relationId =
+    sheetNode.getAttribute("r:id") ||
+    sheetNode.getAttribute("id") ||
+    sheetNode.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id");
+
+  const target = workbookRels[relationId];
+  if (!target) return "";
+
+  return resolveZipPath("xl/workbook.xml", target);
+};
+
+const extractEmbeddedImagesByCell = async (arrayBuffer, sheetName) => {
+  const imageMap = {};
+
+  try {
+    const zip = await JSZip.loadAsync(arrayBuffer);
+    const sheetPath = await getWorkbookSheetPath(zip, sheetName);
+
+    if (!sheetPath) return imageMap;
+
+    const sheetFileName = sheetPath.split("/").pop();
+    const sheetRelsPath = sheetPath.replace(
+      `/worksheets/${sheetFileName}`,
+      `/worksheets/_rels/${sheetFileName}.rels`
+    );
+
+    const sheetRelsXml = await zip.file(sheetRelsPath)?.async("text");
+    if (!sheetRelsXml) return imageMap;
+
+    const sheetRels = getXmlRelationships(sheetRelsXml);
+    const drawingTarget = Object.values(sheetRels).find((target) =>
+      String(target || "").includes("drawings/")
+    );
+
+    if (!drawingTarget) return imageMap;
+
+    const drawingPath = resolveZipPath(sheetPath, drawingTarget);
+    const drawingXml = await zip.file(drawingPath)?.async("text");
+
+    if (!drawingXml) return imageMap;
+
+    const drawingDoc = new DOMParser().parseFromString(drawingXml, "application/xml");
+    const drawingFileName = drawingPath.split("/").pop();
+    const drawingRelsPath = drawingPath.replace(
+      `/drawings/${drawingFileName}`,
+      `/drawings/_rels/${drawingFileName}.rels`
+    );
+
+    const drawingRelsXml = await zip.file(drawingRelsPath)?.async("text");
+    const drawingRels = drawingRelsXml ? getXmlRelationships(drawingRelsXml) : {};
+
+    const anchors = [
+      ...getElementsByLocalName(drawingDoc, "oneCellAnchor"),
+      ...getElementsByLocalName(drawingDoc, "twoCellAnchor"),
+    ];
+
+    for (const anchor of anchors) {
+      const from = getElementsByLocalName(anchor, "from")[0];
+      if (!from) continue;
+
+      const colNode = getElementsByLocalName(from, "col")[0];
+      const rowNode = getElementsByLocalName(from, "row")[0];
+
+      const colNumber = Number(colNode?.textContent || 0);
+      const rowNumber = Number(rowNode?.textContent || 0);
+
+      const cellAddress = `${columnNumberToLetters(colNumber)}${rowNumber + 1}`;
+
+      let dataUrl = "";
+
+      const cNvPr = getElementsByLocalName(anchor, "cNvPr")[0];
+      const description = cNvPr?.getAttribute("descr") || "";
+
+      if (description.startsWith("data:image/")) {
+        dataUrl = description;
+      }
+
+      if (!dataUrl) {
+        const blip = getElementsByLocalName(anchor, "blip")[0];
+        const embedId =
+          blip?.getAttribute("r:embed") ||
+          blip?.getAttribute("embed") ||
+          blip?.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "embed");
+
+        const imageTarget = drawingRels[embedId];
+
+        if (imageTarget) {
+          const imagePath = resolveZipPath(drawingPath, imageTarget);
+          const imageFile = zip.file(imagePath);
+
+          if (imageFile) {
+            const base64 = await imageFile.async("base64");
+            const extension = imagePath.split(".").pop()?.toLowerCase();
+            const mime =
+              extension === "jpg" || extension === "jpeg"
+                ? "image/jpeg"
+                : extension === "webp"
+                ? "image/webp"
+                : "image/png";
+
+            dataUrl = `data:${mime};base64,${base64}`;
+          }
+        }
+      }
+
+      if (dataUrl) {
+        imageMap[cellAddress] = dataUrl;
+      }
+    }
+  } catch {
+    return imageMap;
+  }
+
+  return imageMap;
+};
   const parseMusterWorkbook = (workbook) => {
     const items = [];
 
