@@ -1070,7 +1070,7 @@ const extractEmbeddedImagesByCell = async (arrayBuffer, sheetName) => {
                 ? "image/webp"
                 : "image/png";
 
-            dataUrl = `data:${mime};base64,${base64}`;
+            dataUrl = "data:" + mime + ";base64," + base64;
           }
         }
       }
