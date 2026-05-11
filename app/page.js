@@ -3490,27 +3490,98 @@ const [otpLoading, setOtpLoading] = useState(false);
   const allergenWarnings = selectedRecipe ? detectAllergens(productsInRecipe) : [];
   const filteredProducts = products.filter((p) => p.toLowerCase().includes(search.toLowerCase()));
 
-  const confirmUserEmail = () => {
-    const email = normalizeAppEmail(userEmail);
+  const sendAccessCode = async () => {
+  const email = normalizeAppEmail(userEmail);
 
-    if (!isVirginVoyagesEmail(email)) {
-      setEmailError("Please use your Virgin Voyages email ending with @virginvoyages.com.");
-      return;
-    }
+  if (!supabase) {
+    setEmailError("Supabase is not connected.");
+    return;
+  }
 
-    if (typeof window !== "undefined") {
-      if (rememberEmail) {
-        window.localStorage.setItem(USER_EMAIL_STORAGE_KEY, email);
-      } else {
-        window.localStorage.removeItem(USER_EMAIL_STORAGE_KEY);
-      }
-    }
+  if (!email.endsWith("@virginvoyages.com")) {
+    setEmailError("Only @virginvoyages.com emails are allowed.");
+    return;
+  }
 
-    setUserEmail(email);
-    setEmailError("");
-    setEmailConfirmed(true);
-    logUsageEvent("email_confirmed", { module: "welcome", userEmail: email, remembered: rememberEmail });
-  };
+  setEmailError("");
+  setEmailMessage("");
+  setOtpLoading(true);
+
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      shouldCreateUser: true,
+    },
+  });
+
+  setOtpLoading(false);
+
+  if (error) {
+    setEmailError(error.message);
+    return;
+  }
+
+  setEmailCodeSent(true);
+  setEmailMessage("Access code sent. Please check your email.");
+
+  logUsageEvent("access_code_sent", {
+    module: "welcome",
+    userEmail: email,
+  });
+};
+
+const verifyAccessCode = async () => {
+  const email = normalizeAppEmail(userEmail);
+  const token = String(emailOtpCode || "").replace(/\s+/g, "").trim();
+
+  if (!supabase) {
+    setEmailError("Supabase is not connected.");
+    return;
+  }
+
+  if (!email.endsWith("@virginvoyages.com")) {
+    setEmailError("Only @virginvoyages.com emails are allowed.");
+    return;
+  }
+
+  if (!token) {
+    setEmailError("Enter the access code from your email.");
+    return;
+  }
+
+  setEmailError("");
+  setEmailMessage("");
+  setOtpLoading(true);
+
+  const { error } = await supabase.auth.verifyOtp({
+    email,
+    token,
+    type: "email",
+  });
+
+  setOtpLoading(false);
+
+  if (error) {
+    setEmailError(error.message);
+    return;
+  }
+
+  if (rememberEmail) {
+    localStorage.setItem("vv_user_email", email);
+  } else {
+    localStorage.removeItem("vv_user_email");
+  }
+
+  setUserEmail(email);
+  setEmailConfirmed(true);
+  setEmailCodeSent(false);
+  setEmailOtpCode("");
+
+  logUsageEvent("email_verified", {
+    module: "welcome",
+    userEmail: email,
+  });
+};
 
   const resetUserEmail = () => {
     if (typeof window !== "undefined") window.localStorage.removeItem(USER_EMAIL_STORAGE_KEY);
