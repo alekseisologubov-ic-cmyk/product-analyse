@@ -104,6 +104,44 @@ const STATIONS = [
   "POT WASH DECK 15",
 ];
 
+const BAR_STATIONS = [
+  "Crew Bar",
+  "Crew Shop",
+  "Office",
+  "IV BAR",
+  "KT",
+  "Bosun Club",
+  "Bosun Club Locker",
+  "Pink Agave",
+  "Razzle Dazzle",
+  "Red Room D6",
+  "The Manor",
+  "Casino",
+  "On the Rocks",
+  "On The Rocks Locker",
+  "Extra Virgin",
+  "Test Kitchen",
+  "The Wake",
+  "Red Room D7",
+  "Sip",
+  "Manor Storage Locker",
+  "Draught Haus",
+  "Grounds Club",
+  "Loose Cannon",
+  "Social Club",
+  "The Dock & Dockhouse",
+  "Aquatic / Gym & Tonic",
+  "Grounds Club Too",
+  "Gunbae",
+  "Richard's Rooftop",
+  "Sun Club",
+  "D16 Storage Locker",
+  "Athletic Club Locker",
+  "Athletic Club",
+  "Crew Lookout",
+  "D17 Storage Locker",
+];
+
 const SCHEDULE_ROLES = [
   "Cook",
   "Steward",
@@ -1381,6 +1419,12 @@ export default function App() {
     );
   };
 
+  const getActiveInventoryStationList = () =>
+    equipmentDepartment === "bar" ? BAR_STATIONS : STATIONS;
+
+  const getInventoryStationLabel = () =>
+    equipmentDepartment === "bar" ? "bar" : "station";
+
   const normalizeInventoryRecord = (record) => ({
     id: record.id,
     ship: record.ship,
@@ -1620,7 +1664,9 @@ export default function App() {
       .filter((item) => item.ship === ship && item.station && inventoryRecordMatchesCurrentDepartment(item))
       .map((item) => item.station);
 
-    return [...new Set([...STATIONS, ...stationsFromRecords])]
+    const baseStations = getActiveInventoryStationList();
+
+    return [...new Set([...baseStations, ...stationsFromRecords])]
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b));
   };
@@ -3211,7 +3257,7 @@ export default function App() {
       AvailableAtArrival: Number(item.availableAtArrival || 0),
       ProjectedVoyageNeed_B6: Number(item.projectedNeed || 0),
       SuggestedNextOrder: Number(item.suggestedOrder || 0),
-            Alert: item.alertLabel || "",
+      Alert: item.alertLabel || "",
       Reason: item.orderReason || "Average daily consumption x voyage days, adjusted for stock/future orders until order arrival",
     }));
 
@@ -4126,7 +4172,14 @@ export default function App() {
     const summaryReportRows = getShipSummaryRows();
     const visibleReportRows = getVisibleInventoryReportRows();
     const summaryStationOptions = getSummaryStationOptions();
-    const selectedSummaryStationLabel = summaryStationFilter === "ALL" ? "All Stations" : summaryStationFilter;
+    const activeInventoryStations = getActiveInventoryStationList();
+    const inventoryStationLabel = getInventoryStationLabel();
+    const selectedSummaryStationLabel =
+      summaryStationFilter === "ALL"
+        ? equipmentDepartment === "bar"
+          ? "All Bars"
+          : "All Stations"
+        : summaryStationFilter;
     const inventoryStatusRows = getMyInventoryStatusRows();
     const statusCountedItems = inventoryStatusRows.filter((item) => item.status === "Counted");
     const statusPendingItems = inventoryStatusRows.filter((item) => item.status !== "Counted");
@@ -4160,14 +4213,14 @@ export default function App() {
               ))}
             </select>
 
-            <label style={styles.label}>Choose station</label>
+            <label style={styles.label}>Choose {inventoryStationLabel}</label>
             <select
               value={inventoryStation}
               onChange={(e) => setInventoryStation(e.target.value)}
               style={styles.select}
             >
-              <option value="">Choose station</option>
-              {STATIONS.map((station) => (
+              <option value="">Choose {inventoryStationLabel}</option>
+              {activeInventoryStations.map((station) => (
                 <option key={station} value={station}>{station}</option>
               ))}
             </select>
@@ -4195,7 +4248,7 @@ export default function App() {
 
             <div style={styles.infoBox}>
               <div>🚢 Inventory ship: <strong>{makeInventoryShip || "Not selected"}</strong></div>
-              <div>📍 Station: <strong>{inventoryStation || "Not selected"}</strong></div>
+              <div>📍 {equipmentDepartment === "bar" ? "Bar" : "Station"}: <strong>{inventoryStation || "Not selected"}</strong></div>
               <div>👤 User: <strong>{userName || "Not selected"}</strong></div>
               <div>📋 Shared master items: <strong>{makeInventoryItems.length}</strong></div>
               <div>📂 Master source: <strong>{masterInventorySource || "Not loaded"}</strong></div>
@@ -4420,13 +4473,13 @@ export default function App() {
 
           {inventoryReportMode === "summary" && (
             <div style={styles.reportFilterBox}>
-              <label style={styles.label}>📍 Station Filter</label>
+              <label style={styles.label}>📍 {equipmentDepartment === "bar" ? "Bar Filter" : "Station Filter"}</label>
               <select
                 value={summaryStationFilter}
                 onChange={(e) => setSummaryStationFilter(e.target.value)}
                 style={styles.select}
               >
-                <option value="ALL">All Stations</option>
+                <option value="ALL">{equipmentDepartment === "bar" ? "All Bars" : "All Stations"}</option>
                 {summaryStationOptions.map((station) => (
                   <option key={station} value={station}>{station}</option>
                 ))}
@@ -4442,7 +4495,7 @@ export default function App() {
             <div>🚢 Ship: <strong>{makeInventoryShip || userShip}</strong></div>
             {inventoryReportMode === "my" ? (
               <>
-                <div>📍 Station: <strong>{inventoryStation || "Not selected"}</strong></div>
+                <div>📍 {equipmentDepartment === "bar" ? "Bar" : "Station"}: <strong>{inventoryStation || "Not selected"}</strong></div>
                 <div>👤 User: <strong>{userName || "Not selected"}</strong></div>
                 <div>✅ My records: <strong>{myReportRows.length}</strong></div>
               </>
