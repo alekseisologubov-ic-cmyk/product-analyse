@@ -3745,7 +3745,18 @@ const verifyAccessCode = async () => {
 
           <div style={styles.infoBox}>
             <div>👤 Signed in as: <strong>{normalizeAppEmail(userEmail)}</strong></div>
-            <button style={styles.inlineLinkButton} onClick={resetUserEmail}>Use different email</button>
+            <button
+  type="button"
+  style={styles.inlineLinkButton}
+  onClick={(e) => {
+    e.preventDefault();
+    if (typeof resetUserEmail === "function") {
+      resetUserEmail();
+    }
+  }}
+>
+  Use different email
+</button>
           </div>
 
           <label style={styles.label}>🚢 Select your ship</label>
