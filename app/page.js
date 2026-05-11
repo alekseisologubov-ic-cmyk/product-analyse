@@ -721,6 +721,7 @@ export default function App() {
       if (!product || !uom) return;
 
       const stockOnHand = toNumber(row[3]); // D
+      const parLevel = toNumber(row[16]); // Q — 14-day par level
       const futureOrders = futureOrderColumns.reduce((sum, colIndex) => sum + toNumber(row[colIndex]), 0);
       const pastConsumption = pastConsumptionColumns.reduce((sum, colIndex) => sum + toNumber(row[colIndex]), 0);
 
@@ -732,14 +733,28 @@ export default function App() {
       const projectedNeed = averageConsumptionPerDay * targetDays;
       const consumptionUntilArrival = averageConsumptionPerDay * daysUntilArrival;
       const availableAtArrival = stockOnHand + futureOrders - consumptionUntilArrival;
-      const suggestedOrder = Math.max(projectedNeed - availableAtArrival, 0);
+      const rawSuggestedOrder = Math.max(projectedNeed - availableAtArrival, 0);
+
+      const isFourteenDayLoad = Math.abs(Number(targetDays || 0) - 14) < 0.01;
+      const parMaxAllowed = parLevel > 0 ? parLevel * 1.1 : 0;
+      const parCapApplied = Boolean(isFourteenDayLoad && parLevel > 0 && rawSuggestedOrder > parMaxAllowed);
+      const suggestedOrder = parCapApplied ? parMaxAllowed : rawSuggestedOrder;
+
+      let parLevelNote = "Par level ignored because B6 is not exactly 14 days.";
+      if (isFourteenDayLoad && parLevel > 0 && parCapApplied) {
+        parLevelNote = "Par cap applied: 14-day load cannot exceed par level Q + 10%.";
+      } else if (isFourteenDayLoad && parLevel > 0) {
+        parLevelNote = "Par level considered: calculated order is within par level Q + 10%.";
+      } else if (isFourteenDayLoad && parLevel <= 0) {
+        parLevelNote = "14-day load, but no par level found in column Q.";
+      }
 
       const hasNoPastConsumption = pastConsumption <= 0;
       const hasNoStockOnHand = stockOnHand <= 0;
 
       let alertType = suggestedOrder > 0 ? "order" : "normal";
       let alertLabel = suggestedOrder > 0 ? "Needs order" : "No order suggested";
-      let alertDescription = "Average daily consumption x voyage days, adjusted for stock/future orders until order arrival.";
+      let alertDescription = "Average daily consumption x voyage days, adjusted for stock/future orders until order arrival. " + parLevelNote;
 
       if (hasNoPastConsumption && hasNoStockOnHand) {
         alertType = "blue";
@@ -757,8 +772,13 @@ export default function App() {
         product,
         uom,
         stockOnHand,
+        parLevel,
         futureOrders,
         pastConsumption,
+        rawSuggestedOrder,
+        parMaxAllowed,
+        parCapApplied,
+        parLevelNote,
         historicalSailorDays,
         currentPeriodSailorDays,
         daysUntilArrival,
@@ -789,6 +809,7 @@ export default function App() {
         historicalSailorDays,
         totalItems: parsedRows.length,
         itemsNeedingOrder: parsedRows.filter((item) => item.suggestedOrder > 0).length,
+        parCapItems: parsedRows.filter((item) => item.parCapApplied).length,
         blueReviewItems: parsedRows.filter((item) => item.alertType === "blue").length,
         redReviewItems: parsedRows.filter((item) => item.alertType === "red").length,
       },
@@ -809,7 +830,7 @@ export default function App() {
         setNextOrderSearch("");
         setNextOrderFilter("all");
         setNextOrderMessage(
-          `Order file loaded. ${parsed.meta.totalItems} product rows found. ${parsed.meta.itemsNeedingOrder} need order, ${parsed.meta.blueReviewItems} blue review, ${parsed.meta.redReviewItems} red review.`
+          `Order file loaded. ${parsed.meta.totalItems} product rows found. ${parsed.meta.itemsNeedingOrder} need order, ${parsed.meta.parCapItems} par cap, ${parsed.meta.blueReviewItems} blue review, ${parsed.meta.redReviewItems} red review.`
         );
         logUsageEvent("next_order_file_uploaded", {
           module: "generate_next_order",
@@ -817,6 +838,7 @@ export default function App() {
           sheetName: parsed.meta.sheetName,
           totalItems: parsed.meta.totalItems,
           itemsNeedingOrder: parsed.meta.itemsNeedingOrder,
+          parCapItems: parsed.meta.parCapItems,
           blueReviewItems: parsed.meta.blueReviewItems,
           redReviewItems: parsed.meta.redReviewItems,
         });
@@ -3176,7 +3198,7 @@ export default function App() {
       if (!matchesFilter) return false;
       if (!term) return true;
 
-      return `${item.code || ""} ${item.product || ""} ${item.uom || ""} ${item.alertLabel || ""} ${item.excelRow || ""}`
+      return `${item.code || ""} ${item.product || ""} ${item.uom || ""} ${item.alertLabel || ""} ${item.parLevelNote || ""} ${item.excelRow || ""}`
         .toLowerCase()
         .includes(term);
     });
@@ -3215,6 +3237,7 @@ export default function App() {
           fileName: nextOrderFileName,
           rowsGenerated: rows.length,
           itemsNeedingOrder: nextOrderMeta?.itemsNeedingOrder || 0,
+          parCapItems: nextOrderMeta?.parCapItems || 0,
           blueReviewItems: nextOrderMeta?.blueReviewItems || 0,
           redReviewItems: nextOrderMeta?.redReviewItems || 0,
         });
@@ -3252,6 +3275,7 @@ export default function App() {
       Product: item.product,
       UM: item.uom,
       StockOnHand: Number(item.stockOnHand || 0),
+      ParLevel_Q_14Days: Number(item.parLevel || 0),
       FutureOrders_F_to_N: Number(item.futureOrders || 0),
       PastConsumption_AI_to_AN: Number(item.pastConsumption || 0),
       HistoricalSailorDays_AI5_AI6: Number(item.historicalSailorDays || 0),
@@ -3260,8 +3284,12 @@ export default function App() {
       ConsumptionUntilArrival: Number(item.consumptionUntilArrival || 0),
       AvailableAtArrival: Number(item.availableAtArrival || 0),
       ProjectedVoyageNeed_B6: Number(item.projectedNeed || 0),
+      RawSuggestedBeforePar: Number(item.rawSuggestedOrder || 0),
+      ParMaxAllowed_Q_plus_10_percent: Number(item.parMaxAllowed || 0),
+      ParCapApplied: item.parCapApplied ? "Yes" : "No",
       SuggestedNextOrder: Number(item.suggestedOrder || 0),
       Alert: item.alertLabel || "",
+      ParNote: item.parLevelNote || "",
       Reason: item.orderReason || "Average daily consumption x voyage days, adjusted for stock/future orders until order arrival",
     }));
 
@@ -3320,6 +3348,7 @@ export default function App() {
                 <th>Product</th>
                 <th>UM</th>
                 <th>Stock On Hand</th>
+                <th>Par Level Q</th>
                 <th>Future Orders F:N</th>
                 <th>Past Consumption AI:AN</th>
                 <th>Avg / Day</th>
@@ -3340,13 +3369,14 @@ export default function App() {
                       <td>${escapeHtml(item.product)}</td>
                       <td>${escapeHtml(item.uom)}</td>
                       <td>${formatQty(item.stockOnHand)}</td>
+                      <td>${formatQty(item.parLevel)}</td>
                       <td>${formatQty(item.futureOrders)}</td>
                       <td>${formatQty(item.pastConsumption)}</td>
                       <td>${formatQty(item.averageConsumptionPerDay)}</td>
                       <td>${formatQty(item.consumptionUntilArrival)}</td>
                       <td>${formatQty(item.availableAtArrival)}</td>
                       <td>${formatQty(item.projectedNeed)}</td>
-                      <td class="qty">${formatQty(item.suggestedOrder)}</td>
+                      <td class="qty">${formatQty(item.suggestedOrder)}${item.parCapApplied ? " (Par cap)" : ""}</td>
                       <td class="${item.alertType === "red" ? "red" : item.alertType === "blue" || item.alertType === "order" ? "blue" : ""}">${escapeHtml(item.alertLabel || "")}</td>
                     </tr>
                   `
@@ -3925,10 +3955,11 @@ export default function App() {
               <div>📅 Days of voyage B6: <strong>{formatQty(nextOrderMeta?.targetDays)}</strong></div>
               <div>📦 Product rows found: <strong>{nextOrderMeta?.totalItems || 0}</strong></div>
               <div>🛒 Items needing order: <strong>{nextOrderMeta?.itemsNeedingOrder || 0}</strong></div>
+              <div>📏 Par caps applied: <strong>{nextOrderMeta?.parCapItems || 0}</strong></div>
               <div style={{ color: "#0057b8" }}>🔵 No stock + no past consumption: <strong>{nextOrderMeta?.blueReviewItems || 0}</strong></div>
               <div style={{ color: "#b00020" }}>🔴 Stock on hand + no past consumption: <strong>{nextOrderMeta?.redReviewItems || 0}</strong></div>
               <div style={{ color: "#8a5a00" }}>
-                Calculation uses B2 order day, B3 arrival day, B5 sailors, B6 voyage days, stock on hand from D, future orders from F:N, AI5:AN5 days, AI6:AN6 sailors, and past consumption from AI:AN.
+                Calculation uses B2 order day, B3 arrival day, B5 sailors, B6 voyage days, stock on hand from D, par level from Q, future orders from F:N, AI5:AN5 days, AI6:AN6 sailors, and past consumption from AI:AN. Par level is used only when B6 is exactly 14 days and caps suggested order at Q + 10%.
               </div>
             </div>
           </div>
@@ -3957,7 +3988,7 @@ export default function App() {
               {nextOrderLoading && <div>Generating next order, please wait...</div>}
               {nextOrderMessage && <div style={{ color: nextOrderRows.length ? "#555" : "#8a5a00" }}>{nextOrderMessage}</div>}
               <div>All product rows are included and cards stay in the same order as the Excel file.</div>
-              <div>Formula: average daily consumption × voyage days, then subtract stock/future orders after covering usage until arrival. Blue = 0 stock and 0 consumption. Red = stock on hand but 0 consumption.</div>
+              <div>Formula: average daily consumption × voyage days, then subtract stock/future orders after covering usage until arrival. If B6 is exactly 14 days, column Q par level caps suggested order at par + 10%. Blue = 0 stock and 0 consumption. Red = stock on hand but 0 consumption.</div>
             </div>
           </div>
         </section>
@@ -4030,12 +4061,17 @@ export default function App() {
                   <div style={styles.recipeMeta}>U/M: {item.uom}</div>
                   <div style={styles.recipeMeta}>Excel row: {item.excelRow}</div>
                   <div style={styles.recipeMeta}>Stock on hand D: {formatQty(item.stockOnHand)}</div>
+                  <div style={styles.recipeMeta}>Par level Q: {formatQty(item.parLevel)}</div>
                   <div style={styles.recipeMeta}>Future orders F:N: {formatQty(item.futureOrders)}</div>
                   <div style={styles.recipeMeta}>Past consumption AI:AN: {formatQty(item.pastConsumption)}</div>
                   <div style={styles.recipeMeta}>Average consumption / day: {formatQty(item.averageConsumptionPerDay)}</div>
                   <div style={styles.recipeMeta}>Usage until arrival: {formatQty(item.consumptionUntilArrival)}</div>
                   <div style={styles.recipeMeta}>Available at arrival: {formatQty(item.availableAtArrival)}</div>
                   <div style={styles.recipeMeta}>Projected voyage need: {formatQty(item.projectedNeed)}</div>
+                  <div style={styles.recipeMeta}>Raw suggested before par: {formatQty(item.rawSuggestedOrder)}</div>
+                  {item.parCapApplied && (
+                    <div style={styles.statusWarning}>Par cap applied: max {formatQty(item.parMaxAllowed)}</div>
+                  )}
 
                   <div style={Number(item.suggestedOrder || 0) > 0 ? styles.suggestedOrderBlue : styles.statusNeutral}>
                     Suggested Next Order: {formatQty(item.suggestedOrder)}
