@@ -10,6 +10,10 @@ import {
   EQUIPMENT_DEPARTMENTS,
 } from "./constants/appConstants";
 
+import WelcomePage from "./components/welcome/WelcomePage";
+import EmailGate from "./components/welcome/EmailGate";
+import ShipSelect from "./components/welcome/ShipSelect";
+
 const loadPeopleScheduleModule = () => import("./components/PeopleScheduleModule");
 const PeopleScheduleModule = lazy(loadPeopleScheduleModule);
 
