@@ -766,8 +766,16 @@ export default function App() {
         setNextOrderSearch("");
         setNextOrderFilter("all");
         setNextOrderMessage(
-          `Order file loaded. ${parsed.meta.totalItems} product rows found. ${parsed.meta.itemsNeedingOrder} need order, ${parsed.meta.blueReviewItems} blue review, ${parsed.meta.redReviewItems} red review.`
-        );
+  "Order file loaded. " +
+    parsed.meta.totalItems +
+    " product rows found. " +
+    parsed.meta.itemsNeedingOrder +
+    " need order, " +
+    parsed.meta.blueReviewItems +
+    " blue review, " +
+    parsed.meta.redReviewItems +
+    " red review."
+);
         logUsageEvent("next_order_file_uploaded", {
           module: "generate_next_order",
           fileName: file.name,
