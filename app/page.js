@@ -1,8 +1,16 @@
 "use client";
 
-import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+"use client";
+
+import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "./lib/supabaseClient";
+import {
+  SHIPS,
+  MAKE_INVENTORY_STATIONS,
+  ALLERGEN_RULES,
+  EQUIPMENT_DEPARTMENTS,
+} from "./constants/appConstants";
 
 const loadPeopleScheduleModule = () => import("./components/PeopleScheduleModule");
 const PeopleScheduleModule = lazy(loadPeopleScheduleModule);
