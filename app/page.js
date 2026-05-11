@@ -3583,14 +3583,25 @@ const verifyAccessCode = async () => {
   });
 };
 
-  const resetUserEmail = () => {
-    if (typeof window !== "undefined") window.localStorage.removeItem(USER_EMAIL_STORAGE_KEY);
-    setUserEmail("");
-    setEmailConfirmed(false);
-    setRememberEmail(false);
-    setEmailError("");
-    logUsageEvent("email_reset", { module: "welcome" });
-  };
+  const resetUserEmail = async () => {
+  localStorage.removeItem("vv_user_email");
+
+  setUserEmail("");
+  setEmailConfirmed(false);
+  setEmailError("");
+  setEmailMessage("");
+  setEmailOtpCode("");
+  setEmailCodeSent(false);
+  setRememberEmail(false);
+
+  if (supabase) {
+    await supabase.auth.signOut();
+  }
+
+  logUsageEvent("email_reset", {
+    module: "welcome",
+  });
+};
   const topNotInUseReport = productMissingReportRows;
 
   const totalConsumption = (() => {
