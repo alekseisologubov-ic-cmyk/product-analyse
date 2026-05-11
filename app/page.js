@@ -3607,6 +3607,10 @@ const verifyAccessCode = async () => {
     module: "welcome",
   });
 };
+  logUsageEvent("email_reset", {
+    module: "welcome",
+  });
+};
 
   logUsageEvent("email_reset", {
     module: "welcome",
