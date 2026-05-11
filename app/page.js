@@ -3609,10 +3609,6 @@ const verifyAccessCode = async () => {
   });
 };
 
-  const topNotInUseReport = Array.isArray(productMissingReportRows)
-  ? productMissingReportRows
-  : [];
-
   const totalConsumption = (() => {
     const totals = { BRL: 0, RL: 0, SC: 0, VL: 0 };
 
