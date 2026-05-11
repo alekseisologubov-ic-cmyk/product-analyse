@@ -3612,6 +3612,11 @@ const verifyAccessCode = async () => {
     module: "welcome",
   });
 };
+
+  logUsageEvent("email_reset", {
+    module: "welcome",
+  });
+};
   const topNotInUseReport = productMissingReportRows;
 
   const totalConsumption = (() => {
