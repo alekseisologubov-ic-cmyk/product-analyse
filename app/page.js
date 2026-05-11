@@ -103,19 +103,6 @@ const SCHEDULE_ROTATION_RULES = {
   PASTRY: { contractMonths: 4, vacationMonths: 2, label: "4 month contract / 2 month rotation" },
 };
 
-const ALLERGEN_RULES = [
-  { allergen: "Tree Nuts", keywords: ["almond", "walnut", "pecan", "cashew", "hazelnut", "pistachio", "macadamia"] },
-  { allergen: "Peanuts", keywords: ["peanut"] },
-  { allergen: "Seeds", keywords: ["seed", "seeds", "sunflower seed", "pumpkin seed", "chia", "flax", "hemp seed"], exclude: ["seedless", "seedless cucumber"] },
-  { allergen: "Soy", keywords: ["soy", "tofu", "edamame", "miso", "tamari"] },
-  { allergen: "Gluten", keywords: ["wheat", "flour", "gluten", "bread", "pasta", "semolina", "barley", "rye", "panko"] },
-  { allergen: "Milk / Dairy", keywords: ["milk", "cream", "butter", "cheese", "yogurt", "parmesan", "mozzarella", "ricotta", "cream cheese"] },
-  { allergen: "Egg", keywords: ["egg", "eggs", "mayonnaise", "aioli"], exclude: ["eggplant"] },
-  { allergen: "Fish", keywords: ["salmon", "tuna", "cod", "anchovy", "fish", "sardine"] },
-  { allergen: "Shellfish", keywords: ["shrimp", "crab", "lobster", "mussel", "oyster", "scallop"], exclude: ["clam shell", "clamshell", "packed in a clam shell"] },
-  { allergen: "Sesame", keywords: ["sesame", "tahini"] },
-  { allergen: "Mustard", keywords: ["mustard"] },
-];
 
 const cleanText = (value) =>
   String(value || "").toUpperCase().replace(/\s+/g, " ").trim();
