@@ -990,11 +990,10 @@ const extractEmbeddedImagesByCell = async (arrayBuffer, sheetName) => {
 
     if (!sheetPath) return imageMap;
 
-    const sheetFileName = sheetPath.split("/").pop();
     const sheetRelsPath = sheetPath.replace(
-      `/worksheets/${sheetFileName}`,
-      `/worksheets/_rels/${sheetFileName}.rels`
-    );
+  "/worksheets/" + sheetFileName,
+  "/worksheets/_rels/" + sheetFileName + ".rels"
+);
 
     const sheetRelsXml = await zip.file(sheetRelsPath)?.async("text");
     if (!sheetRelsXml) return imageMap;
