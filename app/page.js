@@ -564,7 +564,7 @@ export default function App() {
 
     channels.push(masterChannel);
 
-        if (equipmentMode === "makeinventory" && makeInventoryShip) {
+           if (equipmentMode === "makeinventory" && makeInventoryShip) {
       const countsChannel = supabase
         .channel("inventory-counts-" + makeInventoryShip)
         .on(
@@ -583,10 +583,6 @@ export default function App() {
 
       channels.push(countsChannel);
     }
-
-    return () => {
-      channels.forEach((channel) => supabase.removeChannel(channel));
-    };
   }, [makeInventoryShip, userShip, module, equipmentMode]);
 
   useEffect(() => {
