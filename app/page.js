@@ -596,20 +596,22 @@ export default function App() {
   const scheduleRealtimeRefresh = (type, shipOverride) => {
     if (printBusyRef.current) return;
 
+      const scheduleRealtimeRefresh = (type, shipOverride) => {
     const ship = shipOverride || makeInventoryShip || userShip;
-    const key = type === "master" ? "master" : `counts-${ship || "unknown"}`;
+    const key = type === "master" ? "master" : "counts-" + (ship || "unknown");
 
     if (realtimeRefreshTimersRef.current[key]) {
       window.clearTimeout(realtimeRefreshTimersRef.current[key]);
     }
 
     realtimeRefreshTimersRef.current[key] = window.setTimeout(() => {
-      delete realtimeRefreshTimersRef.current[key];
-
       if (type === "master") {
-        loadMasterInventoryItems(ship);
-        return;
+        loadMasterInventoryItems();
+      } else {
+        loadInventoryRecords(ship);
       }
+    }, 700);
+  };
 
       if (type === "counts" && ship) {
         loadInventoryRecords(ship);
