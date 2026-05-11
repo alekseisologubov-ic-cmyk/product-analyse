@@ -1410,8 +1410,10 @@ const parseEquipmentMasterFile = async (file) => {
         .eq("ship", scope)
         .order("sort_order", { ascending: true });
 
-    let { data, error } = await loadForScope(MASTER_INVENTORY_SCOPE);
-    let sourceText = "Shared MEL master list loaded for all users.";
+    const masterScope = getMasterInventoryScope(equipmentDepartment);
+let { data, error } = await loadForScope(masterScope);
+
+let sourceText = `Shared ${activeEquipmentDepartmentLabel} master list loaded for all users.`;
 
     if (!error && (!data || data.length === 0) && shipOverride) {
       const legacyResult = await loadForScope(shipOverride);
