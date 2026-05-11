@@ -3585,7 +3585,9 @@ const verifyAccessCode = async () => {
 
   const resetUserEmail = () => {
   try {
-    localStorage.removeItem("vv_user_email");
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("vv_user_email");
+    }
   } catch {}
 
   setUserEmail("");
@@ -3598,10 +3600,7 @@ const verifyAccessCode = async () => {
   setUserShip("");
   setLoggedIn(false);
   setWelcomeStarted(true);
-
-  if (supabase?.auth?.signOut) {
-    supabase.auth.signOut().catch(() => {});
-  }
+};
 
   logUsageEvent("email_reset", {
     module: "welcome",
