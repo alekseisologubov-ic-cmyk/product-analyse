@@ -3749,20 +3749,18 @@ const verifyAccessCode = async () => {
           <p style={styles.subtitle}>Select your vessel to start the dashboard.</p>
 
           <div style={styles.infoBox}>
-            <div>👤 Signed in as: <strong>{normalizeAppEmail(userEmail)}</strong></div>
-            <button
-  type="button"
-  style={styles.inlineLinkButton}
-  onClick={(e) => {
-    e.preventDefault();
-    if (typeof resetUserEmail === "function") {
-      resetUserEmail();
-    }
-  }}
->
-  Use different email
-</button>
-          </div>
+  <div>
+    👤 Signed in as: <strong>{normalizeAppEmail(userEmail)}</strong>
+  </div>
+
+  <button
+    type="button"
+    style={styles.inlineLinkButton}
+    onClick={resetUserEmail}
+  >
+    Use different email
+  </button>
+</div>
 
           <label style={styles.label}>🚢 Select your ship</label>
           <select value={userShip} onChange={(e) => setUserShip(e.target.value)} style={styles.select}>
