@@ -3959,7 +3959,7 @@ export default function App() {
               <div style={{ color: "#0057b8" }}>🔵 No stock + no past consumption: <strong>{nextOrderMeta?.blueReviewItems || 0}</strong></div>
               <div style={{ color: "#b00020" }}>🔴 Stock on hand + no past consumption: <strong>{nextOrderMeta?.redReviewItems || 0}</strong></div>
               <div style={{ color: "#8a5a00" }}>
-                Calculation uses B2 order day, B3 arrival day, B5 sailors, B6 voyage days, stock on hand from D, par level from Q, future orders from F:N, AI5:AN5 days, AI6:AN6 sailors, and past consumption from AI:AN. Par level is used only when B6 is exactly 14 days and caps suggested order at Q + 10%.
+                Compact order cards show only key ordering fields. Detailed calculation fields remain in Print and Excel export.
               </div>
             </div>
           </div>
@@ -3988,7 +3988,7 @@ export default function App() {
               {nextOrderLoading && <div>Generating next order, please wait...</div>}
               {nextOrderMessage && <div style={{ color: nextOrderRows.length ? "#555" : "#8a5a00" }}>{nextOrderMessage}</div>}
               <div>All product rows are included and cards stay in the same order as the Excel file.</div>
-              <div>Formula: average daily consumption × voyage days, then subtract stock/future orders after covering usage until arrival. If B6 is exactly 14 days, column Q par level caps suggested order at par + 10%. Blue = 0 stock and 0 consumption. Red = stock on hand but 0 consumption.</div>
+              <div>Blue = 0 stock and 0 consumption. Red = stock on hand but 0 consumption. Par level is shown only for 14-day loads.</div>
             </div>
           </div>
         </section>
@@ -4045,44 +4045,60 @@ export default function App() {
             <p style={styles.emptyText}>Upload the latest order file and click Generate Next Order. All product rows will appear here.</p>
           )}
 
-          <div style={styles.equipmentGrid}>
+          <div style={styles.nextOrderGrid}>
             {nextOrderRows.length > 0 && visibleNextOrderRows.map((item, index) => {
+              const isFourteenDayLoad = Math.abs(Number(nextOrderMeta?.targetDays || 0) - 14) < 0.01;
               const cardStyle = {
-                ...styles.equipmentCard,
-                ...(item.alertType === "red" ? styles.orderWarningCard : {}),
-                ...(item.alertType === "blue" || item.alertType === "order" ? styles.orderNeededCard : {}),
+                ...styles.nextOrderCard,
+                ...(item.alertType === "red" ? styles.nextOrderCardRed : {}),
+                ...(item.alertType === "blue" || item.alertType === "order" ? styles.nextOrderCardBlue : {}),
               };
 
               return (
                 <div key={`${item.code}-${item.excelRow}-next-order-${index}`} style={cardStyle}>
-                  <div style={styles.recipeMeta}>Excel order #{item.orderRank || index + 1}</div>
-                  <div style={styles.recipeName}>{item.product}</div>
-                  <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                  <div style={styles.recipeMeta}>U/M: {item.uom}</div>
-                  <div style={styles.recipeMeta}>Excel row: {item.excelRow}</div>
-                  <div style={styles.recipeMeta}>Stock on hand D: {formatQty(item.stockOnHand)}</div>
-                  <div style={styles.recipeMeta}>Par level Q: {formatQty(item.parLevel)}</div>
-                  <div style={styles.recipeMeta}>Future orders F:N: {formatQty(item.futureOrders)}</div>
-                  <div style={styles.recipeMeta}>Past consumption AI:AN: {formatQty(item.pastConsumption)}</div>
-                  <div style={styles.recipeMeta}>Average consumption / day: {formatQty(item.averageConsumptionPerDay)}</div>
-                  <div style={styles.recipeMeta}>Usage until arrival: {formatQty(item.consumptionUntilArrival)}</div>
-                  <div style={styles.recipeMeta}>Available at arrival: {formatQty(item.availableAtArrival)}</div>
-                  <div style={styles.recipeMeta}>Projected voyage need: {formatQty(item.projectedNeed)}</div>
-                  <div style={styles.recipeMeta}>Raw suggested before par: {formatQty(item.rawSuggestedOrder)}</div>
-                  {item.parCapApplied && (
-                    <div style={styles.statusWarning}>Par cap applied: max {formatQty(item.parMaxAllowed)}</div>
-                  )}
-
-                  <div style={Number(item.suggestedOrder || 0) > 0 ? styles.suggestedOrderBlue : styles.statusNeutral}>
-                    Suggested Next Order: {formatQty(item.suggestedOrder)}
+                  <div style={styles.nextOrderTopLine}>
+                    <span>#{item.orderRank || index + 1}</span>
+                    <span>Row {item.excelRow}</span>
                   </div>
 
-                  {item.alertType === "red" && <div style={styles.statusBad}>{item.alertLabel}</div>}
-                  {item.alertType === "blue" && <div style={styles.suggestedOrderBlue}>{item.alertLabel}</div>}
-                  {item.alertType === "order" && <div style={styles.suggestedOrderBlue}>{item.alertLabel}</div>}
-                  {item.alertType === "normal" && <div style={styles.statusNeutral}>{item.alertLabel}</div>}
+                  <div style={styles.nextOrderName}>{item.product}</div>
 
-                  <div style={styles.warningSmall}>{item.orderReason}</div>
+                  <div style={styles.nextOrderMeta}>Code: {item.code || "N/A"}</div>
+                  <div style={styles.nextOrderMeta}>U/M: {item.uom}</div>
+
+                  <div style={styles.nextOrderMiniGrid}>
+                    <div style={styles.nextOrderMiniBox}>
+                      <span>Stock</span>
+                      <strong>{formatQty(item.stockOnHand)}</strong>
+                    </div>
+                    <div style={styles.nextOrderMiniBox}>
+                      <span>Future</span>
+                      <strong>{formatQty(item.futureOrders)}</strong>
+                    </div>
+                    <div style={styles.nextOrderMiniBox}>
+                      <span>At arrival</span>
+                      <strong>{formatQty(item.availableAtArrival)}</strong>
+                    </div>
+                    {isFourteenDayLoad && (
+                      <div style={styles.nextOrderMiniBox}>
+                        <span>Par Q</span>
+                        <strong>{formatQty(item.parLevel)}</strong>
+                      </div>
+                    )}
+                  </div>
+
+                  {item.parCapApplied && (
+                    <div style={styles.nextOrderWarning}>Par cap applied: max {formatQty(item.parMaxAllowed)}</div>
+                  )}
+
+                  <div style={Number(item.suggestedOrder || 0) > 0 ? styles.nextOrderSuggestedBlue : styles.nextOrderSuggestedNeutral}>
+                    Order: {formatQty(item.suggestedOrder)}
+                  </div>
+
+                  {item.alertType === "red" && <div style={styles.nextOrderStatusRed}>{item.alertLabel}</div>}
+                  {item.alertType === "blue" && <div style={styles.nextOrderStatusBlue}>{item.alertLabel}</div>}
+                  {item.alertType === "order" && <div style={styles.nextOrderStatusBlue}>{item.alertLabel}</div>}
+                  {item.alertType === "normal" && <div style={styles.nextOrderStatusNeutral}>{item.alertLabel}</div>}
                 </div>
               );
             })}
@@ -5625,6 +5641,21 @@ const styles = {
   warningText: { color: "#8a5a00", background: "#fff4d6", padding: 10, borderRadius: 8 },
   allergenList: { display: "grid", gap: 10 },
   allergenCard: { border: "1px solid #e1c16e", background: "#fff9e8", borderRadius: 10, padding: 10 },
+  nextOrderGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(185px, 1fr))", gap: 10 },
+  nextOrderCard: { border: "1px solid #ddd", borderRadius: 12, padding: 10, background: "#fafafa", display: "grid", gap: 6, textAlign: "left", fontSize: 12 },
+  nextOrderCardBlue: { border: "2px solid #0057b8", background: "#eef5ff" },
+  nextOrderCardRed: { border: "2px solid #b00020", background: "#fff0f0" },
+  nextOrderTopLine: { display: "flex", justifyContent: "space-between", gap: 8, color: "#666", fontSize: 11, fontWeight: "bold" },
+  nextOrderName: { fontWeight: "bold", fontSize: 14, lineHeight: 1.15 },
+  nextOrderMeta: { color: "#555", fontSize: 12, lineHeight: 1.2 },
+  nextOrderMiniGrid: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 6 },
+  nextOrderMiniBox: { background: "#fff", border: "1px solid #ddd", borderRadius: 8, padding: 6, display: "grid", gap: 2, textAlign: "center", minWidth: 0 },
+  nextOrderWarning: { padding: 6, borderRadius: 8, background: "#fff4d6", color: "#8a5a00", fontWeight: "bold", textAlign: "center", fontSize: 12 },
+  nextOrderSuggestedBlue: { padding: 7, borderRadius: 8, background: "#0057b8", color: "#fff", fontWeight: "bold", textAlign: "center", fontSize: 13 },
+  nextOrderSuggestedNeutral: { padding: 7, borderRadius: 8, background: "#f2f2f2", color: "#555", fontWeight: "bold", textAlign: "center", fontSize: 13 },
+  nextOrderStatusBlue: { padding: 6, borderRadius: 8, background: "#0057b8", color: "#fff", fontWeight: "bold", textAlign: "center", fontSize: 12 },
+  nextOrderStatusRed: { padding: 6, borderRadius: 8, background: "#b00020", color: "#fff", fontWeight: "bold", textAlign: "center", fontSize: 12 },
+  nextOrderStatusNeutral: { padding: 6, borderRadius: 8, background: "#f2f2f2", color: "#555", fontWeight: "bold", textAlign: "center", fontSize: 12 },
   equipmentCategory: { marginBottom: 24 },
   equipmentGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 },
   equipmentCard: { border: "1px solid #ddd", borderRadius: 14, padding: 14, background: "#fafafa", display: "grid", gap: 8, cursor: "pointer", textAlign: "left" },
