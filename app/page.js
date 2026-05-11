@@ -3490,55 +3490,29 @@ export default function App() {
   const allergenWarnings = selectedRecipe ? detectAllergens(productsInRecipe) : [];
   const filteredProducts = products.filter((p) => p.toLowerCase().includes(search.toLowerCase()));
 
-  const sendAccessCode = async () => {
+  const sendAccessCode = () => {
     const email = normalizeAppEmail(userEmail);
-
-    if (!supabase) {
-      setEmailError("Supabase is not connected.");
-      return;
-    }
 
     if (!isVirginVoyagesEmail(email)) {
       setEmailError("Please use your Virgin Voyages email ending with @virginvoyages.com.");
       return;
     }
 
-    setEmailError("");
-    setEmailMessage("");
-    setOtpLoading(true);
-
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        shouldCreateUser: true,
-      },
-    });
-
-    setOtpLoading(false);
-
-    if (error) {
-      setEmailError(error.message || "Could not send access code.");
-      return;
-    }
-
     setUserEmail(email);
+    setEmailError("");
+    setEmailMessage("Email accepted. Enter the access code to continue.");
+    setOtpLoading(false);
     setEmailCodeSent(true);
-    setEmailMessage("Access code sent. Please check your email.");
 
-    logUsageEvent("access_code_sent", {
+    logUsageEvent("access_code_screen_opened", {
       module: "welcome",
       userEmail: email,
     });
   };
 
-  const verifyAccessCode = async () => {
+  const verifyAccessCode = () => {
     const email = normalizeAppEmail(userEmail);
     const token = String(emailOtpCode || "").replace(/\s+/g, "").trim();
-
-    if (!supabase) {
-      setEmailError("Supabase is not connected.");
-      return;
-    }
 
     if (!isVirginVoyagesEmail(email)) {
       setEmailError("Please use your Virgin Voyages email ending with @virginvoyages.com.");
@@ -3546,24 +3520,12 @@ export default function App() {
     }
 
     if (!token) {
-      setEmailError("Enter the access code from your email.");
+      setEmailError("Enter the access code.");
       return;
     }
 
-    setEmailError("");
-    setEmailMessage("");
-    setOtpLoading(true);
-
-    const { error } = await supabase.auth.verifyOtp({
-      email,
-      token,
-      type: "email",
-    });
-
-    setOtpLoading(false);
-
-    if (error) {
-      setEmailError(error.message || "Invalid or expired code.");
+    if (token !== "1818") {
+      setEmailError("Access code is incorrect.");
       return;
     }
 
@@ -3579,8 +3541,11 @@ export default function App() {
     setEmailConfirmed(true);
     setEmailCodeSent(false);
     setEmailOtpCode("");
+    setEmailError("");
+    setEmailMessage("");
+    setOtpLoading(false);
 
-    logUsageEvent("email_verified", {
+    logUsageEvent("email_verified_with_access_code", {
       module: "welcome",
       userEmail: email,
       remembered: rememberEmail,
@@ -3679,7 +3644,7 @@ export default function App() {
         <section style={styles.loginCard}>
           <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.logo} />
           <h1 style={styles.title}>Email Access Code</h1>
-          <p style={styles.subtitle}>Enter your Virgin Voyages email and verify the access code.</p>
+          <p style={styles.subtitle}>Enter your Virgin Voyages email and access code.</p>
 
           <label style={styles.label}>✉️ Virgin Voyages email</label>
           <input
@@ -3703,7 +3668,7 @@ export default function App() {
             <>
               <label style={styles.label}>🔐 Access code</label>
               <input
-                type="text"
+                type="password"
                 inputMode="numeric"
                 value={emailOtpCode}
                 disabled={otpLoading}
@@ -3715,7 +3680,7 @@ export default function App() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") verifyAccessCode();
                 }}
-                placeholder="Enter code from email..."
+                placeholder="Enter access code..."
                 style={styles.searchInput}
                 autoComplete="one-time-code"
               />
@@ -3736,18 +3701,18 @@ export default function App() {
 
           <div style={styles.infoBox}>
             <div>🔒 Only emails ending with <strong>@virginvoyages.com</strong> are allowed.</div>
-            <div>📩 A one-time access code will be sent to your email.</div>
+            <div>🔐 Access code is required to continue.</div>
             <div>📊 Usage tracking will be connected to your verified email.</div>
           </div>
 
           {!emailCodeSent ? (
             <button style={styles.primaryButton} onClick={sendAccessCode} disabled={otpLoading}>
-              {otpLoading ? "Sending..." : "Send Access Code"}
+              Continue
             </button>
           ) : (
             <>
               <button style={styles.primaryButton} onClick={verifyAccessCode} disabled={otpLoading}>
-                {otpLoading ? "Verifying..." : "Verify Code"}
+                Verify Code
               </button>
               <button
                 style={styles.backButton}
@@ -3760,9 +3725,6 @@ export default function App() {
                 disabled={otpLoading}
               >
                 Change Email
-              </button>
-              <button style={styles.backButton} onClick={sendAccessCode} disabled={otpLoading}>
-                Resend Code
               </button>
             </>
           )}
