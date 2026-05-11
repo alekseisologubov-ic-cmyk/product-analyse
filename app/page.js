@@ -431,7 +431,7 @@ const getDaysBetweenCells = (startValue, endValue) => {
 
 const getDefaultNextYearStartDate = () => {
   const nextYear = new Date().getFullYear() + 1;
-  return `${nextYear}-01-01`;
+  return String(nextYear) + "-01-01";
 };
 
 export default function App() {
