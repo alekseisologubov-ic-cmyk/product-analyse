@@ -5472,64 +5472,64 @@ export default function App() {
           <p style={styles.emptyText}>No products found for this search.</p>
         )}
 
-        <div style={styles.costReportGrid}>
+        <div style={styles.costReportLineList}>
           {filteredProductCostReportRows.map((item) => (
-            <div key={item.productKey} style={styles.costReportCard}>
-              <div style={styles.costReportHeader}>
-                <div>
-                  <div style={styles.nextOrderName}>{item.product}</div>
-                  {item.code && <div style={styles.nextOrderMeta}>Code: {item.code}</div>}
-                </div>
-                <div style={styles.costReportTotals}>
-                  <strong>{formatQty(item.visibleTotalQty)}</strong>
-                  <span>{formatMoney(item.visibleTotalCost)}</span>
+            <div key={item.productKey} style={styles.costReportLine}>
+              <div style={styles.costLineMain}>
+                <div style={styles.costLineProduct}>{item.product}</div>
+                <div style={styles.costLineMeta}>
+                  {item.code ? "Code: " + item.code + " • " : ""}
+                  {item.venues.length} venue{item.venues.length === 1 ? "" : "s"}
                 </div>
               </div>
 
-              {item.venues.map((venue) => (
-                <div key={venue.venueKey} style={styles.costVenueBlock}>
-                  <div style={styles.costVenueTitle}>{venue.location}</div>
+              <div style={styles.costLineTotals}>
+                <span>Total</span>
+                <strong>{formatQty(item.visibleTotalQty)}</strong>
+                <span>{formatMoney(item.visibleTotalCost)}</span>
+              </div>
 
-                  <div style={styles.costShipGrid}>
-                    {visibleShips.map((ship) => {
-                      const shipData = venue.ships[ship] || { qty: 0, cost: 0, unitPrice: 0, isLowestUnitPrice: false };
-                      const hasData = Number(shipData.qty || 0) !== 0 || Number(shipData.cost || 0) !== 0;
+              <div style={styles.costLineVenues}>
+                {item.venues.map((venue) => (
+                  <div key={venue.venueKey} style={styles.costLineVenue}>
+                    <div style={styles.costLineVenueTitle}>{venue.location}</div>
 
-                      return (
-                        <div
-                          key={ship}
-                          style={{
-                            ...styles.costShipBox,
-                            ...(shipData.isLowestUnitPrice ? styles.costShipLowestPrice : {}),
-                            ...(!hasData ? styles.costShipEmpty : {}),
-                          }}
-                        >
-                          <span style={styles.shipName}>{ship}</span>
-                          <strong>{formatQty(shipData.qty)}</strong>
-                          <span>{formatMoney(shipData.cost)}</span>
-                          {shipData.unitPrice > 0 ? (
-                            <small>{formatMoney(shipData.unitPrice)} / unit</small>
-                          ) : (
-                            <small style={styles.costUnitPricePlaceholder}>—</small>
-                          )}
-                          {shipData.isLowestUnitPrice ? (
-                            <div style={styles.lowestPriceBadge}>Lowest unit price</div>
-                          ) : (
-                            <div style={styles.lowestPriceBadgeSpacer} />
-                          )}
-                        </div>
-                      );
-                    })}
+                    <div style={styles.costLineShipChips}>
+                      {visibleShips.map((ship) => {
+                        const shipData = venue.ships[ship] || { qty: 0, cost: 0, unitPrice: 0, isLowestUnitPrice: false };
+                        const hasData = Number(shipData.qty || 0) !== 0 || Number(shipData.cost || 0) !== 0;
+
+                        if (!hasData) return null;
+
+                        return (
+                          <div
+                            key={ship}
+                            style={{
+                              ...styles.costLineShipChip,
+                              ...(shipData.isLowestUnitPrice ? styles.costLineShipLowest : {}),
+                            }}
+                          >
+                            <span style={styles.costLineShipName}>{ship}</span>
+                            <strong>{formatQty(shipData.qty)}</strong>
+                            <span>{formatMoney(shipData.cost)}</span>
+                            {shipData.unitPrice > 0 && (
+                              <small>{formatMoney(shipData.unitPrice)} / unit</small>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {venue.hasPriceDifference && (
+                      <div style={styles.costLinePriceNote}>Lowest unit price highlighted.</div>
+                    )}
                   </div>
-
-                  {venue.hasPriceDifference && (
-                    <div style={styles.priceDifferenceNote}>Unit price differs by ship. Lowest price is highlighted.</div>
-                  )}
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           ))}
         </div>
+
       </section>
 
       <section style={styles.card}>
@@ -5912,6 +5912,20 @@ const styles = {
   lowestPriceBadge: { marginTop: 4, padding: "4px 6px", borderRadius: 999, background: "#2e7d32", color: "#fff", fontSize: 10, fontWeight: "bold", minHeight: 24, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1.1 },
   lowestPriceBadgeSpacer: { minHeight: 32 },
   priceDifferenceNote: { color: "#2e7d32", fontSize: 12, fontWeight: "bold", minHeight: 28 },
+  costReportLineList: { display: "grid", gap: 8, marginTop: 14 },
+  costReportLine: { border: "1px solid #ddd", borderRadius: 14, padding: 10, background: "#fafafa", display: "grid", gridTemplateColumns: "minmax(220px, 1.1fr) 110px minmax(420px, 2.6fr)", gap: 10, alignItems: "stretch", textAlign: "left" },
+  costLineMain: { display: "grid", gap: 5, alignContent: "center", minWidth: 0 },
+  costLineProduct: { fontWeight: "bold", fontSize: 14, lineHeight: 1.15, overflowWrap: "anywhere" },
+  costLineMeta: { color: "#555", fontSize: 12, lineHeight: 1.2 },
+  costLineTotals: { padding: 8, borderRadius: 10, background: "#111", color: "#fff", display: "grid", gap: 2, textAlign: "center", fontSize: 12, alignContent: "center", minHeight: 62 },
+  costLineVenues: { display: "flex", gap: 8, overflowX: "auto", alignItems: "stretch", paddingBottom: 2 },
+  costLineVenue: { minWidth: 280, border: "1px solid #e1e1e1", borderRadius: 12, padding: 8, background: "#fff", display: "grid", gap: 6, alignContent: "start" },
+  costLineVenueTitle: { fontWeight: "bold", fontSize: 12, lineHeight: 1.1 },
+  costLineShipChips: { display: "flex", flexWrap: "wrap", gap: 5, alignItems: "stretch" },
+  costLineShipChip: { border: "1px solid #ddd", borderRadius: 8, padding: "5px 7px", background: "#fff", display: "grid", gap: 2, textAlign: "center", fontSize: 11, minWidth: 68, alignContent: "center" },
+  costLineShipLowest: { border: "2px solid #2e7d32", background: "#e8f5e9", color: "#2e7d32", fontWeight: "bold" },
+  costLineShipName: { color: "#555", fontSize: 10, fontWeight: "bold" },
+  costLinePriceNote: { color: "#2e7d32", fontSize: 11, fontWeight: "bold", lineHeight: 1.1 },
   equipmentCategory: { marginBottom: 24 },
   equipmentGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 },
   equipmentCard: { border: "1px solid #ddd", borderRadius: 14, padding: 14, background: "#fafafa", display: "grid", gap: 8, cursor: "pointer", textAlign: "left" },
