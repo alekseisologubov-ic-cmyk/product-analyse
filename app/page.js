@@ -4075,8 +4075,14 @@ export default function App() {
                       <span>Future</span>
                       <strong>{formatQty(item.futureOrders)}</strong>
                     </div>
-                    <div style={styles.nextOrderMiniBox}>
-                      <span>At arrival</span>
+                    <div
+                      style={
+                        Number(item.availableAtArrival || 0) < 0
+                          ? { ...styles.nextOrderMiniBox, ...styles.nextOrderMiniBoxNegative }
+                          : styles.nextOrderMiniBox
+                      }
+                    >
+                      <span>{Number(item.availableAtArrival || 0) < 0 ? "⚠️ At arrival" : "At arrival"}</span>
                       <strong>{formatQty(item.availableAtArrival)}</strong>
                     </div>
                     {isFourteenDayLoad && (
@@ -5650,6 +5656,7 @@ const styles = {
   nextOrderMeta: { color: "#555", fontSize: 12, lineHeight: 1.2 },
   nextOrderMiniGrid: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 6 },
   nextOrderMiniBox: { background: "#fff", border: "1px solid #ddd", borderRadius: 8, padding: 6, display: "grid", gap: 2, textAlign: "center", minWidth: 0 },
+  nextOrderMiniBoxNegative: { background: "#b00020", border: "1px solid #b00020", color: "#fff", fontWeight: "bold" },
   nextOrderWarning: { padding: 6, borderRadius: 8, background: "#fff4d6", color: "#8a5a00", fontWeight: "bold", textAlign: "center", fontSize: 12 },
   nextOrderSuggestedBlue: { padding: 7, borderRadius: 8, background: "#0057b8", color: "#fff", fontWeight: "bold", textAlign: "center", fontSize: 13 },
   nextOrderSuggestedNeutral: { padding: 7, borderRadius: 8, background: "#f2f2f2", color: "#555", fontWeight: "bold", textAlign: "center", fontSize: 13 },
