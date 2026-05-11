@@ -64,14 +64,11 @@ const normalizeShipCode = (value) => {
 };
 
 const SCHEDULE_ALL_SHIPS = "ALL";
-const getMasterInventoryScope = (department) => {
-  const dept = cleanText(department || "culinary").replace(/[^A-Z0-9]/g, "_");
-  return `GLOBAL_${dept || "CULINARY"}`;
-};
+const MASTER_INVENTORY_SCOPE = "GLOBAL";
 
 const getMasterInventoryScope = (department) => {
   const dept = cleanText(department || "culinary").replace(/[^A-Z0-9]/g, "_");
-  return `GLOBAL_${dept || "CULINARY"}`;
+  return "GLOBAL_" + (dept || "CULINARY");
 };
 
 const getShipDisplayName = (shipCode) => SHIP_DISPLAY_NAMES[shipCode] || shipCode || "";
@@ -546,15 +543,17 @@ export default function App() {
 
     const channels = [];
 
+    const masterScope = getMasterInventoryScope(equipmentDepartment);
+
     const masterChannel = supabase
-      .channel("inventory-master-global")
+      .channel("inventory-master-" + masterScope)
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "inventory_master_items",
-          filter: `ship=.eq("ship", getMasterInventoryScope(equipmentDepartment))
+          filter: "ship=eq." + masterScope,
         },
         () => {
           scheduleRealtimeRefresh("master", makeInventoryShip || userShip);
@@ -564,7 +563,7 @@ export default function App() {
 
     channels.push(masterChannel);
 
-           if (equipmentMode === "makeinventory" && makeInventoryShip) {
+    if (equipmentMode === "makeinventory" && makeInventoryShip) {
       const countsChannel = supabase
         .channel("inventory-counts-" + makeInventoryShip)
         .on(
@@ -583,7 +582,11 @@ export default function App() {
 
       channels.push(countsChannel);
     }
-  }, [makeInventoryShip, userShip, module, equipmentMode]);
+
+    return () => {
+      channels.forEach((channel) => supabase.removeChannel(channel));
+    };
+  }, [makeInventoryShip, userShip, module, equipmentMode, equipmentDepartment]);
 
   useEffect(() => {
     return () => {
@@ -596,7 +599,6 @@ export default function App() {
   const scheduleRealtimeRefresh = (type, shipOverride) => {
     if (printBusyRef.current) return;
 
-      const scheduleRealtimeRefresh = (type, shipOverride) => {
     const ship = shipOverride || makeInventoryShip || userShip;
     const key = type === "master" ? "master" : "counts-" + (ship || "unknown");
 
@@ -605,13 +607,12 @@ export default function App() {
     }
 
     realtimeRefreshTimersRef.current[key] = window.setTimeout(() => {
+      delete realtimeRefreshTimersRef.current[key];
+
       if (type === "master") {
-        loadMasterInventoryItems();
-      } else {
-        loadInventoryRecords(ship);
+        loadMasterInventoryItems(ship);
+        return;
       }
-    }, 700);
-  };
 
       if (type === "counts" && ship) {
         loadInventoryRecords(ship);
@@ -766,16 +767,8 @@ export default function App() {
         setNextOrderSearch("");
         setNextOrderFilter("all");
         setNextOrderMessage(
-  "Order file loaded. " +
-    parsed.meta.totalItems +
-    " product rows found. " +
-    parsed.meta.itemsNeedingOrder +
-    " need order, " +
-    parsed.meta.blueReviewItems +
-    " blue review, " +
-    parsed.meta.redReviewItems +
-    " red review."
-);
+          `Order file loaded. ${parsed.meta.totalItems} product rows found. ${parsed.meta.itemsNeedingOrder} need order, ${parsed.meta.blueReviewItems} blue review, ${parsed.meta.redReviewItems} red review.`
+        );
         logUsageEvent("next_order_file_uploaded", {
           module: "generate_next_order",
           fileName: file.name,
@@ -893,266 +886,6 @@ export default function App() {
     return map;
   };
 
-  const normalizeZipPath = (path) => {
-  const parts = [];
-
-  String(path || "")
-    .replace(/^\/+/, "")
-    .split("/")
-    .forEach((part) => {
-      if (!part || part === ".") return;
-      if (part === "..") {
-        parts.pop();
-        return;
-      }
-      parts.push(part);
-    });
-
-  return parts.join("/");
-};
-
-const resolveZipPath = (basePath, target) => {
-  const value = String(target || "");
-  if (!value) return "";
-
-  if (value.startsWith("/")) {
-    return normalizeZipPath(value);
-  }
-
-  const baseDir = String(basePath || "").split("/").slice(0, -1).join("/");
-  return normalizeZipPath(baseDir + "/" + value);
-};
-
-const getXmlRelationships = (xmlText) => {
-  const doc = new DOMParser().parseFromString(xmlText, "application/xml");
-  const rels = {};
-
-  Array.from(doc.getElementsByTagName("*"))
-    .filter((node) => node.localName === "Relationship")
-    .forEach((node) => {
-      rels[node.getAttribute("Id")] = node.getAttribute("Target");
-    });
-
-  return rels;
-};
-
-const getElementsByLocalName = (node, localName) =>
-  Array.from(node.getElementsByTagName("*")).filter((el) => el.localName === localName);
-
-const columnNumberToLetters = (columnNumberZeroBased) => {
-  let number = Number(columnNumberZeroBased || 0) + 1;
-  let letters = "";
-
-  while (number > 0) {
-    const remainder = (number - 1) % 26;
-    letters = String.fromCharCode(65 + remainder) + letters;
-    number = Math.floor((number - 1) / 26);
-  }
-
-  return letters;
-};
-
-const getWorkbookSheetPath = async (zip, sheetNameToFind) => {
-  const workbookXml = await zip.file("xl/workbook.xml")?.async("text");
-  const workbookRelsXml = await zip.file("xl/_rels/workbook.xml.rels")?.async("text");
-
-  if (!workbookXml || !workbookRelsXml) return "";
-
-  const workbookDoc = new DOMParser().parseFromString(workbookXml, "application/xml");
-  const workbookRels = getXmlRelationships(workbookRelsXml);
-
-  const sheets = getElementsByLocalName(workbookDoc, "sheet");
-  const wanted = cleanText(sheetNameToFind);
-
-  const sheetNode =
-    sheets.find((sheet) => cleanText(sheet.getAttribute("name")) === wanted) ||
-    sheets.find((sheet) => cleanText(sheet.getAttribute("name")).includes(wanted));
-
-  if (!sheetNode) return "";
-
-  const relationId =
-    sheetNode.getAttribute("r:id") ||
-    sheetNode.getAttribute("id") ||
-    sheetNode.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id");
-
-  const target = workbookRels[relationId];
-  if (!target) return "";
-
-  return resolveZipPath("xl/workbook.xml", target);
-};
-
-const extractEmbeddedImagesByCell = async (arrayBuffer, sheetName) => {
-  const imageMap = {};
-
-  try {
-    const zip = await JSZip.loadAsync(arrayBuffer);
-    const sheetPath = await getWorkbookSheetPath(zip, sheetName);
-
-    if (!sheetPath) return imageMap;
-
-    const sheetRelsPath = sheetPath.replace(
-  "/worksheets/" + sheetFileName,
-  "/worksheets/_rels/" + sheetFileName + ".rels"
-);
-
-    const sheetRelsXml = await zip.file(sheetRelsPath)?.async("text");
-    if (!sheetRelsXml) return imageMap;
-
-    const sheetRels = getXmlRelationships(sheetRelsXml);
-    const drawingTarget = Object.values(sheetRels).find((target) =>
-      String(target || "").includes("drawings/")
-    );
-
-    if (!drawingTarget) return imageMap;
-
-    const drawingPath = resolveZipPath(sheetPath, drawingTarget);
-    const drawingXml = await zip.file(drawingPath)?.async("text");
-
-    if (!drawingXml) return imageMap;
-
-    const drawingDoc = new DOMParser().parseFromString(drawingXml, "application/xml");
-    const drawingFileName = drawingPath.split("/").pop();
-    const drawingRelsPath = drawingPath.replace(
-  "/drawings/" + drawingFileName,
-  "/drawings/_rels/" + drawingFileName + ".rels"
-);
-
-    const drawingRelsXml = await zip.file(drawingRelsPath)?.async("text");
-    const drawingRels = drawingRelsXml ? getXmlRelationships(drawingRelsXml) : {};
-
-    const anchors = [
-      ...getElementsByLocalName(drawingDoc, "oneCellAnchor"),
-      ...getElementsByLocalName(drawingDoc, "twoCellAnchor"),
-    ];
-
-    for (const anchor of anchors) {
-      const from = getElementsByLocalName(anchor, "from")[0];
-      if (!from) continue;
-
-      const colNode = getElementsByLocalName(from, "col")[0];
-      const rowNode = getElementsByLocalName(from, "row")[0];
-
-      const colNumber = Number(colNode?.textContent || 0);
-      const rowNumber = Number(rowNode?.textContent || 0);
-
-      const cellAddress = columnNumberToLetters(colNumber) + String(rowNumber + 1);
-
-      let dataUrl = "";
-
-      const cNvPr = getElementsByLocalName(anchor, "cNvPr")[0];
-      const description = cNvPr?.getAttribute("descr") || "";
-
-      if (description.startsWith("data:image/")) {
-        dataUrl = description;
-      }
-
-      if (!dataUrl) {
-        const blip = getElementsByLocalName(anchor, "blip")[0];
-        const embedId =
-          blip?.getAttribute("r:embed") ||
-          blip?.getAttribute("embed") ||
-          blip?.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "embed");
-
-        const imageTarget = drawingRels[embedId];
-
-        if (imageTarget) {
-          const imagePath = resolveZipPath(drawingPath, imageTarget);
-          const imageFile = zip.file(imagePath);
-
-          if (imageFile) {
-            const base64 = await imageFile.async("base64");
-            const extension = imagePath.split(".").pop()?.toLowerCase();
-            const mime =
-              extension === "jpg" || extension === "jpeg"
-                ? "image/jpeg"
-                : extension === "webp"
-                ? "image/webp"
-                : "image/png";
-
-            dataUrl = "data:" + mime + ";base64," + base64;
-          }
-        }
-      }
-
-      if (dataUrl) {
-        imageMap[cellAddress] = dataUrl;
-      }
-    }
-  } catch {
-    return imageMap;
-  }
-
-  return imageMap;
-};
-  const parseBarInventoryWorkbook = async (file) => {
-  const arrayBuffer = await file.arrayBuffer();
-  const workbook = XLSX.read(arrayBuffer, { type: "array" });
-
-  const oldSheetName =
-    workbook.SheetNames.find((name) => cleanText(name) === "OLD") ||
-    workbook.SheetNames.find((name) => cleanText(name).includes("OLD")) ||
-    workbook.SheetNames[0];
-
-  const worksheet = workbook.Sheets[oldSheetName];
-  const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
-
-  const imageMap = await extractEmbeddedImagesByCell(arrayBuffer, oldSheetName);
-
-  const items = rows
-    .slice(1)
-    .map((row, index) => {
-      const sourceRow = index + 2;
-
-      const code = String(row[0] || "").trim();
-      const name = String(row[1] || "").replace(/\s+/g, " ").trim();
-      const unit = String(row[2] || "").trim();
-
-      const imageFromCell = String(row[3] || "").trim();
-      const imageFromEmbeddedPicture = imageMap["D" + sourceRow] || "";
-      const image = imageFromCell || imageFromEmbeddedPicture;
-
-      return {
-        equipmentDepartment: "bar",
-        sheetName: oldSheetName,
-        category: "Bar",
-        code,
-        name,
-        unit,
-        um: unit,
-        image,
-        sourceRow,
-      };
-    })
-    .filter((item) => item.name && cleanText(item.name) !== "PRODUCT NAME")
-    .filter((item) => cleanText(item.code) !== "PRODUCT CODE")
-    .filter((item) => item.code || item.name);
-
-  return {
-    workbook,
-    items,
-    sourceSheetName: oldSheetName,
-  };
-};
-
-const parseEquipmentMasterFile = async (file) => {
-  if (equipmentDepartment === "bar") {
-    return parseBarInventoryWorkbook(file);
-  }
-
-  const arrayBuffer = await file.arrayBuffer();
-  const workbook = XLSX.read(arrayBuffer, { type: "array" });
-  const items = parseMusterWorkbook(workbook).map((item) => ({
-    ...item,
-    equipmentDepartment: equipmentDepartment || "culinary",
-  }));
-
-  return {
-    workbook,
-    items,
-    sourceSheetName: workbook.SheetNames[0],
-  };
-};
-  
   const parseMusterWorkbook = (workbook) => {
     const items = [];
 
@@ -1219,6 +952,275 @@ const parseEquipmentMasterFile = async (file) => {
     });
 
     return items;
+  };
+
+  const normalizeZipPath = (path) => {
+    const parts = [];
+
+    String(path || "")
+      .replace(/^\/+/, "")
+      .split("/")
+      .forEach((part) => {
+        if (!part || part === ".") return;
+        if (part === "..") {
+          parts.pop();
+          return;
+        }
+        parts.push(part);
+      });
+
+    return parts.join("/");
+  };
+
+  const resolveZipPath = (basePath, target) => {
+    const value = String(target || "");
+    if (!value) return "";
+
+    if (value.startsWith("/")) {
+      return normalizeZipPath(value);
+    }
+
+    const baseDir = String(basePath || "").split("/").slice(0, -1).join("/");
+    return normalizeZipPath(baseDir + "/" + value);
+  };
+
+  const getElementsByLocalName = (node, localName) =>
+    Array.from(node.getElementsByTagName("*")).filter((el) => el.localName === localName);
+
+  const getXmlRelationships = (xmlText) => {
+    const doc = new DOMParser().parseFromString(xmlText, "application/xml");
+    const rels = {};
+
+    getElementsByLocalName(doc, "Relationship").forEach((node) => {
+      rels[node.getAttribute("Id")] = node.getAttribute("Target");
+    });
+
+    return rels;
+  };
+
+  const columnNumberToLetters = (columnNumberZeroBased) => {
+    let number = Number(columnNumberZeroBased || 0) + 1;
+    let letters = "";
+
+    while (number > 0) {
+      const remainder = (number - 1) % 26;
+      letters = String.fromCharCode(65 + remainder) + letters;
+      number = Math.floor((number - 1) / 26);
+    }
+
+    return letters;
+  };
+
+  const getWorkbookSheetPath = async (zip, sheetNameToFind) => {
+    const workbookXml = await zip.file("xl/workbook.xml")?.async("text");
+    const workbookRelsXml = await zip.file("xl/_rels/workbook.xml.rels")?.async("text");
+
+    if (!workbookXml || !workbookRelsXml) return "";
+
+    const workbookDoc = new DOMParser().parseFromString(workbookXml, "application/xml");
+    const workbookRels = getXmlRelationships(workbookRelsXml);
+
+    const sheets = getElementsByLocalName(workbookDoc, "sheet");
+    const wanted = cleanText(sheetNameToFind);
+
+    const sheetNode =
+      sheets.find((sheet) => cleanText(sheet.getAttribute("name")) === wanted) ||
+      sheets.find((sheet) => cleanText(sheet.getAttribute("name")).includes(wanted));
+
+    if (!sheetNode) return "";
+
+    const relationId =
+      sheetNode.getAttribute("r:id") ||
+      sheetNode.getAttribute("id") ||
+      sheetNode.getAttributeNS(
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+        "id"
+      );
+
+    const target = workbookRels[relationId];
+    if (!target) return "";
+
+    return resolveZipPath("xl/workbook.xml", target);
+  };
+
+  const extractEmbeddedImagesByCell = async (arrayBuffer, sheetName) => {
+    const imageMap = {};
+
+    try {
+      const zip = await JSZip.loadAsync(arrayBuffer);
+      const sheetPath = await getWorkbookSheetPath(zip, sheetName);
+
+      if (!sheetPath) return imageMap;
+
+      const sheetFileName = sheetPath.split("/").pop();
+      const sheetRelsPath = sheetPath.replace(
+        "/worksheets/" + sheetFileName,
+        "/worksheets/_rels/" + sheetFileName + ".rels"
+      );
+
+      const sheetRelsXml = await zip.file(sheetRelsPath)?.async("text");
+      if (!sheetRelsXml) return imageMap;
+
+      const sheetRels = getXmlRelationships(sheetRelsXml);
+      const drawingTarget = Object.values(sheetRels).find((target) =>
+        String(target || "").includes("drawings/")
+      );
+
+      if (!drawingTarget) return imageMap;
+
+      const drawingPath = resolveZipPath(sheetPath, drawingTarget);
+      const drawingXml = await zip.file(drawingPath)?.async("text");
+
+      if (!drawingXml) return imageMap;
+
+      const drawingDoc = new DOMParser().parseFromString(drawingXml, "application/xml");
+
+      const drawingFileName = drawingPath.split("/").pop();
+      const drawingRelsPath = drawingPath.replace(
+        "/drawings/" + drawingFileName,
+        "/drawings/_rels/" + drawingFileName + ".rels"
+      );
+
+      const drawingRelsXml = await zip.file(drawingRelsPath)?.async("text");
+      const drawingRels = drawingRelsXml ? getXmlRelationships(drawingRelsXml) : {};
+
+      const anchors = [
+        ...getElementsByLocalName(drawingDoc, "oneCellAnchor"),
+        ...getElementsByLocalName(drawingDoc, "twoCellAnchor"),
+      ];
+
+      for (const anchor of anchors) {
+        const from = getElementsByLocalName(anchor, "from")[0];
+        if (!from) continue;
+
+        const colNode = getElementsByLocalName(from, "col")[0];
+        const rowNode = getElementsByLocalName(from, "row")[0];
+
+        const colNumber = Number(colNode?.textContent || 0);
+        const rowNumber = Number(rowNode?.textContent || 0);
+
+        const cellAddress = columnNumberToLetters(colNumber) + String(rowNumber + 1);
+        let dataUrl = "";
+
+        const cNvPr = getElementsByLocalName(anchor, "cNvPr")[0];
+        const description = cNvPr?.getAttribute("descr") || "";
+
+        if (description.startsWith("data:image/")) {
+          dataUrl = description;
+        }
+
+        if (!dataUrl) {
+          const blip = getElementsByLocalName(anchor, "blip")[0];
+
+          const embedId =
+            blip?.getAttribute("r:embed") ||
+            blip?.getAttribute("embed") ||
+            blip?.getAttributeNS(
+              "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+              "embed"
+            );
+
+          const imageTarget = drawingRels[embedId];
+
+          if (imageTarget) {
+            const imagePath = resolveZipPath(drawingPath, imageTarget);
+            const imageFile = zip.file(imagePath);
+
+            if (imageFile) {
+              const base64 = await imageFile.async("base64");
+              const extension = imagePath.split(".").pop()?.toLowerCase();
+
+              const mime =
+                extension === "jpg" || extension === "jpeg"
+                  ? "image/jpeg"
+                  : extension === "webp"
+                  ? "image/webp"
+                  : "image/png";
+
+              dataUrl = "data:" + mime + ";base64," + base64;
+            }
+          }
+        }
+
+        if (dataUrl) {
+          imageMap[cellAddress] = dataUrl;
+        }
+      }
+    } catch {
+      return imageMap;
+    }
+
+    return imageMap;
+  };
+
+  const parseBarInventoryFile = async (file) => {
+    const arrayBuffer = await file.arrayBuffer();
+    const workbook = XLSX.read(arrayBuffer, { type: "array" });
+
+    const oldSheetName =
+      workbook.SheetNames.find((name) => cleanText(name) === "OLD") ||
+      workbook.SheetNames.find((name) => cleanText(name).includes("OLD")) ||
+      workbook.SheetNames[0];
+
+    const worksheet = workbook.Sheets[oldSheetName];
+    const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+    const imageMap = await extractEmbeddedImagesByCell(arrayBuffer, oldSheetName);
+
+    const items = rows
+      .slice(1)
+      .map((row, index) => {
+        const sourceRow = index + 2;
+
+        const code = String(row[0] || "").trim();
+        const name = String(row[1] || "").replace(/\s+/g, " ").trim();
+        const unit = String(row[2] || "").trim();
+
+        const imageFromCell = String(row[3] || "").trim();
+        const imageFromEmbeddedPicture = imageMap["D" + sourceRow] || "";
+        const image = imageFromCell || imageFromEmbeddedPicture;
+
+        return {
+          equipmentDepartment: "bar",
+          sheetName: oldSheetName,
+          category: "Bar",
+          code,
+          name,
+          unit,
+          um: unit,
+          image,
+          sourceRow,
+        };
+      })
+      .filter((item) => item.name)
+      .filter((item) => cleanText(item.name) !== "PRODUCT NAME")
+      .filter((item) => cleanText(item.code) !== "PRODUCT CODE")
+      .filter((item) => item.code || item.name);
+
+    return {
+      workbook,
+      items,
+      sourceSheetName: oldSheetName,
+    };
+  };
+
+  const parseEquipmentMasterFile = async (file) => {
+    if (equipmentDepartment === "bar") {
+      return parseBarInventoryFile(file);
+    }
+
+    const arrayBuffer = await file.arrayBuffer();
+    const workbook = XLSX.read(arrayBuffer, { type: "array" });
+
+    const items = parseMusterWorkbook(workbook).map((item) => ({
+      ...item,
+      equipmentDepartment: equipmentDepartment || "culinary",
+    }));
+
+    return {
+      workbook,
+      items,
+      sourceSheetName: workbook.SheetNames.join(", "),
+    };
   };
 
   const parseWarehouseItems = () => {
@@ -1366,13 +1368,18 @@ const parseEquipmentMasterFile = async (file) => {
   };
 
   const getInventoryItemKey = (item) => {
-  const departmentKey = cleanText(item?.equipmentDepartment || equipmentDepartment || "culinary")
-    .replace(/[^A-Z0-9]/g, "_");
+    const departmentKey = cleanText(item?.equipmentDepartment || equipmentDepartment || "culinary")
+      .replace(/[^A-Z0-9]/g, "_");
 
-  return cleanText(
-    `${departmentKey}|${item?.sheetName || ""}|${item?.category || ""}|${item?.code || ""}|${item?.name || ""}|${item?.sourceRow || ""}`
-  );
-};
+    return cleanText(
+      departmentKey + "|" +
+        (item?.sheetName || "") + "|" +
+        (item?.category || "") + "|" +
+        (item?.code || "") + "|" +
+        (item?.name || "") + "|" +
+        (item?.sourceRow || "")
+    );
+  };
 
   const normalizeInventoryRecord = (record) => ({
     id: record.id,
@@ -1420,15 +1427,16 @@ const parseEquipmentMasterFile = async (file) => {
         .order("sort_order", { ascending: true });
 
     const masterScope = getMasterInventoryScope(equipmentDepartment);
-let { data, error } = await loadForScope(masterScope);
+    const departmentLabel = activeEquipmentDepartmentLabel || "Equipment";
 
-let sourceText = `Shared ${activeEquipmentDepartmentLabel} master list loaded for all users.`;
+    let { data, error } = await loadForScope(masterScope);
+    let sourceText = "Shared " + departmentLabel + " master list loaded for all users.";
 
     if (!error && (!data || data.length === 0) && shipOverride) {
       const legacyResult = await loadForScope(shipOverride);
       if (!legacyResult.error && legacyResult.data?.length) {
         data = legacyResult.data;
-        sourceText = `Legacy shared master list loaded for ${shipOverride}. Upload MEL again to make it global for all users.`;
+        sourceText = "Legacy shared master list loaded for " + shipOverride + ". Upload again to make it shared by department.";
       }
     }
 
@@ -1462,13 +1470,16 @@ let sourceText = `Shared ${activeEquipmentDepartmentLabel} master list loaded fo
     }
 
     setMasterInventoryLoading(true);
-    setMakeInventoryMessage("Sharing MEL master inventory list for all users...");
-    setMusterMessage("Sharing MEL master inventory list for all users...");
+    const masterScope = getMasterInventoryScope(equipmentDepartment);
+    const departmentLabel = activeEquipmentDepartmentLabel || "Equipment";
+
+    setMakeInventoryMessage("Sharing " + departmentLabel + " master inventory list for all users...");
+    setMusterMessage("Sharing " + departmentLabel + " master inventory list for all users...");
 
     const deleteResult = await supabase
       .from("inventory_master_items")
       .delete()
-      .eq("ship", getMasterInventoryScope(equipmentDepartment))
+      .eq("ship", masterScope);
 
     if (deleteResult.error) {
       const text = `Could not replace shared master inventory: ${deleteResult.error.message}`;
@@ -1482,18 +1493,23 @@ let sourceText = `Shared ${activeEquipmentDepartmentLabel} master list loaded fo
     const rowMap = new Map();
 
     items.forEach((item, index) => {
-      const itemKey = getInventoryItemKey(item);
+      const normalizedItem = {
+        ...item,
+        equipmentDepartment: item.equipmentDepartment || equipmentDepartment || "culinary",
+      };
+
+      const itemKey = getInventoryItemKey(normalizedItem);
       if (!itemKey || rowMap.has(itemKey)) return;
 
       rowMap.set(itemKey, {
-        ship: getMasterInventoryScope(equipmentDepartment),
+        ship: masterScope,
         item_key: itemKey,
-        code: item.code || "",
-        item_name: item.name || "",
-        category: item.category || "",
-        sheet_name: item.sheetName || "",
-        image: item.image || "",
-        source_row: Number(item.sourceRow || index + 1),
+        code: normalizedItem.code || "",
+        item_name: normalizedItem.name || "",
+        category: normalizedItem.category || "",
+        sheet_name: normalizedItem.sheetName || "",
+        image: normalizedItem.image || "",
+        source_row: Number(normalizedItem.sourceRow || index + 1),
         sort_order: index,
         updated_at: new Date().toISOString(),
       });
@@ -1519,10 +1535,10 @@ let sourceText = `Shared ${activeEquipmentDepartmentLabel} master list loaded fo
 
     setMakeInventoryItems(items);
     setMusterItems(items);
-    setMasterInventorySource(`Shared MEL master list saved for all users. ${rows.length} item(s) from all tabs.`);
+    setMasterInventorySource("Shared " + departmentLabel + " master list saved for all users. " + rows.length + " item(s) from all tabs.");
     setMasterInventoryLoading(false);
-    setMakeInventoryMessage(`Shared MEL master list saved for all users. ${rows.length} item(s) from all tabs.`);
-    setMusterMessage(`Shared MEL master list saved for all users. ${rows.length} item(s) from all tabs.`);
+    setMakeInventoryMessage("Shared " + departmentLabel + " master list saved for all users. " + rows.length + " item(s) from all tabs.");
+    setMusterMessage("Shared " + departmentLabel + " master list saved for all users. " + rows.length + " item(s) from all tabs.");
     return true;
   };
 
@@ -1566,6 +1582,23 @@ let sourceText = `Shared ${activeEquipmentDepartmentLabel} master list loaded fo
     setInventoryLoading(false);
   };
 
+  const getCurrentEquipmentDepartmentKey = () =>
+    cleanText(equipmentDepartment || "culinary").replace(/[^A-Z0-9]/g, "_") || "CULINARY";
+
+  const inventoryRecordMatchesCurrentDepartment = (item) => {
+    const departmentKey = getCurrentEquipmentDepartmentKey();
+    const key = cleanText(item?.itemKey || "");
+
+    if (!key) return true;
+    if (key.startsWith(departmentKey + "|")) return true;
+
+    const hasKnownDepartmentPrefix = ["CULINARY|", "BAR|", "RESTAURANT|"].some((prefix) =>
+      key.startsWith(prefix)
+    );
+
+    return !hasKnownDepartmentPrefix && departmentKey === "CULINARY";
+  };
+
   const getMyInventoryRows = () => {
     const ship = makeInventoryShip || userShip;
     const userName = getEffectiveInventoryUserName();
@@ -1575,7 +1608,8 @@ let sourceText = `Shared ${activeEquipmentDepartmentLabel} master list loaded fo
         (item) =>
           item.ship === ship &&
           item.station === inventoryStation &&
-          item.userName === userName
+          item.userName === userName &&
+          inventoryRecordMatchesCurrentDepartment(item)
       )
       .sort((a, b) => a.name.localeCompare(b.name));
   };
@@ -1583,7 +1617,7 @@ let sourceText = `Shared ${activeEquipmentDepartmentLabel} master list loaded fo
   const getSummaryStationOptions = () => {
     const ship = makeInventoryShip || userShip;
     const stationsFromRecords = inventorySummary
-      .filter((item) => item.ship === ship && item.station)
+      .filter((item) => item.ship === ship && item.station && inventoryRecordMatchesCurrentDepartment(item))
       .map((item) => item.station);
 
     return [...new Set([...STATIONS, ...stationsFromRecords])]
@@ -1600,6 +1634,7 @@ let sourceText = `Shared ${activeEquipmentDepartmentLabel} master list loaded fo
       .filter(
         (item) =>
           item.ship === ship &&
+          inventoryRecordMatchesCurrentDepartment(item) &&
           (selectedStation === "ALL" || item.station === selectedStation)
       )
       .forEach((item) => {
@@ -2377,21 +2412,35 @@ let sourceText = `Shared ${activeEquipmentDepartmentLabel} master list loaded fo
     const file = e.target.files?.[0];
     if (!file) return;
 
-    readExcelFile(file, async (workbook) => {
-      const items = parseMusterWorkbook(workbook);
-      setMusterItems(items);
-      setMakeInventoryItems(items);
-      setSelectedEquipment(null);
-      setMusterMessage(`Equipment Muster List loaded from ${workbook.SheetNames.length} sheet(s). Saving shared MEL list...`);
-      logUsageEvent("equipment_muster_file_uploaded", {
-        module: "equipment_muster",
-        fileName: file.name,
-        sheetCount: workbook.SheetNames.length,
-        itemCount: items.length,
-      });
-      await saveMasterInventoryItems(null, items);
-      e.target.value = "";
-    });
+    (async () => {
+      try {
+        const { workbook, items, sourceSheetName } = await parseEquipmentMasterFile(file);
+
+        setMusterItems(items);
+        setMakeInventoryItems(items);
+        setSelectedEquipment(null);
+
+        setMusterMessage(
+          activeEquipmentDepartmentLabel + " Equipment Muster List loaded from " + sourceSheetName + ". Saving shared list..."
+        );
+
+        logUsageEvent("equipment_muster_file_uploaded", {
+          module: "equipment_" + equipmentDepartment + "_muster",
+          equipmentDepartment,
+          fileName: file.name,
+          sheetCount: workbook.SheetNames.length,
+          sourceSheetName,
+          itemCount: items.length,
+        });
+
+        await saveMasterInventoryItems(null, items);
+        e.target.value = "";
+      } catch (error) {
+        setMusterMessage(
+          "Could not load " + activeEquipmentDepartmentLabel + " file: " + (error?.message || "Unknown error")
+        );
+      }
+    })();
   };
 
   const uploadWarehouseFile = (e) => {
@@ -2431,26 +2480,39 @@ let sourceText = `Shared ${activeEquipmentDepartmentLabel} master list loaded fo
     const file = e.target.files?.[0];
     if (!file) return;
 
-    readExcelFile(file, async (workbook) => {
-      const items = parseMusterWorkbook(workbook);
-      setMakeInventoryItems(items);
-      setMusterItems(items);
-      setCurrentInventoryItem(null);
-      setInventoryQty("");
-      setEditingInventoryId(null);
-      setShowVariance(false);
-      setMasterInventorySource(`Uploaded from ${file.name}`);
-      setMakeInventoryMessage(`Master inventory loaded from ${workbook.SheetNames.length} sheet(s). Saving shared MEL list for all users...`);
-      logUsageEvent("shared_master_inventory_uploaded", {
-        module: "make_inventory",
-        fileName: file.name,
-        sheetCount: workbook.SheetNames.length,
-        itemCount: items.length,
-      });
+    (async () => {
+      try {
+        const { workbook, items, sourceSheetName } = await parseEquipmentMasterFile(file);
 
-      await saveMasterInventoryItems(null, items);
-      e.target.value = "";
-    });
+        setMakeInventoryItems(items);
+        setMusterItems(items);
+        setCurrentInventoryItem(null);
+        setInventoryQty("");
+        setEditingInventoryId(null);
+        setShowVariance(false);
+
+        setMasterInventorySource("Uploaded from " + file.name);
+        setMakeInventoryMessage(
+          activeEquipmentDepartmentLabel + " master inventory loaded from " + sourceSheetName + ". Saving shared list for all users..."
+        );
+
+        logUsageEvent("shared_master_inventory_uploaded", {
+          module: "equipment_" + equipmentDepartment + "_make_inventory",
+          equipmentDepartment,
+          fileName: file.name,
+          sheetCount: workbook.SheetNames.length,
+          sourceSheetName,
+          itemCount: items.length,
+        });
+
+        await saveMasterInventoryItems(null, items);
+        e.target.value = "";
+      } catch (error) {
+        setMakeInventoryMessage(
+          "Could not load " + activeEquipmentDepartmentLabel + " file: " + (error?.message || "Unknown error")
+        );
+      }
+    })();
   };
 
   const consumptionData = useMemo(() => consumptionRows.slice(1), [consumptionRows]);
@@ -3149,7 +3211,7 @@ let sourceText = `Shared ${activeEquipmentDepartmentLabel} master list loaded fo
       AvailableAtArrival: Number(item.availableAtArrival || 0),
       ProjectedVoyageNeed_B6: Number(item.projectedNeed || 0),
       SuggestedNextOrder: Number(item.suggestedOrder || 0),
-      Alert: item.alertLabel || "",
+            Alert: item.alertLabel || "",
       Reason: item.orderReason || "Average daily consumption x voyage days, adjusted for stock/future orders until order arrival",
     }));
 
