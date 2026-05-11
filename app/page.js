@@ -5481,7 +5481,6 @@ const verifyAccessCode = async () => {
       )}
     </main>
   );
-}
 
 const styles = {
   page: { minHeight: "100vh", padding: 24, background: "#f5f5f5", fontFamily: "Arial, sans-serif", color: "#111" },
