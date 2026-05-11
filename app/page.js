@@ -1109,7 +1109,7 @@ const extractEmbeddedImagesByCell = async (arrayBuffer, sheetName) => {
       const unit = String(row[2] || "").trim();
 
       const imageFromCell = String(row[3] || "").trim();
-      const imageFromEmbeddedPicture = imageMap[`D${sourceRow}`] || "";
+      const imageFromEmbeddedPicture = imageMap["D" + sourceRow] || "";
       const image = imageFromCell || imageFromEmbeddedPicture;
 
       return {
