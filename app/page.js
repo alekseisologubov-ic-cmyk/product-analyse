@@ -3103,148 +3103,62 @@ export default function App() {
     return { totals, allShips };
   })();
 
-  if (!loggedIn && !welcomeStarted) {
+    if (!loggedIn && !welcomeStarted) {
     return (
-      <main style={styles.welcomePage}>
-        <style>{`
-          @keyframes vvMarquee {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
-          }
-
-          @keyframes vvGlow {
-            0%, 100% { box-shadow: 0 18px 50px rgba(0,0,0,0.18); }
-            50% { box-shadow: 0 22px 70px rgba(176,0,32,0.28); }
-          }
-        `}</style>
-
-        <section style={styles.welcomeHero}>
-          <div style={styles.welcomeGlowCard}>
-            <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.welcomeLogo} />
-
-            <div style={styles.runningLineWrapper}>
-              <div style={styles.runningLineTrack}>
-                <span style={styles.runningLineText}>Use it • Save Time • Be the Reason Someone Smiles Today • </span>
-                <span style={styles.runningLineText}>Use it • Save Time • Be the Reason Someone Smiles Today • </span>
-                <span style={styles.runningLineText}>Use it • Save Time • Be the Reason Someone Smiles Today • </span>
-                <span style={styles.runningLineText}>Use it • Save Time • Be the Reason Someone Smiles Today • </span>
-              </div>
-            </div>
-
-            <div style={styles.ahoyStartBox}>
-              <button
-                style={styles.ahoyStartButton}
-                onClick={() => {
-                  logUsageEvent("welcome_start_clicked", { module: "welcome" });
-                  setWelcomeStarted(true);
-                }}
-                aria-label="Start"
-              >
-                AHOY
-              </button>
-            </div>
-
-            <p style={styles.welcomeSubtitle}>Press AHOY, enter your email, choose your ship, and open the Virgin Voyages dashboard.</p>
-            <div style={styles.welcomeFooterNote}>Product • Equipment • Inventory • People & Schedule</div>
-          </div>
-        </section>
-      </main>
+      <WelcomePage
+        styles={styles}
+        onStart={() => {
+          logUsageEvent("welcome_start_clicked", {
+            module: "welcome",
+            userEmail: normalizeAppEmail(userEmail),
+          });
+          setWelcomeStarted(true);
+        }}
+      />
     );
   }
 
   if (!loggedIn && welcomeStarted && !emailConfirmed) {
     return (
-      <main style={styles.page}>
-        <section style={styles.loginCard}>
-          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.logo} />
-          <h1 style={styles.title}>Enter Your Email</h1>
-          <p style={styles.subtitle}>Use your Virgin Voyages email to continue.</p>
-
-          <label style={styles.label}>✉️ Virgin Voyages email</label>
-          <input
-            type="email"
-            value={userEmail}
-            onChange={(e) => {
-              setUserEmail(e.target.value);
-              setEmailError("");
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") confirmUserEmail();
-            }}
-            placeholder="name@virginvoyages.com"
-            style={styles.searchInput}
-            autoComplete="email"
-          />
-
-          {emailError && <div style={styles.emailError}>{emailError}</div>}
-
-          <label style={styles.checkboxRow}>
-            <input
-              type="checkbox"
-              checked={rememberEmail}
-              onChange={(e) => setRememberEmail(e.target.checked)}
-            />
-            <span>Remember me on this device</span>
-          </label>
-
-          <div style={styles.infoBox}>
-            <div>🔒 Only emails ending with <strong>@virginvoyages.com</strong> are allowed.</div>
-            <div>📊 Usage tracking will be connected to this email.</div>
-          </div>
-
-          <button style={styles.primaryButton} onClick={confirmUserEmail}>
-            Continue
-          </button>
-
-          <button
-            style={styles.backButton}
-            onClick={() => {
-              setWelcomeStarted(false);
-              setEmailError("");
-            }}
-          >
-            ← Back to Start
-          </button>
-        </section>
-      </main>
+      <EmailGate
+        styles={styles}
+        userEmail={userEmail}
+        setUserEmail={setUserEmail}
+        emailError={emailError}
+        setEmailError={setEmailError}
+        rememberEmail={rememberEmail}
+        setRememberEmail={setRememberEmail}
+        onContinue={confirmUserEmail}
+        onBack={() => {
+          setWelcomeStarted(false);
+          setEmailError("");
+        }}
+      />
     );
   }
 
   if (!loggedIn && welcomeStarted && emailConfirmed) {
     return (
-      <main style={styles.page}>
-        <section style={styles.loginCard}>
-          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.logo} />
-          <h1 style={styles.title}>Choose Your Ship</h1>
-          <p style={styles.subtitle}>Select your vessel to start the dashboard.</p>
+      <ShipSelect
+        styles={styles}
+        ships={SHIPS}
+        userEmail={normalizeAppEmail(userEmail)}
+        userShip={userShip}
+        setUserShip={setUserShip}
+        onUseDifferentEmail={resetUserEmail}
+        onBack={() => setWelcomeStarted(false)}
+        onContinue={() => {
+          if (!userShip) return;
 
-          <div style={styles.infoBox}>
-            <div>👤 Signed in as: <strong>{normalizeAppEmail(userEmail)}</strong></div>
-            <button style={styles.inlineLinkButton} onClick={resetUserEmail}>Use different email</button>
-          </div>
+          logUsageEvent("ship_selected", {
+            ship: userShip,
+            module: "welcome",
+            userEmail: normalizeAppEmail(userEmail),
+          });
 
-          <label style={styles.label}>🚢 Select your ship</label>
-          <select value={userShip} onChange={(e) => setUserShip(e.target.value)} style={styles.select}>
-            <option value="">Choose ship</option>
-            {SHIPS.map((ship) => <option key={ship} value={ship}>{ship}</option>)}
-          </select>
-
-          <button
-            style={styles.primaryButton}
-            onClick={() => {
-              if (!userShip) return;
-              logUsageEvent("ship_selected", { ship: userShip, module: "welcome", userEmail: normalizeAppEmail(userEmail) });
-              setLoggedIn(true);
-            }}
-          >
-            Continue
-          </button>
-
-          <button style={styles.backButton} onClick={() => setWelcomeStarted(false)}>
-            ← Back to Start
-          </button>
-        </section>
-      </main>
+          setLoggedIn(true);
+        }}
+      />
     );
   }
 
