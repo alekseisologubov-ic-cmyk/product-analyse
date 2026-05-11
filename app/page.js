@@ -920,7 +920,7 @@ const resolveZipPath = (basePath, target) => {
   }
 
   const baseDir = String(basePath || "").split("/").slice(0, -1).join("/");
-  return normalizeZipPath(`${baseDir}/${value}`);
+  return normalizeZipPath(baseDir + "/" + value);
 };
 
 const getXmlRelationships = (xmlText) => {
