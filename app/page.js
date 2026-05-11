@@ -68,33 +68,6 @@ const getShipDisplayName = (shipCode) => SHIP_DISPLAY_NAMES[shipCode] || shipCod
 const getScheduleShipDisplayName = (shipCode) =>
   shipCode === SCHEDULE_ALL_SHIPS ? "All Ships" : getShipDisplayName(shipCode);
 
-const STATIONS = [
-  "VEG PREP",
-  "BUTCHER PREP",
-  "FISH PREP",
-  "BAKERY",
-  "Pink Agave",
-  "Pastry deck 5",
-  "Razzle Dazzle",
-  "Kitchen Table",
-  "Test Kitchen",
-  "Pastry deck 6",
-  "The Wake",
-  "Garde Manger",
-  "Extra Virgin",
-  "Manor",
-  "The Dock House",
-  "Social Club",
-  "Pizza Place",
-  "The Galley",
-  "Gunbae",
-  "Sun Club",
-  "Locker deck 6",
-  "POT WASH DECK 4",
-  "POT WASH DECK 5",
-  "POT WASH DECK 6",
-  "POT WASH DECK 15",
-];
 
 const SCHEDULE_ROLES = [
   "Cook",
