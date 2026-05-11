@@ -15,13 +15,6 @@ import {
 const loadPeopleScheduleModule = () => import("./components/PeopleScheduleModule");
 const PeopleScheduleModule = lazy(loadPeopleScheduleModule);
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-
-const supabase =
-  supabaseUrl && supabaseAnonKey
-    ? createClient(supabaseUrl, supabaseAnonKey)
-    : null;
 
 const getOrCreateVisitorId = () => {
   if (typeof window === "undefined") return "";
