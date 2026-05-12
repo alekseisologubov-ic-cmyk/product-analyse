@@ -458,6 +458,7 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [viewMode, setViewMode] = useState("all");
   const [productCostReportSearch, setProductCostReportSearch] = useState("");
+  const [productReportView, setProductReportView] = useState("main");
   const [showProductMissingReport, setShowProductMissingReport] = useState(false);
   const [productMissingReportRows, setProductMissingReportRows] = useState([]);
   const [productMissingReportLoading, setProductMissingReportLoading] = useState(false);
@@ -4038,6 +4039,7 @@ export default function App() {
               style={styles.moduleCard}
               onClick={() => {
                 setProductMode("dashboard");
+                setProductReportView("main");
                 logUsageEvent("product_option_opened", { module: "product_dashboard", ship: userShip });
               }}
             >
@@ -5421,26 +5423,60 @@ export default function App() {
         </div>
 
         <div style={styles.card}>
-          <h2 style={styles.cardTitle}>🔍 Select Product</h2>
-          <input placeholder="Search product..." value={search} onChange={(e) => setSearch(e.target.value)} style={styles.searchInput} />
+          <h2 style={styles.cardTitle}>🧭 Product Report View</h2>
+          <p style={styles.emptyText}>Choose the report you want to work with.</p>
 
-          <div style={styles.productList}>
-            {filteredProducts.map((product, i) => (
-              <button
-                key={i}
-                onClick={() => {
-                  setSelectedProduct(product);
-                  setSelectedRecipe(null);
-                }}
-                style={{ ...styles.productItem, ...(selectedProduct === product ? styles.productItemActive : {}) }}
-              >
-                {product}
-              </button>
-            ))}
+          <div style={styles.reportModeGrid}>
+            <button
+              style={{ ...styles.reportModeButton, ...(productReportView === "main" ? styles.reportModeButtonActive : {}) }}
+              onClick={() => setProductReportView("main")}
+            >
+              <strong>💰 Main Report</strong>
+              <span>Consumption and cost by product, venue and ship</span>
+            </button>
+
+            <button
+              style={{ ...styles.reportModeButton, ...(productReportView === "consumption" ? styles.reportModeButtonActive : {}) }}
+              onClick={() => setProductReportView("consumption")}
+            >
+              <strong>📊 Consumption Report</strong>
+              <span>Consumption vs locations and template</span>
+            </button>
+
+            <button
+              style={{ ...styles.reportModeButton, ...(productReportView === "reports" ? styles.reportModeButtonActive : {}) }}
+              onClick={() => setProductReportView("reports")}
+            >
+              <strong>📋 Generate Report</strong>
+              <span>Top 50 items not in use by location</span>
+            </button>
           </div>
         </div>
+
+        {productReportView === "consumption" && (
+          <div style={styles.card}>
+            <h2 style={styles.cardTitle}>🔍 Select Product</h2>
+            <input placeholder="Search product..." value={search} onChange={(e) => setSearch(e.target.value)} style={styles.searchInput} />
+
+            <div style={styles.productList}>
+              {filteredProducts.map((product, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    setSelectedProduct(product);
+                    setSelectedRecipe(null);
+                  }}
+                  style={{ ...styles.productItem, ...(selectedProduct === product ? styles.productItemActive : {}) }}
+                >
+                  {product}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
+      {productReportView === "main" && (
       <section style={styles.card}>
         <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 18 }}>
           <div>
@@ -5531,13 +5567,15 @@ export default function App() {
         </div>
 
       </section>
+      )}
 
+      {productReportView === "reports" && (
       <section style={styles.card}>
         <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: showProductMissingReport ? 18 : 0 }}>
           <div>
-            <h2 style={styles.productTitle}>📊 Product Reports</h2>
+            <h2 style={styles.productTitle}>📋 Generate Report</h2>
             <p style={{ ...styles.emptyText, margin: 0 }}>
-              Top 50 items not in use by the location where they should be used.
+              Generate the Top 50 items not in use by the location where they should be used.
             </p>
           </div>
 
@@ -5634,6 +5672,7 @@ export default function App() {
                   <button
                     style={styles.backButton}
                     onClick={() => {
+                      setProductReportView("consumption");
                       setSelectedProduct(item.product);
                       setSelectedRecipe(null);
                     }}
@@ -5646,8 +5685,9 @@ export default function App() {
           </>
         )}
       </section>
+      )}
 
-      {selectedProduct && (
+      {productReportView === "consumption" && selectedProduct && (
         <section style={styles.card}>
           <h2 style={styles.productTitle}>📦 {selectedProduct}</h2>
           <h3 style={styles.sectionTitle}>📊 Total Consumption</h3>
@@ -5843,6 +5883,9 @@ const styles = {
   message: { color: "#555", fontSize: 14 },
   infoBox: { marginTop: 12, padding: 12, borderRadius: 12, background: "#f2f2f2", display: "grid", gap: 6 },
   reportFilterBox: { marginBottom: 16, padding: 14, borderRadius: 14, background: "#f7fbff", border: "1px solid #cfe4ff", display: "grid", gap: 8 },
+  reportModeGrid: { display: "grid", gap: 10 },
+  reportModeButton: { border: "1px solid #ddd", background: "#fafafa", borderRadius: 14, padding: 14, cursor: "pointer", textAlign: "left", display: "grid", gap: 4, color: "#111" },
+  reportModeButtonActive: { background: "#111", color: "#fff", borderColor: "#111" },
   searchInput: { width: "100%", padding: 12, borderRadius: 10, border: "1px solid #ccc", marginBottom: 10 },
   productList: { maxHeight: 300, overflowY: "auto", border: "1px solid #ddd", borderRadius: 12 },
   productItem: { width: "100%", display: "block", textAlign: "left", padding: 10, border: 0, borderBottom: "1px solid #eee", background: "#fff", cursor: "pointer" },
