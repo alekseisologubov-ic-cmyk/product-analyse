@@ -18,6 +18,7 @@ const compactText = (value) =>
 
 const formatQty = (value) => Number(value || 0).toFixed(2);
 const formatMoney = (value) => "$" + Number(value || 0).toFixed(2);
+const yieldToBrowser = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const getCellValue = (worksheet, address) => worksheet?.[address]?.v ?? "";
 
@@ -250,196 +251,235 @@ const findOrderWorksheetName = (workbook) => {
   );
 };
 
-const parseOrderFile = (file, templateEntries) =>
-  file.arrayBuffer().then((arrayBuffer) => {
-    const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
-    const sheetName = findOrderWorksheetName(workbook);
-    const worksheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+const parseOrderFile = async (file) => {
+  await yieldToBrowser();
 
-    const shipNameRaw = getCellValue(worksheet, "B1");
-    const shipCode = normalizeShipCode(shipNameRaw);
-    const orderDate = getCellValue(worksheet, "B2");
-    const arrivalDate = getCellValue(worksheet, "B3");
-    const sailors = Number(getCellValue(worksheet, "B5") || 0);
-    const voyageDays = Number(getCellValue(worksheet, "B6") || 0);
-    const daysUntilArrival = daysBetween(orderDate, arrivalDate);
+  const arrayBuffer = await file.arrayBuffer();
+  await yieldToBrowser();
 
-    const historicalDays = rows[4] || [];
-    const historicalSailors = rows[5] || [];
+  const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+  const sheetName = findOrderWorksheetName(workbook);
+  const worksheet = workbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
 
-    const orderRows = [];
-    const orderByCode = {};
+  const shipNameRaw = getCellValue(worksheet, "B1");
+  const shipCode = normalizeShipCode(shipNameRaw);
+  const orderDate = getCellValue(worksheet, "B2");
+  const arrivalDate = getCellValue(worksheet, "B3");
+  const sailors = Number(getCellValue(worksheet, "B5") || 0);
+  const voyageDays = Number(getCellValue(worksheet, "B6") || 0);
+  const daysUntilArrival = daysBetween(orderDate, arrivalDate);
 
-    rows.slice(9).forEach((row, rowOffset) => {
-      const excelRow = rowOffset + 10;
-      const code = String(row[0] || "").trim();
-      const product = String(row[1] || "").replace(/\s+/g, " ").trim();
-      const unit = String(row[2] || "").trim() || "N/A";
+  const historicalDays = rows[4] || [];
+  const historicalSailors = rows[5] || [];
 
-      if (!product) return;
-      if (cleanText(product).includes("PRODUCT")) return;
+  const orderRows = [];
+  const orderByCode = {};
 
-      const stock = Number(row[3] || 0);
-      const futureOrders = sumRowRange(row, 5, 13);
-      const parLevel = Number(row[16] || 0);
-      const pastConsumption = sumRowRange(row, 34, 39);
+  const productRows = rows.slice(9);
 
-      let historicalSailorDays = 0;
-      for (let c = 34; c <= 39; c += 1) {
-        historicalSailorDays += Number(historicalDays[c] || 0) * Number(historicalSailors[c] || 0);
+  for (let rowOffset = 0; rowOffset < productRows.length; rowOffset += 1) {
+    if (rowOffset > 0 && rowOffset % 80 === 0) {
+      await yieldToBrowser();
+    }
+
+    const row = productRows[rowOffset];
+    const excelRow = rowOffset + 10;
+    const code = String(row[0] || "").trim();
+    const product = String(row[1] || "").replace(/\s+/g, " ").trim();
+    const unit = String(row[2] || "").trim() || "N/A";
+
+    if (!product) continue;
+    if (cleanText(product).includes("PRODUCT")) continue;
+
+    const stock = Number(row[3] || 0);
+    const futureOrders = sumRowRange(row, 5, 13);
+    const parLevel = Number(row[16] || 0);
+    const pastConsumption = sumRowRange(row, 34, 39);
+
+    let historicalSailorDays = 0;
+    for (let c = 34; c <= 39; c += 1) {
+      historicalSailorDays += Number(historicalDays[c] || 0) * Number(historicalSailors[c] || 0);
+    }
+
+    const consumptionPerSailorDay = historicalSailorDays > 0 ? pastConsumption / historicalSailorDays : 0;
+    const averagePerDay = consumptionPerSailorDay * sailors;
+    const usageUntilArrival = averagePerDay * daysUntilArrival;
+    const availableAtArrival = stock + futureOrders - usageUntilArrival;
+    const projectedVoyageNeed = averagePerDay * voyageDays;
+    const rawSuggested = Math.max(projectedVoyageNeed - availableAtArrival, 0);
+
+    let suggestedOrder = rawSuggested;
+    let parCapApplied = false;
+    let parCapLimit = 0;
+
+    if (Number(voyageDays) === 14 && parLevel > 0) {
+      parCapLimit = parLevel * 1.1;
+      if (suggestedOrder > parCapLimit) {
+        suggestedOrder = parCapLimit;
+        parCapApplied = true;
       }
+    }
 
-      const consumptionPerSailorDay =
-        historicalSailorDays > 0 ? pastConsumption / historicalSailorDays : 0;
-      const averagePerDay = consumptionPerSailorDay * sailors;
-      const usageUntilArrival = averagePerDay * daysUntilArrival;
-      const availableAtArrival = stock + futureOrders - usageUntilArrival;
-      const projectedVoyageNeed = averagePerDay * voyageDays;
-      const rawSuggested = Math.max(projectedVoyageNeed - availableAtArrival, 0);
+    let alertType = "normal";
+    let alertLabel = "Review";
 
-      let suggestedOrder = rawSuggested;
-      let parCapApplied = false;
-      let parCapLimit = 0;
+    if (stock === 0 && pastConsumption === 0) {
+      alertType = "no-stock-no-consumption";
+      alertLabel = "No stock / no consumption";
+    } else if (stock > 0 && pastConsumption === 0) {
+      alertType = "stock-no-consumption";
+      alertLabel = "Stock but no consumption";
+    } else if (suggestedOrder > 0) {
+      alertType = "needs-order";
+      alertLabel = "Needs order";
+    }
 
-      if (Number(voyageDays) === 14 && parLevel > 0) {
-        parCapLimit = parLevel * 1.1;
-        if (suggestedOrder > parCapLimit) {
-          suggestedOrder = parCapLimit;
-          parCapApplied = true;
-        }
+    const item = {
+      excelOrder: orderRows.length + 1,
+      excelRow,
+      code,
+      product,
+      unit,
+      stock,
+      futureOrders,
+      parLevel,
+      pastConsumption,
+      averagePerDay,
+      usageUntilArrival,
+      availableAtArrival,
+      projectedVoyageNeed,
+      rawSuggested,
+      suggestedOrder,
+      parCapApplied,
+      parCapLimit,
+      alertType,
+      alertLabel,
+    };
+
+    orderRows.push(item);
+    if (code) orderByCode[cleanText(code)] = item;
+  }
+
+  await yieldToBrowser();
+
+  const fmlRows = parseFmlRows(workbook);
+
+  const counts = {
+    totalItems: orderRows.length,
+    itemsNeedingOrder: orderRows.filter((row) => row.suggestedOrder > 0).length,
+    noConsumptionItems: orderRows.filter((row) => row.pastConsumption === 0).length,
+    noStockItems: orderRows.filter((row) => row.stock === 0).length,
+    parCapsApplied: orderRows.filter((row) => row.parCapApplied).length,
+    negativeArrival: orderRows.filter((row) => row.availableAtArrival < 0).length,
+    fmlNotUsed: 0,
+    fmlRunningLow: 0,
+  };
+
+  return {
+    workbook,
+    orderRows,
+    orderByCode,
+    fmlRows,
+    fmlNotUsedRows: [],
+    fmlRunningLowRows: [],
+    meta: {
+      fileName: file.name,
+      sheetName,
+      shipNameRaw: String(shipNameRaw || ""),
+      shipCode,
+      orderDate,
+      arrivalDate,
+      sailors,
+      voyageDays,
+      daysUntilArrival,
+      ...counts,
+    },
+  };
+};
+
+const buildFmlReportAsync = async ({
+  mode,
+  fmlRows,
+  orderRows,
+  orderByCode,
+  templateEntries,
+  shipCode,
+  onProgress,
+}) => {
+  const result = [];
+  const templateMatchCache = new Map();
+
+  const findOrderMatch = (fmlItem) => {
+    if (fmlItem.code && orderByCode[cleanText(fmlItem.code)]) {
+      return orderByCode[cleanText(fmlItem.code)];
+    }
+
+    return orderRows.find((row) => productNamesMatch(fmlItem.product, row.product));
+  };
+
+  for (let i = 0; i < fmlRows.length; i += 1) {
+    if (i > 0 && i % 20 === 0) {
+      if (onProgress) {
+        onProgress("Preparing FML report... " + i + " of " + fmlRows.length);
       }
+      await yieldToBrowser();
+    }
 
-      let alertType = "normal";
-      let alertLabel = "Review";
+    const fmlItem = fmlRows[i];
+    const orderMatch = findOrderMatch(fmlItem);
+    if (!orderMatch) continue;
 
-      if (stock === 0 && pastConsumption === 0) {
-        alertType = "no-stock-no-consumption";
-        alertLabel = "No stock / no consumption";
-      } else if (stock > 0 && pastConsumption === 0) {
-        alertType = "stock-no-consumption";
-        alertLabel = "Stock but no consumption";
-      } else if (suggestedOrder > 0) {
-        alertType = "needs-order";
-        alertLabel = "Needs order";
-      }
+    const cacheKey = compactText(fmlItem.product) + "|" + (shipCode || "");
+    let templateMatches = templateMatchCache.get(cacheKey);
 
-      const item = {
-        excelOrder: orderRows.length + 1,
-        excelRow,
-        code,
-        product,
-        unit,
-        stock,
-        futureOrders,
-        parLevel,
-        pastConsumption,
-        averagePerDay,
-        usageUntilArrival,
-        availableAtArrival,
-        projectedVoyageNeed,
-        rawSuggested,
-        suggestedOrder,
-        parCapApplied,
-        parCapLimit,
-        alertType,
-        alertLabel,
-      };
+    if (!templateMatches) {
+      templateMatches = findTemplateMatches(templateEntries, fmlItem.product, shipCode);
+      templateMatchCache.set(cacheKey, templateMatches);
+    }
 
-      orderRows.push(item);
-      if (code) orderByCode[cleanText(code)] = item;
+    if (!templateMatches.length) continue;
+
+    const futureZero = Number(orderMatch.futureOrders || 0) === 0;
+    const pastZero = Number(orderMatch.pastConsumption || 0) === 0;
+    const pastPositive = Number(orderMatch.pastConsumption || 0) > 0;
+    const runningLow =
+      Number(orderMatch.availableAtArrival || 0) <= Number(orderMatch.averagePerDay || 0) &&
+      Number(orderMatch.averagePerDay || 0) > 0;
+
+    if (mode === "notUsed" && (!futureZero || !pastZero)) continue;
+    if (mode === "runningLow" && (!futureZero || !pastPositive || !runningLow)) continue;
+
+    result.push({
+      id: mode + "-" + fmlItem.fmlRow + "-" + (orderMatch.code || orderMatch.product),
+      fmlRow: fmlItem.fmlRow,
+      code: orderMatch.code || fmlItem.code || "",
+      product: orderMatch.product || fmlItem.product,
+      unit: orderMatch.unit || "N/A",
+      stock: orderMatch.stock,
+      futureOrders: orderMatch.futureOrders,
+      pastConsumption: orderMatch.pastConsumption,
+      averagePerDay: orderMatch.averagePerDay,
+      availableAtArrival: orderMatch.availableAtArrival,
+      suggestedOrder: orderMatch.suggestedOrder,
+      venues: fmlItem.venues,
+      venuesText: fmlItem.venuesText,
+      templateMatches,
+      templateLocation: templateMatches[0]?.location || "",
+      scopeText: templateMatches[0]?.scopeText || "",
+      reason:
+        mode === "notUsed"
+          ? "FML item has venues, matches template, but has 0 future order and 0 past consumption."
+          : "FML item matches template, has no future order, and will be low by arrival day.",
     });
+  }
 
-    const fmlRows = parseFmlRows(workbook);
+  if (onProgress) {
+    onProgress("FML report ready. " + result.length + " records found.");
+  }
 
-    const findOrderMatch = (fmlItem) => {
-      if (fmlItem.code && orderByCode[cleanText(fmlItem.code)]) {
-        return orderByCode[cleanText(fmlItem.code)];
-      }
-
-      return orderRows.find((row) => productNamesMatch(fmlItem.product, row.product));
-    };
-
-    const buildFmlBase = (mode) => {
-      const result = [];
-
-      fmlRows.forEach((fmlItem) => {
-        const orderMatch = findOrderMatch(fmlItem);
-        if (!orderMatch) return;
-
-        const templateMatches = findTemplateMatches(templateEntries, fmlItem.product, shipCode);
-        if (!templateMatches.length) return;
-
-        const futureZero = Number(orderMatch.futureOrders || 0) === 0;
-        const pastZero = Number(orderMatch.pastConsumption || 0) === 0;
-        const pastPositive = Number(orderMatch.pastConsumption || 0) > 0;
-        const runningLow =
-          Number(orderMatch.availableAtArrival || 0) <= Number(orderMatch.averagePerDay || 0) &&
-          Number(orderMatch.averagePerDay || 0) > 0;
-
-        if (mode === "notUsed" && (!futureZero || !pastZero)) return;
-        if (mode === "runningLow" && (!futureZero || !pastPositive || !runningLow)) return;
-
-        result.push({
-          id: mode + "-" + fmlItem.fmlRow + "-" + (orderMatch.code || orderMatch.product),
-          fmlRow: fmlItem.fmlRow,
-          code: orderMatch.code || fmlItem.code || "",
-          product: orderMatch.product || fmlItem.product,
-          unit: orderMatch.unit || "N/A",
-          stock: orderMatch.stock,
-          futureOrders: orderMatch.futureOrders,
-          pastConsumption: orderMatch.pastConsumption,
-          averagePerDay: orderMatch.averagePerDay,
-          availableAtArrival: orderMatch.availableAtArrival,
-          suggestedOrder: orderMatch.suggestedOrder,
-          venues: fmlItem.venues,
-          venuesText: fmlItem.venuesText,
-          templateMatches,
-          templateLocation: templateMatches[0]?.location || "",
-          scopeText: templateMatches[0]?.scopeText || "",
-          reason:
-            mode === "notUsed"
-              ? "FML item has venues, matches template, but has 0 future order and 0 past consumption."
-              : "FML item matches template, has no future order, and will be low by arrival day.",
-        });
-      });
-
-      return result;
-    };
-
-    const fmlNotUsedRows = buildFmlBase("notUsed");
-    const fmlRunningLowRows = buildFmlBase("runningLow");
-
-    const counts = {
-      totalItems: orderRows.length,
-      itemsNeedingOrder: orderRows.filter((row) => row.suggestedOrder > 0).length,
-      noConsumptionItems: orderRows.filter((row) => row.pastConsumption === 0).length,
-      noStockItems: orderRows.filter((row) => row.stock === 0).length,
-      parCapsApplied: orderRows.filter((row) => row.parCapApplied).length,
-      negativeArrival: orderRows.filter((row) => row.availableAtArrival < 0).length,
-      fmlNotUsed: fmlNotUsedRows.length,
-      fmlRunningLow: fmlRunningLowRows.length,
-    };
-
-    return {
-      workbook,
-      orderRows,
-      fmlNotUsedRows,
-      fmlRunningLowRows,
-      meta: {
-        fileName: file.name,
-        sheetName,
-        shipNameRaw: String(shipNameRaw || ""),
-        shipCode,
-        orderDate,
-        arrivalDate,
-        sailors,
-        voyageDays,
-        daysUntilArrival,
-        ...counts,
-      },
-    };
-  });
+  return result;
+};
 
 const exportRowsToExcel = (rows, sheetName, fileName) => {
   if (!rows.length) {
@@ -493,6 +533,8 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
   const [templateEntries, setTemplateEntries] = useState([]);
   const [templateStatus, setTemplateStatus] = useState("Loading attached ERP template...");
   const [nextOrderRows, setNextOrderRows] = useState([]);
+  const [orderByCode, setOrderByCode] = useState({});
+  const [fmlSourceRows, setFmlSourceRows] = useState([]);
   const [fmlNotUsedRows, setFmlNotUsedRows] = useState([]);
   const [fmlRunningLowRows, setFmlRunningLowRows] = useState([]);
   const [nextOrderMeta, setNextOrderMeta] = useState({});
@@ -503,6 +545,10 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
   const [nextOrderFilter, setNextOrderFilter] = useState("all");
   const [nextOrderView, setNextOrderView] = useState("order");
   const [nextOrderLoading, setNextOrderLoading] = useState(false);
+  const [fmlReportLoading, setFmlReportLoading] = useState(false);
+  const [fmlReportMessage, setFmlReportMessage] = useState("");
+  const [fmlNotUsedPrepared, setFmlNotUsedPrepared] = useState(false);
+  const [fmlRunningLowPrepared, setFmlRunningLowPrepared] = useState(false);
   const [nextOrderMessage, setNextOrderMessage] = useState("");
 
   useEffect(() => {
@@ -556,14 +602,21 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
     if (!file) return;
 
     setNextOrderLoading(true);
+    setFmlReportLoading(false);
     setNextOrderMessage("Preparing next order report...");
+    setFmlReportMessage("");
 
     try {
+      await yieldToBrowser();
       const parsed = await parseOrderFile(file, templateEntries);
 
       setNextOrderRows(parsed.orderRows);
-      setFmlNotUsedRows(parsed.fmlNotUsedRows);
-      setFmlRunningLowRows(parsed.fmlRunningLowRows);
+      setOrderByCode(parsed.orderByCode || {});
+      setFmlSourceRows(parsed.fmlRows || []);
+      setFmlNotUsedRows([]);
+      setFmlRunningLowRows([]);
+      setFmlNotUsedPrepared(false);
+      setFmlRunningLowPrepared(false);
       setNextOrderMeta(parsed.meta);
       setNextOrderFileName(file.name);
       setNextOrderSearch("");
@@ -576,7 +629,7 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
           parsed.meta.totalItems +
           " product rows found. " +
           parsed.meta.itemsNeedingOrder +
-          " need order."
+          " need order. FML reports will prepare when opened."
       );
 
       logUsageEvent("next_order_file_uploaded", {
@@ -584,17 +637,60 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
         fileName: file.name,
         ship: parsed.meta.shipCode,
         totalItems: parsed.meta.totalItems,
-        fmlNotUsed: parsed.meta.fmlNotUsed,
-        fmlRunningLow: parsed.meta.fmlRunningLow,
+        fmlRows: (parsed.fmlRows || []).length,
       });
     } catch (error) {
       setNextOrderRows([]);
+      setOrderByCode({});
+      setFmlSourceRows([]);
       setFmlNotUsedRows([]);
       setFmlRunningLowRows([]);
+      setFmlNotUsedPrepared(false);
+      setFmlRunningLowPrepared(false);
       setNextOrderMessage(error?.message || "Could not prepare order file.");
     } finally {
       setNextOrderLoading(false);
       event.target.value = "";
+    }
+  };
+
+  const prepareFmlReport = async (mode) => {
+    if (!fmlSourceRows.length || !nextOrderRows.length) {
+      setFmlReportMessage("Upload the latest order file first.");
+      return;
+    }
+
+    if (mode === "notUsed" && fmlNotUsedPrepared) return;
+    if (mode === "runningLow" && fmlRunningLowPrepared) return;
+
+    setFmlReportLoading(true);
+    setFmlReportMessage("Preparing FML report...");
+
+    try {
+      await yieldToBrowser();
+      const rows = await buildFmlReportAsync({
+        mode,
+        fmlRows: fmlSourceRows,
+        orderRows: nextOrderRows,
+        orderByCode,
+        templateEntries,
+        shipCode: nextOrderMeta.shipCode,
+        onProgress: setFmlReportMessage,
+      });
+
+      if (mode === "notUsed") {
+        setFmlNotUsedRows(rows);
+        setFmlNotUsedPrepared(true);
+        setNextOrderMeta((prev) => ({ ...prev, fmlNotUsed: rows.length }));
+      } else {
+        setFmlRunningLowRows(rows);
+        setFmlRunningLowPrepared(true);
+        setNextOrderMeta((prev) => ({ ...prev, fmlRunningLow: rows.length }));
+      }
+    } catch (error) {
+      setFmlReportMessage(error?.message || "Could not prepare FML report.");
+    } finally {
+      setFmlReportLoading(false);
     }
   };
 
@@ -719,14 +815,20 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
 
         <button
           style={{ ...styles.viewModeButton, ...(nextOrderView === "fml" ? styles.viewModeButtonActive : {}) }}
-          onClick={() => setNextOrderView("fml")}
+          onClick={() => {
+            setNextOrderView("fml");
+            prepareFmlReport("notUsed");
+          }}
         >
           📘 FML Not Ordered / Not Used ({fmlNotUsedRows.length})
         </button>
 
         <button
           style={{ ...styles.viewModeButton, ...(nextOrderView === "fmllow" ? styles.viewModeButtonActive : {}) }}
-          onClick={() => setNextOrderView("fmllow")}
+          onClick={() => {
+            setNextOrderView("fmllow");
+            prepareFmlReport("runningLow");
+          }}
         >
           ⚠️ FML Running Low ({fmlRunningLowRows.length})
         </button>
@@ -912,6 +1014,12 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
         </section>
       )}
 
+      {fmlReportMessage && (nextOrderView === "fml" || nextOrderView === "fmllow") && (
+        <section style={styles.card}>
+          <p style={fmlReportLoading ? styles.warningText : styles.emptyText}>{fmlReportMessage}</p>
+        </section>
+      )}
+
       {nextOrderView === "order" && (
         <section style={styles.card}>
           <h2 style={styles.productTitle}>🛒 Next Order Report</h2>
@@ -986,7 +1094,13 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
           <h2 style={styles.productTitle}>📘 FML Not Ordered / Not Used</h2>
 
           {filteredFmlNotUsedRows.length === 0 && (
-            <p style={styles.emptyText}>No FML not-ordered / not-used records found for this ship/template.</p>
+            <p style={styles.emptyText}>
+              {fmlReportLoading
+                ? "Preparing FML report..."
+                : fmlNotUsedPrepared
+                ? "No FML not-ordered / not-used records found for this ship/template."
+                : "Open this report to prepare FML not-ordered / not-used records."}
+            </p>
           )}
 
           <div style={localStyles.compactGrid}>
@@ -1031,7 +1145,13 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
           <h2 style={styles.productTitle}>⚠️ FML Running Low by Arrival</h2>
 
           {filteredFmlRunningLowRows.length === 0 && (
-            <p style={styles.emptyText}>No FML running-low records found for this ship/template.</p>
+            <p style={styles.emptyText}>
+              {fmlReportLoading
+                ? "Preparing FML running-low report..."
+                : fmlRunningLowPrepared
+                ? "No FML running-low records found for this ship/template."
+                : "Open this report to prepare FML running-low records."}
+            </p>
           )}
 
           <div style={localStyles.compactGrid}>
