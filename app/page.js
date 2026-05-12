@@ -4,12 +4,13 @@ import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "rea
 import * as XLSX from "xlsx";
 import JSZip from "jszip";
 import { createClient } from "@supabase/supabase-js";
-const GenerateNextOrder = lazy(() =>
-  import("./components/product/GenerateNextOrder")
-);
 
 const loadPeopleScheduleModule = () => import("./components/PeopleScheduleModule");
 const PeopleScheduleModule = lazy(loadPeopleScheduleModule);
+
+const GenerateNextOrder = lazy(() =>
+  import("./components/product/GenerateNextOrder")
+);
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -4194,7 +4195,6 @@ export default function App() {
                       <td>${formatQty(item.projectedNeed)}</td>
                       <td class="qty">${formatQty(item.suggestedOrder)}${item.parCapApplied ? " (Par cap)" : ""}</td>
                       <td class="${item.alertType === "red" ? "red" : item.alertType === "blue" || item.alertType === "order" ? "blue" : ""}">${escapeHtml(item.alertLabel || "")}</td>
-                      
                     </tr>
                   `
                 )
@@ -5085,399 +5085,23 @@ export default function App() {
   }
 
   if (module === "product" && productMode === "nextorder") {
-    const nextOrderFilterCounts = getNextOrderFilterCounts();
-    const visibleNextOrderRows = getNextOrderRowsForOutput(true);
-    const visibleFmlMissingRows = getVisibleFmlMissingRows();
-    const visibleFmlLowRows = getVisibleFmlLowRows();
-
     return (
-      <main style={styles.page}>
-        <header style={styles.header}>
-          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
-          <div style={styles.headerActions}>
-            <button style={styles.backButton} onClick={() => setProductMode("")}>← Product Options</button>
-            <div style={styles.shipBadge}>🚢 {nextOrderMeta?.shipName || userShip}</div>
-          </div>
-        </header>
-
-        <section style={styles.grid}>
-          <div style={styles.card}>
-            <h2 style={styles.cardTitle}>🛒 Generate Next Order</h2>
-
-            <div style={styles.infoBox}>
-              <div>📋 ERP template: <strong>{nextOrderTemplateFileName || templateStatus || "Default ERP template"}</strong></div>
-              <div style={{ color: "#0057b8" }}>The ERP Food ordering template is attached automatically. Upload a new ERP template below only if you need to replace it.</div>
-            </div>
-
-            <label style={styles.label}>Optional: Replace ERP Food ordering template file</label>
-            <input
-              type="file"
-              accept=".xlsx,.xls,.xlsm"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-                setNextOrderTemplateFileName(file.name);
-                uploadTemplateFile(e);
-              }}
-              style={styles.fileInput}
-            />
-
-            <label style={styles.label}>Step 1: Upload the last updated order file</label>
-            <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadNextOrderFile} style={styles.fileInput} />
-
-            <div style={styles.infoBox}>
-              <div>📄 Order file: <strong>{nextOrderFileName || "Not uploaded"}</strong></div>
-              <div>📋 ERP template file: <strong>{nextOrderTemplateFileName || templateStatus || "Default ERP template"}</strong></div>
-              <div>📘 Sheet used: <strong>{nextOrderMeta?.sheetName || "N/A"}</strong></div>
-              <div>🚢 Ship: <strong>{nextOrderMeta?.shipName || "N/A"}</strong></div>
-              <div>🗓️ Order day B2: <strong>{nextOrderMeta?.orderDate || "N/A"}</strong></div>
-              <div>🚚 Arrival day B3: <strong>{nextOrderMeta?.arrivalDate || "N/A"}</strong></div>
-              <div>⏳ Days until arrival: <strong>{formatQty(nextOrderMeta?.daysUntilArrival)}</strong></div>
-              <div>👥 Sailors count B5: <strong>{formatQty(nextOrderMeta?.targetSailors)}</strong></div>
-              <div>📅 Days of voyage B6: <strong>{formatQty(nextOrderMeta?.targetDays)}</strong></div>
-              <div>📦 Product rows found: <strong>{nextOrderMeta?.totalItems || 0}</strong></div>
-              <div>🛒 Items needing order: <strong>{nextOrderMeta?.itemsNeedingOrder || 0}</strong></div>
-              <div>📏 Par caps applied: <strong>{nextOrderMeta?.parCapItems || 0}</strong></div>
-              <div style={{ color: "#0057b8" }}>🔵 No stock + no past consumption: <strong>{nextOrderMeta?.blueReviewItems || 0}</strong></div>
-              <div style={{ color: "#b00020" }}>🔴 Stock on hand + no past consumption: <strong>{nextOrderMeta?.redReviewItems || 0}</strong></div>
-              <div style={{ color: "#0057b8" }}>📘 FML not ordered / not used: <strong>{nextOrderMeta?.fmlMissingItems || 0}</strong></div>
-              <div style={{ color: "#b00020" }}>⚠️ FML running low at arrival: <strong>{nextOrderMeta?.fmlRunningLowItems || 0}</strong></div>
-              <div style={{ color: "#8a5a00" }}>
-                Compact order cards show only key ordering fields. Detailed calculation fields remain in Print and Excel export.
-              </div>
-            </div>
-          </div>
-
-          <div style={styles.card}>
-            <h2 style={styles.cardTitle}>⚙️ Order Actions</h2>
-
-            <div style={styles.headerActions}>
-              <button style={styles.primaryButton} onClick={generateNextOrderReport} disabled={nextOrderLoading || !nextOrderSourceRows.length}>
-                {nextOrderLoading ? "Generating..." : "✨ Generate Next Order"}
-              </button>
-
-              <button style={styles.backButton} onClick={printNextOrder} disabled={nextOrderLoading}>
-                🖨️ Print
-              </button>
-
-              <button style={styles.primaryButton} onClick={exportNextOrderToExcel} disabled={nextOrderLoading}>
-                📥 Export Excel
-              </button>
-            </div>
-
-            <div style={styles.headerActions}>
-              <button style={styles.backButton} onClick={printFmlMissingReport} disabled={nextOrderLoading || !fmlMissingRows.length}>
-                🖨️ Print FML Not Used
-              </button>
-
-              <button style={styles.primaryButton} onClick={exportFmlMissingReportToExcel} disabled={nextOrderLoading || !fmlMissingRows.length}>
-                📥 Export FML Not Used
-              </button>
-
-              <button style={styles.backButton} onClick={printFmlLowReport} disabled={nextOrderLoading || !fmlLowRows.length}>
-                🖨️ Print FML Low
-              </button>
-
-              <button style={styles.primaryButton} onClick={exportFmlLowReportToExcel} disabled={nextOrderLoading || !fmlLowRows.length}>
-                📥 Export FML Low
-              </button>
-            </div>
-
-            <div style={styles.infoBox}>
-              <div>🛒 Product lines generated: <strong>{nextOrderRows.length}</strong></div>
-              <div>🔎 Showing after filter/search: <strong>{nextOrderRows.length ? visibleNextOrderRows.length : 0}</strong></div>
-              <div>📘 FML not-used rows: <strong>{fmlMissingRows.length}</strong></div>
-              <div>⚠️ FML running-low rows: <strong>{fmlLowRows.length}</strong></div>
-              <div>📋 Order: <strong>Same order as uploaded Excel file</strong></div>
-              {nextOrderLoading && <div>Generating next order, please wait...</div>}
-              {nextOrderMessage && <div style={{ color: nextOrderRows.length ? "#555" : "#8a5a00" }}>{nextOrderMessage}</div>}
-              <div>All product rows are included and cards stay in the same order as the Excel file.</div>
-              <div>Blue = 0 stock and 0 consumption. Red = stock on hand but 0 consumption. Par level is shown only for 14-day loads.</div>
-            </div>
-          </div>
-        </section>
-
-        <section style={styles.card}>
-          <h2 style={styles.productTitle}>🛒 Generate Next Order Reports</h2>
-
-          <div style={styles.headerActions}>
-            <button
-              style={{ ...styles.viewModeButton, ...(nextOrderView === "order" ? styles.viewModeButtonActive : {}) }}
-              onClick={() => setNextOrderView("order")}
-            >
-              🛒 Next Order
-            </button>
-
-            <button
-              style={{ ...styles.viewModeButton, ...(nextOrderView === "fml" ? styles.viewModeButtonActive : {}) }}
-              onClick={() => setNextOrderView("fml")}
-            >
-              📘 FML Not Ordered / Not Used ({fmlMissingRows.length})
-            </button>
-
-            <button
-              style={{ ...styles.viewModeButton, ...(nextOrderView === "fmlLow" ? styles.viewModeButtonActive : {}) }}
-              onClick={() => setNextOrderView("fmlLow")}
-            >
-              ⚠️ FML Running Low ({fmlLowRows.length})
-            </button>
-          </div>
-
-          {nextOrderView === "order" && (
-          <>
-          <div style={styles.reportFilterBox}>
-            <label style={styles.label}>Filter generated order</label>
-
-            <div style={styles.headerActions}>
-              <button
-                style={{ ...styles.viewModeButton, ...(nextOrderFilter === "all" ? styles.viewModeButtonActive : {}) }}
-                onClick={() => setNextOrderFilter("all")}
-              >
-                📋 All ({nextOrderFilterCounts.all})
-              </button>
-
-              <button
-                style={{ ...styles.viewModeButton, ...(nextOrderFilter === "needsOrder" ? styles.viewModeButtonActive : {}) }}
-                onClick={() => setNextOrderFilter("needsOrder")}
-              >
-                🛒 Needs to Order ({nextOrderFilterCounts.needsOrder})
-              </button>
-
-              <button
-                style={{ ...styles.viewModeButton, ...(nextOrderFilter === "noConsumption" ? styles.viewModeButtonActive : {}) }}
-                onClick={() => setNextOrderFilter("noConsumption")}
-              >
-                🔴 No Consumption ({nextOrderFilterCounts.noConsumption})
-              </button>
-
-              <button
-                style={{ ...styles.viewModeButton, ...(nextOrderFilter === "noStock" ? styles.viewModeButtonActive : {}) }}
-                onClick={() => setNextOrderFilter("noStock")}
-              >
-                🔵 No Stock ({nextOrderFilterCounts.noStock})
-              </button>
-            </div>
-
-            <input
-              placeholder="Search item by name, code, U/M, alert or Excel row..."
-              value={nextOrderSearch}
-              onChange={(e) => setNextOrderSearch(e.target.value)}
-              style={{ ...styles.searchInput, marginBottom: 0 }}
-            />
-          </div>
-
-          {nextOrderRows.length > 0 && (nextOrderSearch || nextOrderFilter !== "all") && visibleNextOrderRows.length === 0 && (
-            <p style={styles.emptyText}>No generated order lines match this filter/search.</p>
-          )}
-
-          {nextOrderRows.length === 0 && !nextOrderLoading && (
-            <p style={styles.emptyText}>Upload the latest order file and click Generate Next Order. All product rows will appear here.</p>
-          )}
-
-          <div style={styles.nextOrderGrid}>
-            {nextOrderRows.length > 0 && visibleNextOrderRows.map((item, index) => {
-              const isFourteenDayLoad = Math.abs(Number(nextOrderMeta?.targetDays || 0) - 14) < 0.01;
-              const cardStyle = {
-                ...styles.nextOrderCard,
-                ...(item.alertType === "red" ? styles.nextOrderCardRed : {}),
-                ...(item.alertType === "blue" || item.alertType === "order" ? styles.nextOrderCardBlue : {}),
-              };
-
-              return (
-                <div key={`${item.code}-${item.excelRow}-next-order-${index}`} style={cardStyle}>
-                  <div style={styles.nextOrderTopLine}>
-                    <span>#{item.orderRank || index + 1}</span>
-                    <span>Row {item.excelRow}</span>
-                  </div>
-
-                  <div style={styles.nextOrderName}>{item.product}</div>
-
-                  <div style={styles.nextOrderMeta}>Code: {item.code || "N/A"}</div>
-                  <div style={styles.nextOrderMeta}>U/M: {item.uom}</div>
-
-                  <div style={styles.nextOrderMiniGrid}>
-                    <div style={styles.nextOrderMiniBox}>
-                      <span>Stock</span>
-                      <strong>{formatQty(item.stockOnHand)}</strong>
-                    </div>
-                    <div style={styles.nextOrderMiniBox}>
-                      <span>Future</span>
-                      <strong>{formatQty(item.futureOrders)}</strong>
-                    </div>
-                    <div
-                      style={
-                        Number(item.availableAtArrival || 0) < 0
-                          ? { ...styles.nextOrderMiniBox, ...styles.nextOrderMiniBoxNegative }
-                          : styles.nextOrderMiniBox
-                      }
-                    >
-                      <span>{Number(item.availableAtArrival || 0) < 0 ? "⚠️ At arrival" : "At arrival"}</span>
-                      <strong>{formatQty(item.availableAtArrival)}</strong>
-                    </div>
-                    {isFourteenDayLoad && (
-                      <div style={styles.nextOrderMiniBox}>
-                        <span>Par Q</span>
-                        <strong>{formatQty(item.parLevel)}</strong>
-                      </div>
-                    )}
-                  </div>
-
-                  {item.parCapApplied && (
-                    <div style={styles.nextOrderWarning}>Par cap applied: max {formatQty(item.parMaxAllowed)}</div>
-                  )}
-
-                  <div style={Number(item.suggestedOrder || 0) > 0 ? styles.nextOrderSuggestedBlue : styles.nextOrderSuggestedNeutral}>
-                    Order: {formatQty(item.suggestedOrder)}
-                  </div>
-
-                  {item.alertType === "red" && <div style={styles.nextOrderStatusRed}>{item.alertLabel}</div>}
-                  {item.alertType === "blue" && <div style={styles.nextOrderStatusBlue}>{item.alertLabel}</div>}
-                  {item.alertType === "order" && <div style={styles.nextOrderStatusBlue}>{item.alertLabel}</div>}
-                  {item.alertType === "normal" && <div style={styles.nextOrderStatusNeutral}>{item.alertLabel}</div>}
-                </div>
-              );
-            })}
-          </div>
-          </>
-          )}
-
-          {nextOrderView === "fml" && (
-            <>
-              <div style={styles.reportFilterBox}>
-                <label style={styles.label}>Search FML report</label>
-                <input
-                  placeholder="Search product, code, venue, template or FML row..."
-                  value={fmlMissingSearch}
-                  onChange={(e) => setFmlMissingSearch(e.target.value)}
-                  style={{ ...styles.searchInput, marginBottom: 0 }}
-                />
-              </div>
-
-              <div style={styles.infoBox}>
-                <div>🚢 Order file ship: <strong>{nextOrderMeta?.shipCode || nextOrderMeta?.shipName || "N/A"}</strong></div>
-                <div>📘 FML/template matched rows: <strong>{fmlMissingRows.length}</strong></div>
-                <div>🔎 Showing after search: <strong>{visibleFmlMissingRows.length}</strong></div>
-                <div>Report rule: FML product must match the template for this ship, have venues in FML column F, and have 0 future orders plus 0 past consumption.</div>
-              </div>
-
-              {fmlMissingRows.length === 0 && (
-                <p style={styles.emptyText}>Default ERP template is attached. Upload the latest order file. The report will show only FML products that also match the ERP template for the current order ship.</p>
-              )}
-
-              {fmlMissingRows.length > 0 && visibleFmlMissingRows.length === 0 && (
-                <p style={styles.emptyText}>No FML report rows match this search.</p>
-              )}
-
-              <div style={styles.fmlCompactGrid}>
-                {visibleFmlMissingRows.map((item, index) => (
-                  <div key={`${item.code}-${item.excelRow}-fml-${index}`} style={styles.fmlCompactCard}>
-                    <div style={styles.nextOrderTopLine}>
-                      <span>#{index + 1}</span>
-                      <span>FML {item.excelRow}</span>
-                    </div>
-
-                    <div style={styles.fmlCompactName}>{item.product}</div>
-                    <div style={styles.fmlCompactMeta}>Code: {item.code || "N/A"} • U/M: {item.uom || "N/A"}</div>
-
-                    <div style={styles.nextOrderMiniGrid}>
-                      <div style={styles.nextOrderMiniBox}>
-                        <span>Stock</span>
-                        <strong>{formatQty(item.stockOnHand)}</strong>
-                      </div>
-                      <div style={styles.nextOrderMiniBox}>
-                        <span>Future</span>
-                        <strong>{formatQty(item.futureOrders)}</strong>
-                      </div>
-                      <div style={styles.nextOrderMiniBox}>
-                        <span>Past</span>
-                        <strong>{formatQty(item.pastConsumption)}</strong>
-                      </div>
-                    </div>
-
-                    <div style={styles.fmlCompactBadge}>Template match: {item.templateShipScopeNote || "Used by all ships"}</div>
-                    <div style={styles.fmlCompactMeta}><strong>Venue(s):</strong> {(item.matchedVenues && item.matchedVenues.length ? item.matchedVenues : item.venues).join(", ")}</div>
-                    <div style={styles.fmlCompactMeta}><strong>Template:</strong> {(item.templateLocationNames || []).slice(0, 3).join(", ") || "Matched"}</div>
-                    <div style={styles.fmlCompactReason}>No future orders and no past consumption.</div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-
-          {nextOrderView === "fmlLow" && (
-            <>
-              <div style={styles.reportFilterBox}>
-                <label style={styles.label}>Search FML running-low report</label>
-                <input
-                  placeholder="Search product, code, venue, template or FML row..."
-                  value={fmlLowSearch}
-                  onChange={(e) => setFmlLowSearch(e.target.value)}
-                  style={{ ...styles.searchInput, marginBottom: 0 }}
-                />
-              </div>
-
-              <div style={styles.infoBox}>
-                <div>🚢 Order file ship: <strong>{nextOrderMeta?.shipCode || nextOrderMeta?.shipName || "N/A"}</strong></div>
-                <div>⚠️ FML running-low rows: <strong>{fmlLowRows.length}</strong></div>
-                <div>🔎 Showing after search: <strong>{visibleFmlLowRows.length}</strong></div>
-                <div>Report rule: FML product must match the template for this ship, have venues in FML column F, have 0 future orders, have past consumption, and be at or below one day of stock by order arrival.</div>
-              </div>
-
-              {fmlLowRows.length === 0 && (
-                <p style={styles.emptyText}>Default ERP template is attached. Upload the latest order file. The report will show FML products with no future order that are projected to run low by arrival day.</p>
-              )}
-
-              {fmlLowRows.length > 0 && visibleFmlLowRows.length === 0 && (
-                <p style={styles.emptyText}>No FML running-low rows match this search.</p>
-              )}
-
-              <div style={styles.fmlCompactGrid}>
-                {visibleFmlLowRows.map((item, index) => (
-                  <div key={`${item.code}-${item.excelRow}-fml-low-${index}`} style={{ ...styles.fmlCompactCard, ...styles.orderWarningCard }}>
-                    <div style={styles.nextOrderTopLine}>
-                      <span>#{index + 1}</span>
-                      <span>FML {item.excelRow}</span>
-                    </div>
-
-                    <div style={styles.fmlCompactName}>{item.product}</div>
-                    <div style={styles.fmlCompactMeta}>Code: {item.code || "N/A"} • U/M: {item.uom || "N/A"}</div>
-
-                    <div style={styles.nextOrderMiniGrid}>
-                      <div style={styles.nextOrderMiniBox}>
-                        <span>Stock</span>
-                        <strong>{formatQty(item.stockOnHand)}</strong>
-                      </div>
-                      <div style={styles.nextOrderMiniBox}>
-                        <span>Future</span>
-                        <strong>{formatQty(item.futureOrders)}</strong>
-                      </div>
-                      <div style={styles.nextOrderMiniBox}>
-                        <span>Avg/day</span>
-                        <strong>{formatQty(item.averageConsumptionPerDay)}</strong>
-                      </div>
-                      <div
-                        style={
-                          Number(item.availableAtArrival || 0) <= 0
-                            ? { ...styles.nextOrderMiniBox, ...styles.nextOrderMiniBoxNegative }
-                            : styles.nextOrderMiniBox
-                        }
-                      >
-                        <span>⚠️ At arrival</span>
-                        <strong>{formatQty(item.availableAtArrival)}</strong>
-                      </div>
-                    </div>
-
-                    <div style={styles.fmlCompactBadge}>Template match: {item.templateShipScopeNote || "Used by all ships"}</div>
-                    <div style={styles.fmlCompactMeta}><strong>Venue(s):</strong> {(item.matchedVenues && item.matchedVenues.length ? item.matchedVenues : item.venues).join(", ")}</div>
-                    <div style={styles.fmlCompactMeta}><strong>Template:</strong> {(item.templateLocationNames || []).slice(0, 3).join(", ") || "Matched"}</div>
-                    <div style={styles.fmlCompactReason}>{item.reason}</div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </section>
-      </main>
+      <Suspense
+        fallback={
+          <main style={styles.page}>
+            <section style={styles.card}>
+              <h2 style={styles.cardTitle}>🛒 Loading Generate Next Order...</h2>
+              <p style={styles.emptyText}>Preparing order tools.</p>
+            </section>
+          </main>
+        }
+      >
+        <GenerateNextOrder
+          styles={styles}
+          userShip={userShip}
+          onBack={() => setProductMode("")}
+        />
+      </Suspense>
     );
   }
 
