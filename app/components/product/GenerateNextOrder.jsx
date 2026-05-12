@@ -998,8 +998,7 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
                 </div>
 
                 <div style={localStyles.productName}>{row.product}</div>
-                <div style={styles.recipeMeta}>Code: {row.code || "N/A"}</div>
-                <div style={styles.recipeMeta}>U/M: {row.unit || "N/A"}</div>
+                <div style={localStyles.miniMeta}>Code: {row.code || "N/A"} · U/M: {row.unit || "N/A"}</div>
 
                 <div style={localStyles.metricGrid}>
                   <div style={localStyles.metricBox}>
@@ -1016,10 +1015,10 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
                   </div>
                 </div>
 
-                <div style={localStyles.blueBadge}>Venues from FML column F</div>
-                <div style={styles.recipeMeta}>{row.venuesText}</div>
+                <div style={localStyles.blueBadge}>FML venues</div>
+                <div style={localStyles.compactTextBlock}>{row.venuesText}</div>
                 <div style={localStyles.templateNote}>{row.scopeText}</div>
-                <div style={styles.recipeMeta}>Template: {row.templateLocation}</div>
+                <div style={localStyles.compactTextBlock}>Template: {row.templateLocation}</div>
                 <div style={localStyles.reviewBadge}>{row.reason}</div>
               </div>
             ))}
@@ -1044,8 +1043,7 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
                 </div>
 
                 <div style={localStyles.productName}>{row.product}</div>
-                <div style={styles.recipeMeta}>Code: {row.code || "N/A"}</div>
-                <div style={styles.recipeMeta}>U/M: {row.unit || "N/A"}</div>
+                <div style={localStyles.miniMeta}>Code: {row.code || "N/A"} · U/M: {row.unit || "N/A"}</div>
 
                 <div style={localStyles.metricGrid}>
                   <div style={localStyles.metricBox}>
@@ -1062,10 +1060,10 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
                   </div>
                 </div>
 
-                <div style={localStyles.blueBadge}>Venues from FML column F</div>
-                <div style={styles.recipeMeta}>{row.venuesText}</div>
+                <div style={localStyles.blueBadge}>FML venues</div>
+                <div style={localStyles.compactTextBlock}>{row.venuesText}</div>
                 <div style={localStyles.templateNote}>{row.scopeText}</div>
-                <div style={styles.recipeMeta}>Template: {row.templateLocation}</div>
+                <div style={localStyles.compactTextBlock}>Template: {row.templateLocation}</div>
                 <div style={localStyles.reviewBadge}>{row.reason}</div>
               </div>
             ))}
@@ -1079,103 +1077,132 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
 const localStyles = {
   compactGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(215px, 1fr))",
-    gap: 12,
+    gridTemplateColumns: "repeat(auto-fill, minmax(155px, 1fr))",
+    gap: 7,
   },
   nextOrderCard: {
     border: "2px solid #0057b8",
     borderRadius: 14,
-    padding: 12,
+    padding: 8,
     background: "#eef5ff",
     display: "grid",
-    gap: 8,
-    fontSize: 13,
+    gap: 6,
+    fontSize: 11,
   },
   fmlCard: {
-    border: "2px solid #0057b8",
-    borderRadius: 14,
-    padding: 12,
+    border: "1.5px solid #0057b8",
+    borderRadius: 10,
+    padding: 6,
     background: "#eef5ff",
     display: "grid",
-    gap: 8,
-    fontSize: 13,
+    gap: 4,
+    fontSize: 10,
+    minWidth: 0,
+    alignContent: "start",
+    overflow: "hidden",
   },
   cardTopLine: {
     display: "flex",
     justifyContent: "space-between",
     color: "#555",
-    fontSize: 12,
+    fontSize: 9,
     fontWeight: "bold",
+    gap: 4,
   },
   productName: {
     fontWeight: "bold",
-    fontSize: 16,
+    fontSize: 11.5,
+    lineHeight: 1.08,
+    wordBreak: "break-word",
+  },
+  miniMeta: {
+    color: "#555",
+    fontSize: 9.5,
     lineHeight: 1.15,
+  },
+  compactTextBlock: {
+    color: "#444",
+    fontSize: 9.5,
+    lineHeight: 1.12,
+    wordBreak: "break-word",
+    maxHeight: 46,
+    overflowY: "auto",
   },
   metricGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-    gap: 7,
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: 4,
   },
   metricBox: {
     border: "1px solid #ddd",
-    borderRadius: 9,
-    padding: 8,
+    borderRadius: 7,
+    padding: "4px 2px",
     background: "#fff",
     display: "grid",
-    gap: 3,
+    gap: 1,
     textAlign: "center",
+    fontSize: 9.5,
+    minHeight: 38,
   },
   metricBoxBad: {
     border: "1px solid #b00020",
-    borderRadius: 9,
-    padding: 8,
+    borderRadius: 7,
+    padding: "4px 2px",
     background: "#fff0f0",
     color: "#b00020",
     display: "grid",
-    gap: 3,
+    gap: 1,
     textAlign: "center",
     fontWeight: "bold",
+    fontSize: 9.5,
+    minHeight: 38,
   },
   metricBoxWarning: {
     border: "1px solid #8a5a00",
-    borderRadius: 9,
-    padding: 8,
+    borderRadius: 7,
+    padding: "4px 2px",
     background: "#fff4d6",
     color: "#8a5a00",
     display: "grid",
-    gap: 3,
+    gap: 1,
     textAlign: "center",
     fontWeight: "bold",
+    fontSize: 9.5,
+    minHeight: 38,
   },
   orderBadge: {
-    padding: 9,
-    borderRadius: 10,
+    padding: 6,
+    borderRadius: 8,
     background: "#0057b8",
     color: "#fff",
     fontWeight: "bold",
     textAlign: "center",
-    fontSize: 15,
+    fontSize: 11.5,
   },
   blueBadge: {
-    padding: 8,
-    borderRadius: 10,
+    padding: "4px 5px",
+    borderRadius: 7,
     background: "#0057b8",
     color: "#fff",
     fontWeight: "bold",
     textAlign: "center",
+    fontSize: 9.5,
+    lineHeight: 1.1,
   },
   reviewBadge: {
-    padding: 8,
-    borderRadius: 10,
+    padding: "5px 5px",
+    borderRadius: 7,
     background: "#fff4d6",
     color: "#8a5a00",
     fontWeight: "bold",
     textAlign: "center",
+    fontSize: 9.5,
+    lineHeight: 1.1,
   },
   templateNote: {
     color: "#0057b8",
     fontWeight: "bold",
-    fontSize: 12,
+    fontSize: 9.5,
+    lineHeight: 1.1,
   },
 };
