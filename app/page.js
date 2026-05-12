@@ -3311,6 +3311,276 @@ export default function App() {
     printWindow.print();
   };
 
+
+  const getMainConsumptionCostReportExportRows = () => {
+    const rows = [];
+
+    filteredProductCostReportRows.forEach((item) => {
+      item.venues.forEach((venue) => {
+        visibleShips.forEach((ship) => {
+          const shipData = venue.ships?.[ship] || {};
+          const qty = Number(shipData.qty || 0);
+          const cost = Number(shipData.cost || 0);
+          const unitPrice = Number(shipData.unitPrice || 0);
+          const hasData = qty !== 0 || cost !== 0 || unitPrice !== 0;
+
+          if (!hasData) return;
+
+          rows.push({
+            Product: item.product,
+            Code: item.code || "",
+            Venue: venue.location,
+            Ship: ship,
+            Quantity: qty,
+            TotalCost: cost,
+            UnitPrice: unitPrice,
+            LowestUnitPrice: shipData.isLowestUnitPrice ? "Yes" : "No",
+            PriceDifferenceByVenue: venue.hasPriceDifference ? "Yes" : "No",
+          });
+        });
+      });
+    });
+
+    return rows;
+  };
+
+  const exportMainConsumptionCostReportToExcel = () => {
+    logUsageEvent("export_excel_clicked", {
+      module: "product_dashboard",
+      reportMode: "main_consumption_cost",
+      ship: userShip,
+      viewMode,
+      search: productCostReportSearch,
+    });
+
+    const rows = getMainConsumptionCostReportExportRows();
+
+    if (!rows.length) {
+      alert("No main consumption/cost report rows to export.");
+      return;
+    }
+
+    const summaryRows = filteredProductCostReportRows.map((item) => ({
+      Product: item.product,
+      Code: item.code || "",
+      Venues: item.venues.length,
+      TotalQuantity: item.visibleTotalQty,
+      TotalCost: item.visibleTotalCost,
+    }));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), "Product Summary");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Venue Ship Detail");
+    XLSX.writeFile(wb, "main-consumption-cost-" + (viewMode === "single" ? userShip : "all-ships") + ".xlsx");
+  };
+
+  const printMainConsumptionCostReport = () => {
+    logUsageEvent("print_clicked", {
+      module: "product_dashboard",
+      reportMode: "main_consumption_cost",
+      ship: userShip,
+      viewMode,
+      search: productCostReportSearch,
+    });
+
+    const rows = getMainConsumptionCostReportExportRows();
+
+    if (!rows.length) {
+      alert("No main consumption/cost report rows to print.");
+      return;
+    }
+
+    const html = "" +
+      "<html>" +
+      "<head>" +
+      "<title>Main Consumption and Cost Report</title>" +
+      "<style>" +
+      "body{font-family:Arial,sans-serif;padding:24px;}" +
+      "h1{margin-bottom:4px;}" +
+      "table{width:100%;border-collapse:collapse;margin-top:18px;font-size:11px;}" +
+      "th,td{border:1px solid #ccc;padding:6px;text-align:left;vertical-align:top;}" +
+      "th{background:#f2f2f2;}" +
+      ".low{color:#2e7d32;font-weight:bold;}" +
+      "</style>" +
+      "</head>" +
+      "<body>" +
+      "<h1>Main Consumption and Cost Report</h1>" +
+      "<div><strong>View:</strong> " + escapeHtml(viewMode === "single" ? userShip : "All ships") + "</div>" +
+      "<div><strong>Search:</strong> " + escapeHtml(productCostReportSearch || "All products") + "</div>" +
+      "<div><strong>Printed:</strong> " + new Date().toLocaleString() + "</div>" +
+      "<table>" +
+      "<thead><tr><th>Product</th><th>Code</th><th>Venue</th><th>Ship</th><th>Quantity</th><th>Total Cost</th><th>Unit Price</th><th>Lowest Price</th></tr></thead>" +
+      "<tbody>" +
+      rows.map((row) => (
+        "<tr>" +
+        "<td>" + escapeHtml(row.Product) + "</td>" +
+        "<td>" + escapeHtml(row.Code) + "</td>" +
+        "<td>" + escapeHtml(row.Venue) + "</td>" +
+        "<td>" + escapeHtml(row.Ship) + "</td>" +
+        "<td>" + formatQty(row.Quantity) + "</td>" +
+        "<td>" + formatMoney(row.TotalCost) + "</td>" +
+        "<td>" + formatMoney(row.UnitPrice) + "</td>" +
+        "<td class=\"" + (row.LowestUnitPrice === "Yes" ? "low" : "") + "\">" + escapeHtml(row.LowestUnitPrice) + "</td>" +
+        "</tr>"
+      )).join("") +
+      "</tbody></table></body></html>";
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      alert("The print window was blocked. Allow popups and try again.");
+      return;
+    }
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
+  const getSelectedProductConsumptionReportRows = () => {
+    if (!selectedProduct) return [];
+
+    const rows = [];
+
+    combinedBreakdown.forEach((venueItem) => {
+      visibleShips.forEach((ship) => {
+        const qty = Number(venueItem.ships?.[ship] || 0);
+        const missingUsage = Boolean(venueItem.required && qty === 0);
+
+        rows.push({
+          Product: selectedProduct,
+          Venue: venueItem.displayName,
+          Ship: ship,
+          Quantity: qty,
+          Required: venueItem.required ? "Yes" : "No",
+          MissingUsage: missingUsage ? "Yes" : "No",
+          MissingFromTemplate: venueItem.missingFromTemplate ? "Yes" : "No",
+          TemplateCharge: venueItem.requiredFromTemplate ? "Yes" : "No",
+          TemplateMenu: venueItem.templateMatches.join(", "),
+          MissingShips: venueItem.missingShips.join(", "),
+        });
+      });
+    });
+
+    return rows;
+  };
+
+  const exportSelectedProductConsumptionReportToExcel = () => {
+    logUsageEvent("export_excel_clicked", {
+      module: "product_dashboard",
+      reportMode: "consumption_vs_locations_template",
+      ship: userShip,
+      viewMode,
+      product: selectedProduct,
+    });
+
+    const rows = getSelectedProductConsumptionReportRows();
+
+    if (!selectedProduct || !rows.length) {
+      alert("Select a product before exporting the consumption report.");
+      return;
+    }
+
+    const totalRows = visibleShips.map((ship) => ({
+      Product: selectedProduct,
+      Ship: ship,
+      TotalQuantity: totalConsumption.totals[ship],
+    }));
+
+    const recipeRowsForExport = recipesForProduct.map((recipe) => ({
+      Product: selectedProduct,
+      RecipeCode: recipe.recipeCode,
+      RecipeName: recipe.recipeName,
+      Venues: recipe.venues.join(", "),
+    }));
+
+    const allergenRowsForExport = allergenWarnings.flatMap((item) =>
+      item.products.map((product) => ({
+        Product: selectedProduct,
+        Allergen: item.allergen,
+        MatchedItem: product,
+      }))
+    );
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(totalRows), "Totals");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Venue Ship Usage");
+
+    if (recipeRowsForExport.length) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(recipeRowsForExport), "Recipes");
+    }
+
+    if (allergenRowsForExport.length) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(allergenRowsForExport), "Allergens");
+    }
+
+    XLSX.writeFile(wb, "consumption-report-" + selectedProduct.replace(/[^a-z0-9]+/gi, "-").toLowerCase().slice(0, 40) + ".xlsx");
+  };
+
+  const printSelectedProductConsumptionReport = () => {
+    logUsageEvent("print_clicked", {
+      module: "product_dashboard",
+      reportMode: "consumption_vs_locations_template",
+      ship: userShip,
+      viewMode,
+      product: selectedProduct,
+    });
+
+    const rows = getSelectedProductConsumptionReportRows();
+
+    if (!selectedProduct || !rows.length) {
+      alert("Select a product before printing the consumption report.");
+      return;
+    }
+
+    const html = "" +
+      "<html>" +
+      "<head>" +
+      "<title>Consumption Report</title>" +
+      "<style>" +
+      "body{font-family:Arial,sans-serif;padding:24px;}" +
+      "h1{margin-bottom:4px;}" +
+      "table{width:100%;border-collapse:collapse;margin-top:18px;font-size:11px;}" +
+      "th,td{border:1px solid #ccc;padding:6px;text-align:left;vertical-align:top;}" +
+      "th{background:#f2f2f2;}" +
+      ".bad{color:#b00020;font-weight:bold;}" +
+      ".blue{color:#0057b8;font-weight:bold;}" +
+      "</style>" +
+      "</head>" +
+      "<body>" +
+      "<h1>Consumption vs Locations and Template</h1>" +
+      "<div><strong>Product:</strong> " + escapeHtml(selectedProduct) + "</div>" +
+      "<div><strong>View:</strong> " + escapeHtml(viewMode === "single" ? userShip : "All ships") + "</div>" +
+      "<div><strong>Printed:</strong> " + new Date().toLocaleString() + "</div>" +
+      "<table>" +
+      "<thead><tr><th>Venue</th><th>Ship</th><th>Quantity</th><th>Required</th><th>Missing Usage</th><th>Missing Template</th><th>Template Charge</th><th>Template/Menu</th></tr></thead>" +
+      "<tbody>" +
+      rows.map((row) => (
+        "<tr>" +
+        "<td>" + escapeHtml(row.Venue) + "</td>" +
+        "<td>" + escapeHtml(row.Ship) + "</td>" +
+        "<td>" + formatQty(row.Quantity) + "</td>" +
+        "<td>" + escapeHtml(row.Required) + "</td>" +
+        "<td class=\"" + (row.MissingUsage === "Yes" ? "bad" : "") + "\">" + escapeHtml(row.MissingUsage) + "</td>" +
+        "<td class=\"" + (row.MissingFromTemplate === "Yes" ? "blue" : "") + "\">" + escapeHtml(row.MissingFromTemplate) + "</td>" +
+        "<td>" + escapeHtml(row.TemplateCharge) + "</td>" +
+        "<td>" + escapeHtml(row.TemplateMenu || "N/A") + "</td>" +
+        "</tr>"
+      )).join("") +
+      "</tbody></table></body></html>";
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      alert("The print window was blocked. Allow popups and try again.");
+      return;
+    }
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
   const sortNextOrderRows = (rows) =>
     [...rows].sort((a, b) => {
       const rowDiff = Number(a.excelRow || 0) - Number(b.excelRow || 0);
@@ -5485,6 +5755,15 @@ export default function App() {
               Automatically generated from the consumption file. Lowest unit price is highlighted when ship prices differ.
             </p>
           </div>
+
+          <div style={styles.headerActions}>
+            <button style={styles.backButton} onClick={printMainConsumptionCostReport}>
+              🖨️ Print
+            </button>
+            <button style={styles.primaryButton} onClick={exportMainConsumptionCostReportToExcel}>
+              📥 Export Excel
+            </button>
+          </div>
         </div>
 
         <div style={styles.infoBox}>
@@ -5689,7 +5968,24 @@ export default function App() {
 
       {productReportView === "consumption" && selectedProduct && (
         <section style={styles.card}>
-          <h2 style={styles.productTitle}>📦 {selectedProduct}</h2>
+          <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 18 }}>
+            <div>
+              <h2 style={styles.productTitle}>📦 {selectedProduct}</h2>
+              <p style={{ ...styles.emptyText, margin: 0 }}>
+                Consumption vs locations and template for the selected product.
+              </p>
+            </div>
+
+            <div style={styles.headerActions}>
+              <button style={styles.backButton} onClick={printSelectedProductConsumptionReport}>
+                🖨️ Print
+              </button>
+              <button style={styles.primaryButton} onClick={exportSelectedProductConsumptionReportToExcel}>
+                📥 Export Excel
+              </button>
+            </div>
+          </div>
+
           <h3 style={styles.sectionTitle}>📊 Total Consumption</h3>
 
           <div style={styles.totalBox}>
