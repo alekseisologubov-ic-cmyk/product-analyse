@@ -779,7 +779,7 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
   const filteredNextOrderRows = useMemo(() => {
     const query = nextOrderSearch.toLowerCase().trim();
 
-    return nextOrderRows.filter((row) => {
+    const rows = nextOrderRows.filter((row) => {
       const filterOk =
         nextOrderFilter === "all" ||
         (nextOrderFilter === "needs" && row.suggestedOrder > 0) ||
@@ -803,6 +803,20 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
         .toLowerCase()
         .includes(query);
     });
+
+    if (nextOrderFilter === "runningLow") {
+      return [...rows].sort((a, b) => {
+        const aArrival = Number(a.availableAtArrival || 0);
+        const bArrival = Number(b.availableAtArrival || 0);
+
+        // Biggest shortage first: -5821 before -126.
+        if (aArrival !== bArrival) return aArrival - bArrival;
+
+        return Number(a.excelOrder || 0) - Number(b.excelOrder || 0);
+      });
+    }
+
+    return rows;
   }, [nextOrderRows, nextOrderSearch, nextOrderFilter]);
 
   const filteredFmlNotUsedRows = useMemo(() => {
