@@ -18,6 +18,39 @@ const compactText = (value) =>
 
 const formatQty = (value) => Number(value || 0).toFixed(2);
 const formatMoney = (value) => "$" + Number(value || 0).toFixed(2);
+
+const toNumber = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  const cleaned = String(value ?? "")
+    .replace(/,/g, "")
+    .replace(/[^0-9.\-]/g, "")
+    .trim();
+
+  const number = Number(cleaned);
+  return Number.isFinite(number) ? number : 0;
+};
+
+const getHistoricalSailorDays = (cellA, cellB) => {
+  const a = toNumber(cellA);
+  const b = toNumber(cellB);
+
+  if (!a && !b) return 0;
+  if (a && !b) return a;
+  if (!a && b) return b;
+
+  const low = Math.min(Math.abs(a), Math.abs(b));
+  const high = Math.max(Math.abs(a), Math.abs(b));
+
+  // Older order files store total historical sailor-days directly in AI5:AN5
+  // and the number of past days in AI6:AN6. If one value is much larger,
+  // use that large value as the historical basis instead of multiplying again.
+  if (low > 0 && high > low * 1000) return high;
+
+  // Otherwise treat the two cells as sailors x days.
+  return a * b;
+};
+
 const yieldToBrowser = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const getCellValue = (worksheet, address) => worksheet?.[address]?.v ?? "";
@@ -90,7 +123,7 @@ const sumRowRange = (row, startIndex, endIndex) => {
   let total = 0;
 
   for (let i = startIndex; i <= endIndex; i += 1) {
-    total += Number(row?.[i] || 0);
+    total += toNumber(row?.[i]);
   }
 
   return total;
@@ -266,8 +299,8 @@ const parseOrderFile = async (file) => {
   const shipCode = normalizeShipCode(shipNameRaw);
   const orderDate = getCellValue(worksheet, "B2");
   const arrivalDate = getCellValue(worksheet, "B3");
-  const sailors = Number(getCellValue(worksheet, "B5") || 0);
-  const voyageDays = Number(getCellValue(worksheet, "B6") || 0);
+  const sailors = toNumber(getCellValue(worksheet, "B5"));
+  const voyageDays = toNumber(getCellValue(worksheet, "B6"));
   const daysUntilArrival = daysBetween(orderDate, arrivalDate);
 
   const historicalDays = rows[4] || [];
@@ -292,18 +325,18 @@ const parseOrderFile = async (file) => {
     if (!product) continue;
     if (cleanText(product).includes("PRODUCT")) continue;
 
-    const stock = Number(row[3] || 0);
+    const stock = toNumber(row[3]);
     const futureOrders = sumRowRange(row, 5, 13);
-    const parLevel = Number(row[16] || 0);
+    const parLevel = toNumber(row[16]);
     const pastConsumption = sumRowRange(row, 34, 39);
 
     let historicalSailorDays = 0;
     for (let c = 34; c <= 39; c += 1) {
-      historicalSailorDays += Number(historicalDays[c] || 0) * Number(historicalSailors[c] || 0);
+      historicalSailorDays += getHistoricalSailorDays(historicalDays[c], historicalSailors[c]);
     }
 
-    const consumptionPerSailorDay = historicalSailorDays > 0 ? pastConsumption / historicalSailorDays : 0;
-    const averagePerDay = consumptionPerSailorDay * sailors;
+    const averagePerSailorDay = historicalSailorDays > 0 ? pastConsumption / historicalSailorDays : 0;
+    const averagePerDay = averagePerSailorDay * sailors;
     const usageUntilArrival = averagePerDay * daysUntilArrival;
     const availableAtArrival = stock + futureOrders - usageUntilArrival;
     const projectedVoyageNeed = averagePerDay * voyageDays;
