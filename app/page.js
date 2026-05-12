@@ -4815,7 +4815,7 @@ export default function App() {
               </button>
             </div>
 
-            <p style={styles.welcomeSubtitle}>Press AHOY, enter your email, choose your ship, and open the Virgin Voyages dashboard.</p>
+            <p style={styles.welcomeSubtitle}>Press AHOY to START.</p>
             <div style={styles.welcomeFooterNote}>Product • Equipment • Inventory • People & Schedule</div>
           </div>
         </section>
