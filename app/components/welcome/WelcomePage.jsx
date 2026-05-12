@@ -19,7 +19,11 @@ export default function WelcomePage({ styles, onStart }) {
 
       <section style={styles.welcomeHero}>
         <div style={styles.welcomeGlowCard}>
-          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.welcomeLogo} />
+          <img
+            src="/virgin-logo.png"
+            alt="Virgin Voyages"
+            style={styles.welcomeLogo}
+          />
 
           <div style={styles.runningLineWrapper}>
             <div style={styles.runningLineTrack}>
@@ -38,23 +42,17 @@ export default function WelcomePage({ styles, onStart }) {
             </div>
           </div>
 
-          <div style={styles.ahoyStartBox}>
-            <button
-              style={styles.ahoyStartButton}
-              onClick={onStart}
-              aria-label="Start"
-            >
-              AHOY
-            </button>
-          </div>
+          <button
+            style={styles.ahoyStartButton}
+            onClick={onStart}
+            aria-label="Start"
+          >
+            AHOY
+          </button>
 
           <p style={styles.welcomeSubtitle}>
-            Press AHOY, enter your email, choose your ship, and open the Virgin Voyages dashboard.
+            Press AHOY to start.
           </p>
-
-          <div style={styles.welcomeFooterNote}>
-            Product • Equipment • Inventory • People & Schedule
-          </div>
         </div>
       </section>
     </main>
