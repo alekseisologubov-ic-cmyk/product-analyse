@@ -1265,8 +1265,10 @@ export default function App() {
 
       const arrayBuffer = await response.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer, { type: "array" });
-      setTemplateMap(parseTemplateWorkbook(workbook));
-      setTemplateStatus("Template loaded.");
+      const parsedTemplate = parseTemplateWorkbook(workbook);
+      setTemplateMap(parsedTemplate);
+      setTemplateStatus("Default ERP template loaded.");
+      setNextOrderTemplateFileName((current) => current || "Default ERP Food ordering template");
     } catch {
       setTemplateStatus("Could not load template.");
     }
@@ -2881,7 +2883,8 @@ export default function App() {
     readExcelFile(file, (workbook) => {
       const parsedTemplate = parseTemplateWorkbook(workbook);
       setTemplateMap(parsedTemplate);
-      setTemplateStatus("Custom template loaded.");
+      setTemplateStatus("Custom ERP template loaded.");
+      setNextOrderTemplateFileName(file.name || "Custom ERP template loaded");
       logUsageEvent("product_template_file_uploaded", {
         module: "product_dashboard",
         fileName: file.name,
@@ -4188,6 +4191,7 @@ export default function App() {
                       <td>${formatQty(item.projectedNeed)}</td>
                       <td class="qty">${formatQty(item.suggestedOrder)}${item.parCapApplied ? " (Par cap)" : ""}</td>
                       <td class="${item.alertType === "red" ? "red" : item.alertType === "blue" || item.alertType === "order" ? "blue" : ""}">${escapeHtml(item.alertLabel || "")}</td>
+                      
                     </tr>
                   `
                 )
@@ -4240,7 +4244,7 @@ export default function App() {
     const rows = getVisibleFmlMissingRows();
 
     if (!rows.length) {
-      alert("No FML template-matched not-used rows found. Upload the ERP template and latest order file first.");
+      alert("No FML template-matched not-used rows found. The default ERP template is attached; upload the latest order file first.");
       return;
     }
 
@@ -4281,7 +4285,7 @@ export default function App() {
     const rows = getVisibleFmlMissingRows();
 
     if (!rows.length) {
-      alert("No FML template-matched not-used rows found. Upload the ERP template and latest order file first.");
+      alert("No FML template-matched not-used rows found. The default ERP template is attached; upload the latest order file first.");
       return;
     }
 
@@ -4400,7 +4404,7 @@ export default function App() {
     const rows = getVisibleFmlLowRows();
 
     if (!rows.length) {
-      alert("No FML running-low rows found. Upload the ERP template and latest order file first.");
+      alert("No FML running-low rows found. The default ERP template is attached; upload the latest order file first.");
       return;
     }
 
@@ -4444,7 +4448,7 @@ export default function App() {
     const rows = getVisibleFmlLowRows();
 
     if (!rows.length) {
-      alert("No FML running-low rows found. Upload the ERP template and latest order file first.");
+      alert("No FML running-low rows found. The default ERP template is attached; upload the latest order file first.");
       return;
     }
 
@@ -5069,7 +5073,7 @@ export default function App() {
             >
               <div style={styles.moduleIcon}>🛒</div>
               <strong>Generate Next Order</strong>
-              <span>Upload the latest order workbook and calculate suggested next-order quantities.</span>
+              <span>Use the attached ERP template, upload the latest order workbook, and calculate suggested next-order quantities.</span>
             </button>
           </div>
         </section>
@@ -5097,7 +5101,12 @@ export default function App() {
           <div style={styles.card}>
             <h2 style={styles.cardTitle}>🛒 Generate Next Order</h2>
 
-            <label style={styles.label}>Step 1: Upload ERP Food ordering template file</label>
+            <div style={styles.infoBox}>
+              <div>📋 ERP template: <strong>{nextOrderTemplateFileName || templateStatus || "Default ERP template"}</strong></div>
+              <div style={{ color: "#0057b8" }}>The ERP Food ordering template is attached automatically. Upload a new ERP template below only if you need to replace it.</div>
+            </div>
+
+            <label style={styles.label}>Optional: Replace ERP Food ordering template file</label>
             <input
               type="file"
               accept=".xlsx,.xls,.xlsm"
@@ -5110,12 +5119,12 @@ export default function App() {
               style={styles.fileInput}
             />
 
-            <label style={styles.label}>Step 2: Upload the last updated order file</label>
+            <label style={styles.label}>Step 1: Upload the last updated order file</label>
             <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadNextOrderFile} style={styles.fileInput} />
 
             <div style={styles.infoBox}>
               <div>📄 Order file: <strong>{nextOrderFileName || "Not uploaded"}</strong></div>
-              <div>📋 Template file: <strong>{nextOrderTemplateFileName || templateStatus || "Default template"}</strong></div>
+              <div>📋 ERP template file: <strong>{nextOrderTemplateFileName || templateStatus || "Default ERP template"}</strong></div>
               <div>📘 Sheet used: <strong>{nextOrderMeta?.sheetName || "N/A"}</strong></div>
               <div>🚢 Ship: <strong>{nextOrderMeta?.shipName || "N/A"}</strong></div>
               <div>🗓️ Order day B2: <strong>{nextOrderMeta?.orderDate || "N/A"}</strong></div>
@@ -5349,7 +5358,7 @@ export default function App() {
               </div>
 
               {fmlMissingRows.length === 0 && (
-                <p style={styles.emptyText}>Upload the ERP template file and the latest order file. The report will show only FML products that also match the template for the current order ship.</p>
+                <p style={styles.emptyText}>Default ERP template is attached. Upload the latest order file. The report will show only FML products that also match the ERP template for the current order ship.</p>
               )}
 
               {fmlMissingRows.length > 0 && visibleFmlMissingRows.length === 0 && (
@@ -5412,7 +5421,7 @@ export default function App() {
               </div>
 
               {fmlLowRows.length === 0 && (
-                <p style={styles.emptyText}>Upload the ERP template file and the latest order file. The report will show FML products with no future order that are projected to run low by arrival day.</p>
+                <p style={styles.emptyText}>Default ERP template is attached. Upload the latest order file. The report will show FML products with no future order that are projected to run low by arrival day.</p>
               )}
 
               {fmlLowRows.length > 0 && visibleFmlLowRows.length === 0 && (
