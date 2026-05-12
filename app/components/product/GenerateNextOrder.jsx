@@ -345,6 +345,7 @@ const parseOrderFile = async (file) => {
       futureOrders,
       parLevel,
       pastConsumption,
+      historicalSailorDays,
       averagePerDay,
       usageUntilArrival,
       availableAtArrival,
@@ -629,7 +630,7 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
           parsed.meta.totalItems +
           " product rows found. " +
           parsed.meta.itemsNeedingOrder +
-          " need order. FML reports are preparing in the background."
+          " need order. Calculated using B2/B3 days to arrival, B5 sailors, B6 voyage days, F:N future orders, AI:AN past consumption, and Q par where applicable. FML reports are preparing in the background."
       );
 
       logUsageEvent("next_order_file_uploaded", {
@@ -804,6 +805,7 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
     FutureOrders: row.futureOrders,
     ParLevel: row.parLevel,
     PastConsumption: row.pastConsumption,
+    HistoricalSailorDays: row.historicalSailorDays,
     AveragePerDay: row.averagePerDay,
     UsageUntilArrival: row.usageUntilArrival,
     AvailableAtArrival: row.availableAtArrival,
@@ -1092,6 +1094,13 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
                   <div style={styles.recipeMeta}>Code: {row.code || "N/A"}</div>
                   <div style={styles.recipeMeta}>U/M: {row.unit || "N/A"}</div>
 
+                  <div style={localStyles.calcStrip}>
+                    <div>Past: <strong>{formatQty(row.pastConsumption)}</strong> · Avg/day: <strong>{formatQty(row.averagePerDay)}</strong></div>
+                    <div>Days to arrival: <strong>{formatQty(nextOrderMeta.daysUntilArrival)}</strong> · Use until arrival: <strong>{formatQty(row.usageUntilArrival)}</strong></div>
+                    <div>Voyage need: <strong>{formatQty(row.projectedVoyageNeed)}</strong> · Raw order: <strong>{formatQty(row.rawSuggested)}</strong></div>
+                    {row.parCapApplied && <div style={localStyles.parCapNote}>Par cap applied: max {formatQty(row.parCapLimit)}</div>}
+                  </div>
+
                   <div style={localStyles.metricGrid}>
                     <div style={localStyles.metricBox}>
                       <span>Stock</span>
@@ -1295,6 +1304,21 @@ const localStyles = {
     wordBreak: "break-word",
     maxHeight: 46,
     overflowY: "auto",
+  },
+  calcStrip: {
+    padding: "5px 6px",
+    borderRadius: 8,
+    background: "#fff",
+    border: "1px solid #d7e7ff",
+    color: "#333",
+    fontSize: 9.5,
+    lineHeight: 1.25,
+    display: "grid",
+    gap: 2,
+  },
+  parCapNote: {
+    color: "#8a5a00",
+    fontWeight: "bold",
   },
   metricGrid: {
     display: "grid",
