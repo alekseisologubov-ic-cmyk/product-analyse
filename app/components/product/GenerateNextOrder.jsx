@@ -783,6 +783,7 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
       const filterOk =
         nextOrderFilter === "all" ||
         (nextOrderFilter === "needs" && row.suggestedOrder > 0) ||
+        (nextOrderFilter === "runningLow" && Number(row.availableAtArrival || 0) < 0) ||
         (nextOrderFilter === "noConsumption" && row.pastConsumption === 0) ||
         (nextOrderFilter === "noStock" && row.stock === 0);
 
@@ -869,6 +870,7 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
     }));
 
   const countNeedsOrder = nextOrderRows.filter((row) => row.suggestedOrder > 0).length;
+  const countRunningLowBeforeLoading = nextOrderRows.filter((row) => Number(row.availableAtArrival || 0) < 0).length;
   const countNoConsumption = nextOrderRows.filter((row) => row.pastConsumption === 0).length;
   const countNoStock = nextOrderRows.filter((row) => row.stock === 0).length;
 
@@ -964,6 +966,12 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
                   onClick={() => setNextOrderFilter("needs")}
                 >
                   Needs to Order ({countNeedsOrder})
+                </button>
+                <button
+                  style={{ ...styles.viewModeButton, ...(nextOrderFilter === "runningLow" ? styles.viewModeButtonActive : {}) }}
+                  onClick={() => setNextOrderFilter("runningLow")}
+                >
+                  ⚠️ Running Low Before Loading ({countRunningLowBeforeLoading})
                 </button>
                 <button
                   style={{ ...styles.viewModeButton, ...(nextOrderFilter === "noConsumption" ? styles.viewModeButtonActive : {}) }}
