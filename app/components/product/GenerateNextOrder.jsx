@@ -629,7 +629,7 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
           parsed.meta.totalItems +
           " product rows found. " +
           parsed.meta.itemsNeedingOrder +
-          " need order. FML reports will prepare when opened."
+          " need order. FML reports are preparing in the background."
       );
 
       logUsageEvent("next_order_file_uploaded", {
@@ -639,6 +639,54 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
         totalItems: parsed.meta.totalItems,
         fmlRows: (parsed.fmlRows || []).length,
       });
+
+      window.setTimeout(() => {
+        (async () => {
+          try {
+            setFmlReportLoading(true);
+            setFmlReportMessage("Preparing FML reports in the background...");
+
+            const notUsedRows = await buildFmlReportAsync({
+              mode: "notUsed",
+              fmlRows: parsed.fmlRows || [],
+              orderRows: parsed.orderRows || [],
+              orderByCode: parsed.orderByCode || {},
+              templateEntries,
+              shipCode: parsed.meta.shipCode,
+              onProgress: setFmlReportMessage,
+            });
+
+            setFmlNotUsedRows(notUsedRows);
+            setFmlNotUsedPrepared(true);
+            setNextOrderMeta((prev) => ({ ...prev, fmlNotUsed: notUsedRows.length }));
+
+            const runningLowRows = await buildFmlReportAsync({
+              mode: "runningLow",
+              fmlRows: parsed.fmlRows || [],
+              orderRows: parsed.orderRows || [],
+              orderByCode: parsed.orderByCode || {},
+              templateEntries,
+              shipCode: parsed.meta.shipCode,
+              onProgress: setFmlReportMessage,
+            });
+
+            setFmlRunningLowRows(runningLowRows);
+            setFmlRunningLowPrepared(true);
+            setNextOrderMeta((prev) => ({ ...prev, fmlRunningLow: runningLowRows.length }));
+            setFmlReportMessage(
+              "FML reports ready. Not used: " +
+                notUsedRows.length +
+                ", running low: " +
+                runningLowRows.length +
+                "."
+            );
+          } catch (error) {
+            setFmlReportMessage(error?.message || "Could not prepare FML reports.");
+          } finally {
+            setFmlReportLoading(false);
+          }
+        })();
+      }, 50);
     } catch (error) {
       setNextOrderRows([]);
       setOrderByCode({});
