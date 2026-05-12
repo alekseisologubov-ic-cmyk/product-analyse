@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "latest",
+    "@vercel/speed-insights": "latest",
     "jszip": "latest",
     "next": "latest",
     "react": "latest",
