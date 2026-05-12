@@ -467,6 +467,7 @@ export default function App() {
   const [nextOrderSourceRows, setNextOrderSourceRows] = useState([]);
   const [nextOrderMeta, setNextOrderMeta] = useState({});
   const [nextOrderFileName, setNextOrderFileName] = useState("");
+  const [nextOrderTemplateFileName, setNextOrderTemplateFileName] = useState("");
   const [nextOrderSearch, setNextOrderSearch] = useState("");
   const [nextOrderFilter, setNextOrderFilter] = useState("all");
   const [nextOrderLoading, setNextOrderLoading] = useState(false);
@@ -707,7 +708,103 @@ export default function App() {
       .map((venue) => venue.replace(/\s+/g, " ").trim())
       .filter(Boolean);
 
-  const parseFmlNotOrderedUnusedReport = (workbook, orderRows) => {
+  const getLooseVenueMatchKey = (value) =>
+    normalizeVenue(value).replace(/[^A-Z0-9]/g, "");
+
+  const getTemplateSheetShipScope = (sheetName) => {
+    const text = cleanText(sheetName).replace(/RESILIANT/g, "RESILIENT");
+    const scope = [];
+
+    if (/\bSCL\b/.test(text) || /\bSC\b/.test(text) || text.includes("SCARLET")) scope.push("SC");
+    if (/\bVAL\b/.test(text) || /\bVL\b/.test(text) || text.includes("VALIANT")) scope.push("VL");
+    if (/\bRES\b/.test(text) || /\bRL\b/.test(text) || text.includes("RESILIENT")) scope.push("RL");
+    if (/\bBRL\b/.test(text) || text.includes("BRILLIANT")) scope.push("BRL");
+
+    return [...new Set(scope)];
+  };
+
+  const getTemplateShipScopeLabel = (shipScope) => {
+    const scope = Array.isArray(shipScope) ? shipScope.filter(Boolean) : [];
+    return scope.length ? "Used only on " + scope.join(", ") : "Used by all ships";
+  };
+
+  const templateShipScopeMatches = (shipScope, currentShipCode) => {
+    const scope = Array.isArray(shipScope) ? shipScope.filter(Boolean) : [];
+    if (!scope.length) return true;
+    if (!currentShipCode) return false;
+    return scope.includes(currentShipCode);
+  };
+
+  const getTemplateMatchesForFmlProduct = (fmlItem, currentShipCode) => {
+    const matches = [];
+    const seen = new Set();
+    const fmlVenues = fmlItem.venues || [];
+    const fmlVenueKeys = fmlVenues.map((venue) => getLooseVenueMatchKey(venue)).filter(Boolean);
+    const fmlCodeKey = normalizeOrderCode(fmlItem.code);
+
+    Object.entries(templateMap || {}).forEach(([venueKey, productsByKey]) => {
+      Object.values(productsByKey || {}).forEach((templateItem) => {
+        const templateCodes = Array.isArray(templateItem.productCodes) ? templateItem.productCodes : [];
+        const codeMatches = fmlCodeKey && templateCodes.some((code) => normalizeOrderCode(code) === fmlCodeKey);
+        const nameMatches = productNamesMatch(fmlItem.product, templateItem.product);
+
+        if (!codeMatches && !nameMatches) return;
+
+        const locations = Array.isArray(templateItem.templateLocations) && templateItem.templateLocations.length
+          ? templateItem.templateLocations
+          : [{
+              locationKey: venueKey,
+              displayName: venueKey,
+              sheetName: "",
+              templateName: "",
+              shipScope: [],
+              shipScopeLabel: "Used by all ships",
+            }];
+
+        locations.forEach((location) => {
+          const shipScope = Array.isArray(location.shipScope) ? location.shipScope : [];
+          if (!templateShipScopeMatches(shipScope, currentShipCode)) return;
+
+          const candidateKeys = [
+            location.locationKey,
+            location.displayName,
+            location.sheetName,
+            venueKey,
+          ].map((value) => getLooseVenueMatchKey(value)).filter(Boolean);
+
+          const matchedFmlVenueIndexes = fmlVenueKeys
+            .map((fmlKey, index) => candidateKeys.some((candidateKey) => candidateKey === fmlKey || candidateKey.includes(fmlKey) || fmlKey.includes(candidateKey)) ? index : -1)
+            .filter((index) => index >= 0);
+
+          if (!matchedFmlVenueIndexes.length) return;
+
+          const uniqueKey = [
+            location.sheetName || venueKey,
+            location.templateName || "",
+            templateItem.product || "",
+            shipScope.join("-") || "ALL",
+          ].join("|");
+
+          if (seen.has(uniqueKey)) return;
+          seen.add(uniqueKey);
+
+          matches.push({
+            templateProduct: templateItem.product || fmlItem.product,
+            templateName: location.templateName || "Template",
+            sheetName: location.sheetName || "",
+            displayName: location.displayName || location.locationKey || venueKey,
+            shipScope,
+            shipScopeLabel: getTemplateShipScopeLabel(shipScope),
+            matchedVenues: [...new Set(matchedFmlVenueIndexes.map((index) => fmlVenues[index]).filter(Boolean))],
+          });
+        });
+      });
+    });
+
+    return matches;
+  };
+
+  const parseFmlNotOrderedUnusedReport = (workbook, orderRows, currentShipCode) => {
     const fmlSheetName =
       workbook.SheetNames.find((name) => cleanText(name) === "FML") ||
       workbook.SheetNames.find((name) => cleanText(name).includes("FML"));
@@ -717,10 +814,10 @@ export default function App() {
     const ws = workbook.Sheets[fmlSheetName];
     if (!ws) return [];
 
-    const decodedRange = XLSX.utils.decode_range(ws["!ref"] || "A1:F1");
+    const decodedRange = XLSX.utils.decode_range(ws["!ref"] || "A1:I1");
     const fmlRange = {
       s: { r: decodedRange.s.r, c: 0 },
-      e: { r: decodedRange.e.r, c: 5 },
+      e: { r: decodedRange.e.r, c: Math.max(decodedRange.e.c, 8) },
     };
 
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", range: fmlRange });
@@ -758,15 +855,36 @@ export default function App() {
       const codeKey = normalizeOrderCode(code);
       const productKey = getProductReportKey(product);
       const orderItem = orderByCode[codeKey] || orderByProductKey[productKey] || null;
+      if (!orderItem) return;
 
-      const futureOrders = Number(orderItem?.futureOrders || 0);
-      const pastConsumption = Number(orderItem?.pastConsumption || 0);
+      const futureOrders = Number(orderItem.futureOrders || 0);
+      const pastConsumption = Number(orderItem.pastConsumption || 0);
 
       if (futureOrders > 0 || pastConsumption > 0) return;
+
+      const templateMatches = getTemplateMatchesForFmlProduct(
+        { code, product, venues },
+        currentShipCode
+      );
+
+      if (!templateMatches.length) return;
 
       const uniqueKey = codeKey || productKey || cleanText(product + "|" + excelRow);
       if (seen.has(uniqueKey)) return;
       seen.add(uniqueKey);
+
+      const matchedVenues = [
+        ...new Set(templateMatches.flatMap((match) => match.matchedVenues || [])),
+      ];
+      const templateShipScopeLabels = [
+        ...new Set(templateMatches.map((match) => match.shipScopeLabel || "Used by all ships")),
+      ];
+      const templateLocationNames = [
+        ...new Set(templateMatches.map((match) => match.displayName || match.templateName || "Template")),
+      ];
+      const templateSheetNames = [
+        ...new Set(templateMatches.map((match) => match.sheetName).filter(Boolean)),
+      ];
 
       reportRows.push({
         excelRow,
@@ -779,21 +897,23 @@ export default function App() {
         subCategory,
         venues,
         venueText,
+        matchedVenues,
+        templateMatches,
+        templateLocationNames,
+        templateSheetNames,
+        templateShipScopeLabels,
+        templateShipScopeNote: templateShipScopeLabels.join("; "),
         stockOnHand: Number(orderItem?.stockOnHand || 0),
         futureOrders,
         pastConsumption,
         foundInOrderTemplate: Boolean(orderItem),
-        reason: orderItem
-          ? "FML product has venues but has 0 future orders and 0 past consumption in Standard Order Template."
-          : "FML product has venues but was not found in Standard Order Template.",
+        foundInTemplate: true,
+        currentShipCode,
+        reason: "FML product matches the ERP template for this ship and has 0 future orders plus 0 past consumption in Standard Order Template.",
       });
     });
 
-    return reportRows.sort((a, b) => {
-      const cat = String(a.category || "").localeCompare(String(b.category || ""));
-      if (cat !== 0) return cat;
-      return String(a.product || "").localeCompare(String(b.product || ""));
-    });
+    return reportRows.sort((a, b) => Number(a.excelRow || 0) - Number(b.excelRow || 0));
   };
 
   const parseNextOrderWorkbook = (workbook) => {
@@ -806,6 +926,8 @@ export default function App() {
     const ws = workbook.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
 
+    const orderShipName = String(rows[0]?.[1] || "").trim();
+    const orderShipCode = normalizeShipCode(orderShipName);
     const rawOrderDate = rows[1]?.[1]; // B2
     const rawArrivalDate = rows[2]?.[1]; // B3
     const targetSailors = toNumber(rows[4]?.[1]); // B5
@@ -910,14 +1032,15 @@ export default function App() {
       });
     });
 
-    const fmlReportRows = parseFmlNotOrderedUnusedReport(workbook, parsedRows);
+    const fmlReportRows = parseFmlNotOrderedUnusedReport(workbook, parsedRows, orderShipCode);
 
     return {
       rows: parsedRows,
       fmlReportRows,
       meta: {
         sheetName,
-        shipName: String(rows[0]?.[1] || "").trim(),
+        shipName: orderShipName,
+        shipCode: orderShipCode,
         orderDate: formatDateCell(rawOrderDate),
         arrivalDate: formatDateCell(rawArrivalDate),
         targetSailors,
@@ -1029,11 +1152,14 @@ export default function App() {
             "Template"
           );
 
+          const shipScope = getTemplateSheetShipScope(sheetName);
           const templateLocation = {
             locationKey: getTemplateLocationKey(sheetName, templateName),
             displayName: getTemplateLocationDisplay(sheetName, templateName),
             sheetName,
             templateName: templateName || sheetName || "Template",
+            shipScope,
+            shipScopeLabel: getTemplateShipScopeLabel(shipScope),
           };
 
           rows.slice(rowIndex + 1).forEach((dataRow) => {
@@ -1055,9 +1181,15 @@ export default function App() {
             if (!map[venueKey][productKey]) {
               map[venueKey][productKey] = {
                 product,
+                productCodes: new Set(),
                 templates: new Set(),
                 templateLocations: new Set(),
               };
+            }
+
+            const templateCode = String(dataRow[colIndex - 1] || "").trim();
+            if (templateCode && cleanText(templateCode) !== "CODE") {
+              map[venueKey][productKey].productCodes.add(templateCode);
             }
 
             map[venueKey][productKey].templates.add(templateName || sheetName || "Template");
@@ -1069,6 +1201,7 @@ export default function App() {
 
     Object.keys(map).forEach((venueKey) => {
       Object.keys(map[venueKey]).forEach((productKey) => {
+        map[venueKey][productKey].productCodes = [...(map[venueKey][productKey].productCodes || [])];
         map[venueKey][productKey].templates = [...map[venueKey][productKey].templates];
         map[venueKey][productKey].templateLocations = [...(map[venueKey][productKey].templateLocations || [])]
           .map((locationText) => {
@@ -3885,7 +4018,7 @@ export default function App() {
                 <th>Par Level Q</th>
                 <th>Future Orders F:N</th>
                 <th>Past Consumption AI:AN</th>
-                                <th>Avg / Day</th>
+                <th>Avg / Day</th>
                 <th>Use Until Arrival</th>
                 <th>Available At Arrival</th>
                 <th>Projected Voyage Need</th>
@@ -3947,6 +4080,9 @@ export default function App() {
         item.category,
         item.subCategory,
         item.venueText,
+        (item.matchedVenues || []).join(" "),
+        (item.templateLocationNames || []).join(" "),
+        item.templateShipScopeNote,
         item.reason,
         item.excelRow,
         item.standardOrderRow,
@@ -3961,7 +4097,7 @@ export default function App() {
     const rows = getVisibleFmlMissingRows();
 
     if (!rows.length) {
-      alert("No FML not-ordered/not-used rows found. Upload the latest order file first.");
+      alert("No FML template-matched not-used rows found. Upload the ERP template and latest order file first.");
       return;
     }
 
@@ -3979,13 +4115,16 @@ export default function App() {
       Code: item.code || "",
       Product: item.product || "",
       UM: item.uom || "",
-      Category: item.category || "",
-      SubCategory: item.subCategory || "",
+      MatchedTemplateVenues: (item.matchedVenues || []).join(", "),
+      TemplateLocations: (item.templateLocationNames || []).join(", "),
+      TemplateSheets: (item.templateSheetNames || []).join(", "),
+      TemplateShipScope: item.templateShipScopeNote || "Used by all ships",
       VenuesFromFMLColumnF: item.venueText || "",
       StockOnHand: Number(item.stockOnHand || 0),
       FutureOrders_F_to_N: Number(item.futureOrders || 0),
       PastConsumption_AI_to_AN: Number(item.pastConsumption || 0),
       FoundInStandardOrderTemplate: item.foundInOrderTemplate ? "Yes" : "No",
+      FoundInTemplateForShip: item.foundInTemplate ? "Yes" : "No",
       Reason: item.reason || "",
     }));
 
@@ -3999,7 +4138,7 @@ export default function App() {
     const rows = getVisibleFmlMissingRows();
 
     if (!rows.length) {
-      alert("No FML not-ordered/not-used rows found. Upload the latest order file first.");
+      alert("No FML template-matched not-used rows found. Upload the ERP template and latest order file first.");
       return;
     }
 
@@ -4039,8 +4178,9 @@ export default function App() {
                 <th>Code</th>
                 <th>Product</th>
                 <th>UM</th>
-                <th>Category</th>
-                <th>Venues from FML Column F</th>
+                <th>Matched Venue(s)</th>
+                <th>Template Scope</th>
+                <th>Template Location(s)</th>
                 <th>Stock</th>
                 <th>Future Orders</th>
                 <th>Past Consumption</th>
@@ -4057,8 +4197,9 @@ export default function App() {
                       <td>${escapeHtml(item.code || "")}</td>
                       <td>${escapeHtml(item.product || "")}</td>
                       <td>${escapeHtml(item.uom || "")}</td>
-                      <td>${escapeHtml(item.category || "")}</td>
-                      <td class="blue">${escapeHtml(item.venueText || "")}</td>
+                      <td class="blue">${escapeHtml((item.matchedVenues || []).join(", ") || item.venueText || "")}</td>
+                      <td>${escapeHtml(item.templateShipScopeNote || "Used by all ships")}</td>
+                      <td>${escapeHtml((item.templateLocationNames || []).join(", "))}</td>
                       <td>${formatQty(item.stockOnHand)}</td>
                       <td>${formatQty(item.futureOrders)}</td>
                       <td>${formatQty(item.pastConsumption)}</td>
@@ -4642,11 +4783,25 @@ export default function App() {
           <div style={styles.card}>
             <h2 style={styles.cardTitle}>🛒 Generate Next Order</h2>
 
-            <label style={styles.label}>Upload the last updated order file</label>
+            <label style={styles.label}>Step 1: Upload ERP Food ordering template file</label>
+            <input
+              type="file"
+              accept=".xlsx,.xls,.xlsm"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setNextOrderTemplateFileName(file.name);
+                uploadTemplateFile(e);
+              }}
+              style={styles.fileInput}
+            />
+
+            <label style={styles.label}>Step 2: Upload the last updated order file</label>
             <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadNextOrderFile} style={styles.fileInput} />
 
             <div style={styles.infoBox}>
-              <div>📄 Source file: <strong>{nextOrderFileName || "Not uploaded"}</strong></div>
+              <div>📄 Order file: <strong>{nextOrderFileName || "Not uploaded"}</strong></div>
+              <div>📋 Template file: <strong>{nextOrderTemplateFileName || templateStatus || "Default template"}</strong></div>
               <div>📘 Sheet used: <strong>{nextOrderMeta?.sheetName || "N/A"}</strong></div>
               <div>🚢 Ship: <strong>{nextOrderMeta?.shipName || "N/A"}</strong></div>
               <div>🗓️ Order day B2: <strong>{nextOrderMeta?.orderDate || "N/A"}</strong></div>
@@ -4848,7 +5003,7 @@ export default function App() {
               <div style={styles.reportFilterBox}>
                 <label style={styles.label}>Search FML report</label>
                 <input
-                  placeholder="Search product, code, category, venue or FML row..."
+                  placeholder="Search product, code, venue, template or FML row..."
                   value={fmlMissingSearch}
                   onChange={(e) => setFmlMissingSearch(e.target.value)}
                   style={{ ...styles.searchInput, marginBottom: 0 }}
@@ -4856,31 +5011,30 @@ export default function App() {
               </div>
 
               <div style={styles.infoBox}>
-                <div>📘 Total FML products not ordered / not used: <strong>{fmlMissingRows.length}</strong></div>
+                <div>🚢 Order file ship: <strong>{nextOrderMeta?.shipCode || nextOrderMeta?.shipName || "N/A"}</strong></div>
+                <div>📘 FML/template matched rows: <strong>{fmlMissingRows.length}</strong></div>
                 <div>🔎 Showing after search: <strong>{visibleFmlMissingRows.length}</strong></div>
-                <div>Report rule: product exists in FML with venues in column F, but has 0 future orders F:N and 0 past consumption AI:AN in Standard Order Template.</div>
+                <div>Report rule: FML product must match the template for this ship, have venues in FML column F, and have 0 future orders plus 0 past consumption.</div>
               </div>
 
               {fmlMissingRows.length === 0 && (
-                <p style={styles.emptyText}>Upload the latest order file. Products from FML with no orders and no past consumption will appear here.</p>
+                <p style={styles.emptyText}>Upload the ERP template file and the latest order file. The report will show only FML products that also match the template for the current order ship.</p>
               )}
 
               {fmlMissingRows.length > 0 && visibleFmlMissingRows.length === 0 && (
                 <p style={styles.emptyText}>No FML report rows match this search.</p>
               )}
 
-              <div style={styles.nextOrderGrid}>
+              <div style={styles.fmlCompactGrid}>
                 {visibleFmlMissingRows.map((item, index) => (
-                  <div key={`${item.code}-${item.excelRow}-fml-${index}`} style={{ ...styles.nextOrderCard, ...styles.nextOrderCardBlue }}>
+                  <div key={`${item.code}-${item.excelRow}-fml-${index}`} style={styles.fmlCompactCard}>
                     <div style={styles.nextOrderTopLine}>
                       <span>#{index + 1}</span>
-                      <span>FML Row {item.excelRow}</span>
+                      <span>FML {item.excelRow}</span>
                     </div>
 
-                    <div style={styles.nextOrderName}>{item.product}</div>
-                    <div style={styles.nextOrderMeta}>Code: {item.code || "N/A"}</div>
-                    <div style={styles.nextOrderMeta}>U/M: {item.uom || "N/A"}</div>
-                    <div style={styles.nextOrderMeta}>Category: {item.category || "N/A"}</div>
+                    <div style={styles.fmlCompactName}>{item.product}</div>
+                    <div style={styles.fmlCompactMeta}>Code: {item.code || "N/A"} • U/M: {item.uom || "N/A"}</div>
 
                     <div style={styles.nextOrderMiniGrid}>
                       <div style={styles.nextOrderMiniBox}>
@@ -4895,16 +5049,12 @@ export default function App() {
                         <span>Past</span>
                         <strong>{formatQty(item.pastConsumption)}</strong>
                       </div>
-                      <div style={item.foundInOrderTemplate ? styles.nextOrderMiniBox : { ...styles.nextOrderMiniBox, background: "#fff4d6", color: "#8a5a00", fontWeight: "bold" }}>
-                        <span>Order sheet</span>
-                        <strong>{item.standardOrderRow || "Missing"}</strong>
-                      </div>
                     </div>
 
-                    <div style={styles.nextOrderStatusBlue}>Venues from FML column F</div>
-                    <div style={styles.nextOrderMeta}>{item.venueText}</div>
-
-                    <div style={styles.nextOrderWarning}>{item.reason}</div>
+                    <div style={styles.fmlCompactBadge}>Template match: {item.templateShipScopeNote || "Used by all ships"}</div>
+                    <div style={styles.fmlCompactMeta}><strong>Venue(s):</strong> {(item.matchedVenues && item.matchedVenues.length ? item.matchedVenues : item.venues).join(", ")}</div>
+                    <div style={styles.fmlCompactMeta}><strong>Template:</strong> {(item.templateLocationNames || []).slice(0, 3).join(", ") || "Matched"}</div>
+                    <div style={styles.fmlCompactReason}>No future orders and no past consumption.</div>
                   </div>
                 ))}
               </div>
@@ -6606,6 +6756,12 @@ const styles = {
   warningText: { color: "#8a5a00", background: "#fff4d6", padding: 10, borderRadius: 8 },
   allergenList: { display: "grid", gap: 10 },
   allergenCard: { border: "1px solid #e1c16e", background: "#fff9e8", borderRadius: 10, padding: 10 },
+  fmlCompactGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8 },
+  fmlCompactCard: { border: "2px solid #0057b8", borderRadius: 10, padding: 8, background: "#eef5ff", display: "grid", gap: 5, textAlign: "left", fontSize: 11, alignContent: "start", minWidth: 0 },
+  fmlCompactName: { fontWeight: "bold", fontSize: 13, lineHeight: 1.12, overflowWrap: "anywhere" },
+  fmlCompactMeta: { color: "#444", fontSize: 11, lineHeight: 1.18, overflowWrap: "anywhere" },
+  fmlCompactBadge: { padding: "5px 6px", borderRadius: 8, background: "#0057b8", color: "#fff", fontWeight: "bold", textAlign: "center", fontSize: 11, lineHeight: 1.1 },
+  fmlCompactReason: { padding: 5, borderRadius: 8, background: "#fff4d6", color: "#8a5a00", fontWeight: "bold", textAlign: "center", fontSize: 10, lineHeight: 1.1 },
   nextOrderGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(185px, 1fr))", gap: 10 },
   nextOrderCard: { border: "1px solid #ddd", borderRadius: 12, padding: 10, background: "#fafafa", display: "grid", gap: 6, textAlign: "left", fontSize: 12 },
   nextOrderCardBlue: { border: "2px solid #0057b8", background: "#eef5ff" },
