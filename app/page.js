@@ -4,6 +4,9 @@ import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "rea
 import * as XLSX from "xlsx";
 import JSZip from "jszip";
 import { createClient } from "@supabase/supabase-js";
+const GenerateNextOrder = lazy(() =>
+  import("./components/product/GenerateNextOrder")
+);
 
 const loadPeopleScheduleModule = () => import("./components/PeopleScheduleModule");
 const PeopleScheduleModule = lazy(loadPeopleScheduleModule);
