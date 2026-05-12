@@ -4816,7 +4816,7 @@ export default function App() {
             </div>
 
             <p style={styles.welcomeSubtitle}>Press AHOY to START.</p>
-            <div style={styles.welcomeFooterNote}>LETS DO IT</div>
+            <div style={styles.welcomeFooterNote}></div>
           </div>
         </section>
       </main>
