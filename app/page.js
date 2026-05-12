@@ -471,6 +471,9 @@ export default function App() {
   const [nextOrderFilter, setNextOrderFilter] = useState("all");
   const [nextOrderLoading, setNextOrderLoading] = useState(false);
   const [nextOrderMessage, setNextOrderMessage] = useState("");
+  const [nextOrderView, setNextOrderView] = useState("order");
+  const [fmlMissingRows, setFmlMissingRows] = useState([]);
+  const [fmlMissingSearch, setFmlMissingSearch] = useState("");
 
   const [module, setModule] = useState("");
   const [productMode, setProductMode] = useState("");
@@ -686,6 +689,113 @@ export default function App() {
     return XLSX.utils.sheet_to_json(ws, { header: 1 });
   };
 
+  const normalizeOrderCode = (value) => {
+    const raw = String(value ?? "").trim();
+    if (!raw) return "";
+
+    const numberValue = Number(raw);
+    if (Number.isFinite(numberValue) && raw.replace(/\.0+$/, "") === String(Math.trunc(numberValue))) {
+      return String(Math.trunc(numberValue));
+    }
+
+    return cleanText(raw).replace(/\.0+$/, "");
+  };
+
+  const splitFmlVenues = (value) =>
+    String(value || "")
+      .split(",")
+      .map((venue) => venue.replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+
+  const parseFmlNotOrderedUnusedReport = (workbook, orderRows) => {
+    const fmlSheetName =
+      workbook.SheetNames.find((name) => cleanText(name) === "FML") ||
+      workbook.SheetNames.find((name) => cleanText(name).includes("FML"));
+
+    if (!fmlSheetName) return [];
+
+    const ws = workbook.Sheets[fmlSheetName];
+    if (!ws) return [];
+
+    const decodedRange = XLSX.utils.decode_range(ws["!ref"] || "A1:F1");
+    const fmlRange = {
+      s: { r: decodedRange.s.r, c: 0 },
+      e: { r: decodedRange.e.r, c: 5 },
+    };
+
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", range: fmlRange });
+
+    const orderByCode = {};
+    const orderByProductKey = {};
+
+    orderRows.forEach((item) => {
+      const codeKey = normalizeOrderCode(item.code);
+      const productKey = getProductReportKey(item.product);
+
+      if (codeKey) orderByCode[codeKey] = item;
+      if (productKey && !orderByProductKey[productKey]) orderByProductKey[productKey] = item;
+    });
+
+    const reportRows = [];
+    const seen = new Set();
+
+    rows.slice(3).forEach((row, index) => {
+      const excelRow = index + 4;
+      const department = String(row[0] || "").trim();
+      const category = String(row[1] || "").trim();
+      const subCategory = String(row[2] || "").trim();
+      const code = String(row[3] || "").trim();
+      const product = String(row[4] || "").replace(/\s+/g, " ").trim();
+      const venueText = String(row[5] || "").replace(/\s+/g, " ").trim();
+      const uom = String(row[8] || "").trim();
+
+      if (!code || !product || !venueText) return;
+      if (cleanText(code) === "PRODUCT" || cleanText(product) === "PRODUCT NAME") return;
+
+      const venues = splitFmlVenues(venueText);
+      if (!venues.length) return;
+
+      const codeKey = normalizeOrderCode(code);
+      const productKey = getProductReportKey(product);
+      const orderItem = orderByCode[codeKey] || orderByProductKey[productKey] || null;
+
+      const futureOrders = Number(orderItem?.futureOrders || 0);
+      const pastConsumption = Number(orderItem?.pastConsumption || 0);
+
+      if (futureOrders > 0 || pastConsumption > 0) return;
+
+      const uniqueKey = codeKey || productKey || cleanText(product + "|" + excelRow);
+      if (seen.has(uniqueKey)) return;
+      seen.add(uniqueKey);
+
+      reportRows.push({
+        excelRow,
+        standardOrderRow: orderItem?.excelRow || "",
+        code,
+        product,
+        uom: orderItem?.uom || uom || "",
+        department,
+        category,
+        subCategory,
+        venues,
+        venueText,
+        stockOnHand: Number(orderItem?.stockOnHand || 0),
+        futureOrders,
+        pastConsumption,
+        foundInOrderTemplate: Boolean(orderItem),
+        reason: orderItem
+          ? "FML product has venues but has 0 future orders and 0 past consumption in Standard Order Template."
+          : "FML product has venues but was not found in Standard Order Template.",
+      });
+    });
+
+    return reportRows.sort((a, b) => {
+      const cat = String(a.category || "").localeCompare(String(b.category || ""));
+      if (cat !== 0) return cat;
+      return String(a.product || "").localeCompare(String(b.product || ""));
+    });
+  };
+
   const parseNextOrderWorkbook = (workbook) => {
     const sheetName = workbook.SheetNames.includes("Standard Order Template")
       ? "Standard Order Template"
@@ -800,8 +910,11 @@ export default function App() {
       });
     });
 
+    const fmlReportRows = parseFmlNotOrderedUnusedReport(workbook, parsedRows);
+
     return {
       rows: parsedRows,
+      fmlReportRows,
       meta: {
         sheetName,
         shipName: String(rows[0]?.[1] || "").trim(),
@@ -817,6 +930,7 @@ export default function App() {
         parCapItems: parsedRows.filter((item) => item.parCapApplied).length,
         blueReviewItems: parsedRows.filter((item) => item.alertType === "blue").length,
         redReviewItems: parsedRows.filter((item) => item.alertType === "red").length,
+        fmlMissingItems: fmlReportRows.length,
       },
     };
   };
@@ -832,10 +946,25 @@ export default function App() {
         setNextOrderSourceRows(parsed.rows);
         setNextOrderMeta(parsed.meta);
         setNextOrderRows([]);
+        setFmlMissingRows(parsed.fmlReportRows || []);
         setNextOrderSearch("");
+        setFmlMissingSearch("");
         setNextOrderFilter("all");
+        setNextOrderView("order");
         setNextOrderMessage(
-          `Order file loaded. ${parsed.meta.totalItems} product rows found. ${parsed.meta.itemsNeedingOrder} need order, ${parsed.meta.parCapItems} par cap, ${parsed.meta.blueReviewItems} blue review, ${parsed.meta.redReviewItems} red review.`
+          "Order file loaded. " +
+            parsed.meta.totalItems +
+            " product rows found. " +
+            parsed.meta.itemsNeedingOrder +
+            " need order, " +
+            parsed.meta.parCapItems +
+            " par cap, " +
+            parsed.meta.blueReviewItems +
+            " blue review, " +
+            parsed.meta.redReviewItems +
+            " red review, " +
+            parsed.meta.fmlMissingItems +
+            " FML not ordered/not used."
         );
         logUsageEvent("next_order_file_uploaded", {
           module: "generate_next_order",
@@ -846,6 +975,7 @@ export default function App() {
           parCapItems: parsed.meta.parCapItems,
           blueReviewItems: parsed.meta.blueReviewItems,
           redReviewItems: parsed.meta.redReviewItems,
+          fmlMissingItems: parsed.meta.fmlMissingItems,
         });
       } catch (error) {
         setNextOrderFileName(file.name);
@@ -3755,7 +3885,7 @@ export default function App() {
                 <th>Par Level Q</th>
                 <th>Future Orders F:N</th>
                 <th>Past Consumption AI:AN</th>
-                <th>Avg / Day</th>
+                                <th>Avg / Day</th>
                 <th>Use Until Arrival</th>
                 <th>Available At Arrival</th>
                 <th>Projected Voyage Need</th>
@@ -3782,6 +3912,157 @@ export default function App() {
                       <td>${formatQty(item.projectedNeed)}</td>
                       <td class="qty">${formatQty(item.suggestedOrder)}${item.parCapApplied ? " (Par cap)" : ""}</td>
                       <td class="${item.alertType === "red" ? "red" : item.alertType === "blue" || item.alertType === "order" ? "blue" : ""}">${escapeHtml(item.alertLabel || "")}</td>
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      alert("The print window was blocked. Allow popups and try again.");
+      return;
+    }
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
+  const getVisibleFmlMissingRows = () => {
+    const term = fmlMissingSearch.toLowerCase().trim();
+    if (!term) return fmlMissingRows;
+
+    return fmlMissingRows.filter((item) =>
+      [
+        item.code,
+        item.product,
+        item.uom,
+        item.department,
+        item.category,
+        item.subCategory,
+        item.venueText,
+        item.reason,
+        item.excelRow,
+        item.standardOrderRow,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(term)
+    );
+  };
+
+  const exportFmlMissingReportToExcel = () => {
+    const rows = getVisibleFmlMissingRows();
+
+    if (!rows.length) {
+      alert("No FML not-ordered/not-used rows found. Upload the latest order file first.");
+      return;
+    }
+
+    logUsageEvent("export_excel_clicked", {
+      module: "generate_next_order_fml_missing",
+      ship: nextOrderMeta?.shipName || userShip,
+      search: fmlMissingSearch,
+      rows: rows.length,
+    });
+
+    const exportRows = rows.map((item, index) => ({
+      Line: index + 1,
+      FMLRow: item.excelRow,
+      StandardOrderRow: item.standardOrderRow || "Not found",
+      Code: item.code || "",
+      Product: item.product || "",
+      UM: item.uom || "",
+      Category: item.category || "",
+      SubCategory: item.subCategory || "",
+      VenuesFromFMLColumnF: item.venueText || "",
+      StockOnHand: Number(item.stockOnHand || 0),
+      FutureOrders_F_to_N: Number(item.futureOrders || 0),
+      PastConsumption_AI_to_AN: Number(item.pastConsumption || 0),
+      FoundInStandardOrderTemplate: item.foundInOrderTemplate ? "Yes" : "No",
+      Reason: item.reason || "",
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportRows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "FML Not Ordered Not Used");
+    XLSX.writeFile(wb, "fml-not-ordered-not-used-" + (nextOrderMeta?.shipName || userShip || "ship") + ".xlsx");
+  };
+
+  const printFmlMissingReport = () => {
+    const rows = getVisibleFmlMissingRows();
+
+    if (!rows.length) {
+      alert("No FML not-ordered/not-used rows found. Upload the latest order file first.");
+      return;
+    }
+
+    logUsageEvent("print_clicked", {
+      module: "generate_next_order_fml_missing",
+      ship: nextOrderMeta?.shipName || userShip,
+      search: fmlMissingSearch,
+      rows: rows.length,
+    });
+
+    const html = `
+      <html>
+        <head>
+          <title>FML Not Ordered / Not Used</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; }
+            h1 { margin-bottom: 4px; }
+            .meta { margin: 2px 0; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+            th, td { border: 1px solid #ccc; padding: 6px; text-align: left; vertical-align: top; }
+            th { background: #f2f2f2; }
+            .blue { color: #0057b8; font-weight: bold; }
+            .warn { color: #8a5a00; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h1>FML Products Not Ordered / Not Used</h1>
+          <div class="meta"><strong>Source file:</strong> ${escapeHtml(nextOrderFileName || "N/A")}</div>
+          <div class="meta"><strong>Ship:</strong> ${escapeHtml(nextOrderMeta?.shipName || userShip || "N/A")}</div>
+          <div class="meta"><strong>Rows:</strong> ${rows.length}</div>
+          <div class="meta"><strong>Generated:</strong> ${new Date().toLocaleString()}</div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>FML Row</th>
+                <th>Code</th>
+                <th>Product</th>
+                <th>UM</th>
+                <th>Category</th>
+                <th>Venues from FML Column F</th>
+                <th>Stock</th>
+                <th>Future Orders</th>
+                <th>Past Consumption</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows
+                .map(
+                  (item, index) => `
+                    <tr>
+                      <td>${index + 1}</td>
+                      <td>${escapeHtml(item.excelRow || "")}</td>
+                      <td>${escapeHtml(item.code || "")}</td>
+                      <td>${escapeHtml(item.product || "")}</td>
+                      <td>${escapeHtml(item.uom || "")}</td>
+                      <td>${escapeHtml(item.category || "")}</td>
+                      <td class="blue">${escapeHtml(item.venueText || "")}</td>
+                      <td>${formatQty(item.stockOnHand)}</td>
+                      <td>${formatQty(item.futureOrders)}</td>
+                      <td>${formatQty(item.pastConsumption)}</td>
+                      <td class="warn">${escapeHtml(item.reason || "")}</td>
                     </tr>
                   `
                 )
@@ -4323,8 +4604,11 @@ export default function App() {
               onClick={() => {
                 setProductMode("nextorder");
                 setNextOrderRows([]);
+                setFmlMissingRows([]);
                 setNextOrderSearch("");
+                setFmlMissingSearch("");
                 setNextOrderFilter("all");
+                setNextOrderView("order");
                 setNextOrderMessage("");
                 logUsageEvent("product_option_opened", { module: "generate_next_order", ship: userShip });
               }}
@@ -4342,6 +4626,7 @@ export default function App() {
   if (module === "product" && productMode === "nextorder") {
     const nextOrderFilterCounts = getNextOrderFilterCounts();
     const visibleNextOrderRows = getNextOrderRowsForOutput(true);
+    const visibleFmlMissingRows = getVisibleFmlMissingRows();
 
     return (
       <main style={styles.page}>
@@ -4374,6 +4659,7 @@ export default function App() {
               <div>📏 Par caps applied: <strong>{nextOrderMeta?.parCapItems || 0}</strong></div>
               <div style={{ color: "#0057b8" }}>🔵 No stock + no past consumption: <strong>{nextOrderMeta?.blueReviewItems || 0}</strong></div>
               <div style={{ color: "#b00020" }}>🔴 Stock on hand + no past consumption: <strong>{nextOrderMeta?.redReviewItems || 0}</strong></div>
+              <div style={{ color: "#0057b8" }}>📘 FML not ordered / not used: <strong>{nextOrderMeta?.fmlMissingItems || 0}</strong></div>
               <div style={{ color: "#8a5a00" }}>
                 Compact order cards show only key ordering fields. Detailed calculation fields remain in Print and Excel export.
               </div>
@@ -4397,9 +4683,20 @@ export default function App() {
               </button>
             </div>
 
+            <div style={styles.headerActions}>
+              <button style={styles.backButton} onClick={printFmlMissingReport} disabled={nextOrderLoading || !fmlMissingRows.length}>
+                🖨️ Print FML Report
+              </button>
+
+              <button style={styles.primaryButton} onClick={exportFmlMissingReportToExcel} disabled={nextOrderLoading || !fmlMissingRows.length}>
+                📥 Export FML Report
+              </button>
+            </div>
+
             <div style={styles.infoBox}>
               <div>🛒 Product lines generated: <strong>{nextOrderRows.length}</strong></div>
               <div>🔎 Showing after filter/search: <strong>{nextOrderRows.length ? visibleNextOrderRows.length : 0}</strong></div>
+              <div>📘 FML report rows: <strong>{fmlMissingRows.length}</strong></div>
               <div>📋 Order: <strong>Same order as uploaded Excel file</strong></div>
               {nextOrderLoading && <div>Generating next order, please wait...</div>}
               {nextOrderMessage && <div style={{ color: nextOrderRows.length ? "#555" : "#8a5a00" }}>{nextOrderMessage}</div>}
@@ -4410,8 +4707,26 @@ export default function App() {
         </section>
 
         <section style={styles.card}>
-          <h2 style={styles.productTitle}>🛒 Generated Next Order</h2>
+          <h2 style={styles.productTitle}>🛒 Generate Next Order Reports</h2>
 
+          <div style={styles.headerActions}>
+            <button
+              style={{ ...styles.viewModeButton, ...(nextOrderView === "order" ? styles.viewModeButtonActive : {}) }}
+              onClick={() => setNextOrderView("order")}
+            >
+              🛒 Next Order
+            </button>
+
+            <button
+              style={{ ...styles.viewModeButton, ...(nextOrderView === "fml" ? styles.viewModeButtonActive : {}) }}
+              onClick={() => setNextOrderView("fml")}
+            >
+              📘 FML Not Ordered / Not Used ({fmlMissingRows.length})
+            </button>
+          </div>
+
+          {nextOrderView === "order" && (
+          <>
           <div style={styles.reportFilterBox}>
             <label style={styles.label}>Filter generated order</label>
 
@@ -4525,6 +4840,76 @@ export default function App() {
               );
             })}
           </div>
+          </>
+          )}
+
+          {nextOrderView === "fml" && (
+            <>
+              <div style={styles.reportFilterBox}>
+                <label style={styles.label}>Search FML report</label>
+                <input
+                  placeholder="Search product, code, category, venue or FML row..."
+                  value={fmlMissingSearch}
+                  onChange={(e) => setFmlMissingSearch(e.target.value)}
+                  style={{ ...styles.searchInput, marginBottom: 0 }}
+                />
+              </div>
+
+              <div style={styles.infoBox}>
+                <div>📘 Total FML products not ordered / not used: <strong>{fmlMissingRows.length}</strong></div>
+                <div>🔎 Showing after search: <strong>{visibleFmlMissingRows.length}</strong></div>
+                <div>Report rule: product exists in FML with venues in column F, but has 0 future orders F:N and 0 past consumption AI:AN in Standard Order Template.</div>
+              </div>
+
+              {fmlMissingRows.length === 0 && (
+                <p style={styles.emptyText}>Upload the latest order file. Products from FML with no orders and no past consumption will appear here.</p>
+              )}
+
+              {fmlMissingRows.length > 0 && visibleFmlMissingRows.length === 0 && (
+                <p style={styles.emptyText}>No FML report rows match this search.</p>
+              )}
+
+              <div style={styles.nextOrderGrid}>
+                {visibleFmlMissingRows.map((item, index) => (
+                  <div key={`${item.code}-${item.excelRow}-fml-${index}`} style={{ ...styles.nextOrderCard, ...styles.nextOrderCardBlue }}>
+                    <div style={styles.nextOrderTopLine}>
+                      <span>#{index + 1}</span>
+                      <span>FML Row {item.excelRow}</span>
+                    </div>
+
+                    <div style={styles.nextOrderName}>{item.product}</div>
+                    <div style={styles.nextOrderMeta}>Code: {item.code || "N/A"}</div>
+                    <div style={styles.nextOrderMeta}>U/M: {item.uom || "N/A"}</div>
+                    <div style={styles.nextOrderMeta}>Category: {item.category || "N/A"}</div>
+
+                    <div style={styles.nextOrderMiniGrid}>
+                      <div style={styles.nextOrderMiniBox}>
+                        <span>Stock</span>
+                        <strong>{formatQty(item.stockOnHand)}</strong>
+                      </div>
+                      <div style={styles.nextOrderMiniBox}>
+                        <span>Future</span>
+                        <strong>{formatQty(item.futureOrders)}</strong>
+                      </div>
+                      <div style={styles.nextOrderMiniBox}>
+                        <span>Past</span>
+                        <strong>{formatQty(item.pastConsumption)}</strong>
+                      </div>
+                      <div style={item.foundInOrderTemplate ? styles.nextOrderMiniBox : { ...styles.nextOrderMiniBox, background: "#fff4d6", color: "#8a5a00", fontWeight: "bold" }}>
+                        <span>Order sheet</span>
+                        <strong>{item.standardOrderRow || "Missing"}</strong>
+                      </div>
+                    </div>
+
+                    <div style={styles.nextOrderStatusBlue}>Venues from FML column F</div>
+                    <div style={styles.nextOrderMeta}>{item.venueText}</div>
+
+                    <div style={styles.nextOrderWarning}>{item.reason}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </section>
       </main>
     );
