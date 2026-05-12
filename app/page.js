@@ -475,6 +475,8 @@ export default function App() {
   const [nextOrderView, setNextOrderView] = useState("order");
   const [fmlMissingRows, setFmlMissingRows] = useState([]);
   const [fmlMissingSearch, setFmlMissingSearch] = useState("");
+  const [fmlLowRows, setFmlLowRows] = useState([]);
+  const [fmlLowSearch, setFmlLowSearch] = useState("");
 
   const [module, setModule] = useState("");
   const [productMode, setProductMode] = useState("");
@@ -916,6 +918,139 @@ export default function App() {
     return reportRows.sort((a, b) => Number(a.excelRow || 0) - Number(b.excelRow || 0));
   };
 
+
+  const parseFmlRunningLowReport = (workbook, orderRows, currentShipCode) => {
+    const fmlSheetName =
+      workbook.SheetNames.find((name) => cleanText(name) === "FML") ||
+      workbook.SheetNames.find((name) => cleanText(name).includes("FML"));
+
+    if (!fmlSheetName) return [];
+
+    const ws = workbook.Sheets[fmlSheetName];
+    if (!ws) return [];
+
+    const decodedRange = XLSX.utils.decode_range(ws["!ref"] || "A1:I1");
+    const fmlRange = {
+      s: { r: decodedRange.s.r, c: 0 },
+      e: { r: decodedRange.e.r, c: Math.max(decodedRange.e.c, 8) },
+    };
+
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", range: fmlRange });
+
+    const orderByCode = {};
+    const orderByProductKey = {};
+
+    orderRows.forEach((item) => {
+      const codeKey = normalizeOrderCode(item.code);
+      const productKey = getProductReportKey(item.product);
+
+      if (codeKey) orderByCode[codeKey] = item;
+      if (productKey && !orderByProductKey[productKey]) orderByProductKey[productKey] = item;
+    });
+
+    const reportRows = [];
+    const seen = new Set();
+
+    rows.slice(3).forEach((row, index) => {
+      const excelRow = index + 4;
+      const department = String(row[0] || "").trim();
+      const category = String(row[1] || "").trim();
+      const subCategory = String(row[2] || "").trim();
+      const code = String(row[3] || "").trim();
+      const product = String(row[4] || "").replace(/\s+/g, " ").trim();
+      const venueText = String(row[5] || "").replace(/\s+/g, " ").trim();
+      const uom = String(row[8] || "").trim();
+
+      if (!code || !product || !venueText) return;
+      if (cleanText(code) === "PRODUCT" || cleanText(product) === "PRODUCT NAME") return;
+
+      const venues = splitFmlVenues(venueText);
+      if (!venues.length) return;
+
+      const codeKey = normalizeOrderCode(code);
+      const productKey = getProductReportKey(product);
+      const orderItem = orderByCode[codeKey] || orderByProductKey[productKey] || null;
+      if (!orderItem) return;
+
+      const futureOrders = Number(orderItem.futureOrders || 0);
+      const pastConsumption = Number(orderItem.pastConsumption || 0);
+      const averageConsumptionPerDay = Number(orderItem.averageConsumptionPerDay || 0);
+      const availableAtArrival = Number(orderItem.availableAtArrival || 0);
+
+      if (futureOrders > 0) return;
+      if (pastConsumption <= 0 || averageConsumptionPerDay <= 0) return;
+
+      const oneDayBuffer = averageConsumptionPerDay;
+      const isRunningLowAtArrival = availableAtArrival <= oneDayBuffer;
+      if (!isRunningLowAtArrival) return;
+
+      const templateMatches = getTemplateMatchesForFmlProduct(
+        { code, product, venues },
+        currentShipCode
+      );
+
+      if (!templateMatches.length) return;
+
+      const uniqueKey = codeKey || productKey || cleanText(product + "|" + excelRow);
+      if (seen.has(uniqueKey)) return;
+      seen.add(uniqueKey);
+
+      const matchedVenues = [
+        ...new Set(templateMatches.flatMap((match) => match.matchedVenues || [])),
+      ];
+      const templateShipScopeLabels = [
+        ...new Set(templateMatches.map((match) => match.shipScopeLabel || "Used by all ships")),
+      ];
+      const templateLocationNames = [
+        ...new Set(templateMatches.map((match) => match.displayName || match.templateName || "Template")),
+      ];
+      const templateSheetNames = [
+        ...new Set(templateMatches.map((match) => match.sheetName).filter(Boolean)),
+      ];
+
+      const daysOfCoverAtArrival = averageConsumptionPerDay > 0
+        ? availableAtArrival / averageConsumptionPerDay
+        : 0;
+
+      const reason = availableAtArrival <= 0
+        ? "No future order. Based on average daily consumption, this product is expected to be out before or by arrival day."
+        : "No future order. Based on average daily consumption, this product will have less than one day of stock at arrival.";
+
+      reportRows.push({
+        excelRow,
+        standardOrderRow: orderItem?.excelRow || "",
+        code,
+        product,
+        uom: orderItem?.uom || uom || "",
+        department,
+        category,
+        subCategory,
+        venues,
+        venueText,
+        matchedVenues,
+        templateMatches,
+        templateLocationNames,
+        templateSheetNames,
+        templateShipScopeLabels,
+        templateShipScopeNote: templateShipScopeLabels.join("; "),
+        stockOnHand: Number(orderItem?.stockOnHand || 0),
+        futureOrders,
+        pastConsumption,
+        averageConsumptionPerDay,
+        consumptionUntilArrival: Number(orderItem?.consumptionUntilArrival || 0),
+        availableAtArrival,
+        daysOfCoverAtArrival,
+        suggestedOrder: Number(orderItem?.suggestedOrder || 0),
+        foundInOrderTemplate: Boolean(orderItem),
+        foundInTemplate: true,
+        currentShipCode,
+        reason,
+      });
+    });
+
+    return reportRows.sort((a, b) => Number(a.excelRow || 0) - Number(b.excelRow || 0));
+  };
+
   const parseNextOrderWorkbook = (workbook) => {
     const sheetName = workbook.SheetNames.includes("Standard Order Template")
       ? "Standard Order Template"
@@ -1033,10 +1168,12 @@ export default function App() {
     });
 
     const fmlReportRows = parseFmlNotOrderedUnusedReport(workbook, parsedRows, orderShipCode);
+    const fmlRunningLowRows = parseFmlRunningLowReport(workbook, parsedRows, orderShipCode);
 
     return {
       rows: parsedRows,
       fmlReportRows,
+      fmlRunningLowRows,
       meta: {
         sheetName,
         shipName: orderShipName,
@@ -1054,6 +1191,7 @@ export default function App() {
         blueReviewItems: parsedRows.filter((item) => item.alertType === "blue").length,
         redReviewItems: parsedRows.filter((item) => item.alertType === "red").length,
         fmlMissingItems: fmlReportRows.length,
+        fmlRunningLowItems: fmlRunningLowRows.length,
       },
     };
   };
@@ -1070,8 +1208,10 @@ export default function App() {
         setNextOrderMeta(parsed.meta);
         setNextOrderRows([]);
         setFmlMissingRows(parsed.fmlReportRows || []);
+        setFmlLowRows(parsed.fmlRunningLowRows || []);
         setNextOrderSearch("");
         setFmlMissingSearch("");
+        setFmlLowSearch("");
         setNextOrderFilter("all");
         setNextOrderView("order");
         setNextOrderMessage(
@@ -1087,7 +1227,9 @@ export default function App() {
             parsed.meta.redReviewItems +
             " red review, " +
             parsed.meta.fmlMissingItems +
-            " FML not ordered/not used."
+            " FML not ordered/not used, " +
+            parsed.meta.fmlRunningLowItems +
+            " FML running low."
         );
         logUsageEvent("next_order_file_uploaded", {
           module: "generate_next_order",
@@ -1099,6 +1241,7 @@ export default function App() {
           blueReviewItems: parsed.meta.blueReviewItems,
           redReviewItems: parsed.meta.redReviewItems,
           fmlMissingItems: parsed.meta.fmlMissingItems,
+          fmlRunningLowItems: parsed.meta.fmlRunningLowItems,
         });
       } catch (error) {
         setNextOrderFileName(file.name);
@@ -4226,6 +4369,174 @@ export default function App() {
     printWindow.print();
   };
 
+
+  const getVisibleFmlLowRows = () => {
+    const term = fmlLowSearch.toLowerCase().trim();
+    if (!term) return fmlLowRows;
+
+    return fmlLowRows.filter((item) =>
+      [
+        item.code,
+        item.product,
+        item.uom,
+        item.department,
+        item.category,
+        item.subCategory,
+        item.venueText,
+        (item.matchedVenues || []).join(" "),
+        (item.templateLocationNames || []).join(" "),
+        item.templateShipScopeNote,
+        item.reason,
+        item.excelRow,
+        item.standardOrderRow,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(term)
+    );
+  };
+
+  const exportFmlLowReportToExcel = () => {
+    const rows = getVisibleFmlLowRows();
+
+    if (!rows.length) {
+      alert("No FML running-low rows found. Upload the ERP template and latest order file first.");
+      return;
+    }
+
+    logUsageEvent("export_excel_clicked", {
+      module: "generate_next_order_fml_running_low",
+      ship: nextOrderMeta?.shipName || userShip,
+      search: fmlLowSearch,
+      rows: rows.length,
+    });
+
+    const exportRows = rows.map((item, index) => ({
+      Line: index + 1,
+      FMLRow: item.excelRow,
+      StandardOrderRow: item.standardOrderRow || "Not found",
+      Code: item.code || "",
+      Product: item.product || "",
+      UM: item.uom || "",
+      MatchedTemplateVenues: (item.matchedVenues || []).join(", "),
+      TemplateLocations: (item.templateLocationNames || []).join(", "),
+      TemplateSheets: (item.templateSheetNames || []).join(", "),
+      TemplateShipScope: item.templateShipScopeNote || "Used by all ships",
+      VenuesFromFMLColumnF: item.venueText || "",
+      StockOnHand: Number(item.stockOnHand || 0),
+      FutureOrders_F_to_N: Number(item.futureOrders || 0),
+      PastConsumption_AI_to_AN: Number(item.pastConsumption || 0),
+      AverageConsumptionPerDay: Number(item.averageConsumptionPerDay || 0),
+      ConsumptionUntilArrival: Number(item.consumptionUntilArrival || 0),
+      AvailableAtArrival: Number(item.availableAtArrival || 0),
+      DaysCoverAtArrival: Number(item.daysOfCoverAtArrival || 0),
+      SuggestedOrder: Number(item.suggestedOrder || 0),
+      Reason: item.reason || "",
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportRows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "FML Running Low");
+    XLSX.writeFile(wb, "fml-running-low-" + (nextOrderMeta?.shipName || userShip || "ship") + ".xlsx");
+  };
+
+  const printFmlLowReport = () => {
+    const rows = getVisibleFmlLowRows();
+
+    if (!rows.length) {
+      alert("No FML running-low rows found. Upload the ERP template and latest order file first.");
+      return;
+    }
+
+    logUsageEvent("print_clicked", {
+      module: "generate_next_order_fml_running_low",
+      ship: nextOrderMeta?.shipName || userShip,
+      search: fmlLowSearch,
+      rows: rows.length,
+    });
+
+    const html = `
+      <html>
+        <head>
+          <title>FML Running Low At Arrival</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; }
+            h1 { margin-bottom: 4px; }
+            .meta { margin: 2px 0; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+            th, td { border: 1px solid #ccc; padding: 6px; text-align: left; vertical-align: top; }
+            th { background: #f2f2f2; }
+            .blue { color: #0057b8; font-weight: bold; }
+            .red { color: #b00020; font-weight: bold; }
+            .warn { color: #8a5a00; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h1>FML Products Running Low By Arrival</h1>
+          <div class="meta"><strong>Source file:</strong> ${escapeHtml(nextOrderFileName || "N/A")}</div>
+          <div class="meta"><strong>Ship:</strong> ${escapeHtml(nextOrderMeta?.shipName || userShip || "N/A")}</div>
+          <div class="meta"><strong>Rows:</strong> ${rows.length}</div>
+          <div class="meta"><strong>Generated:</strong> ${new Date().toLocaleString()}</div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>FML Row</th>
+                <th>Code</th>
+                <th>Product</th>
+                <th>UM</th>
+                <th>Matched Venue(s)</th>
+                <th>Template Scope</th>
+                <th>Stock</th>
+                <th>Past Consumption</th>
+                <th>Avg / Day</th>
+                <th>At Arrival</th>
+                <th>Days Cover</th>
+                <th>Suggested Order</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows
+                .map(
+                  (item, index) => `
+                    <tr>
+                      <td>${index + 1}</td>
+                      <td>${escapeHtml(item.excelRow || "")}</td>
+                      <td>${escapeHtml(item.code || "")}</td>
+                      <td>${escapeHtml(item.product || "")}</td>
+                      <td>${escapeHtml(item.uom || "")}</td>
+                      <td class="blue">${escapeHtml((item.matchedVenues || []).join(", ") || item.venueText || "")}</td>
+                      <td>${escapeHtml(item.templateShipScopeNote || "Used by all ships")}</td>
+                      <td>${formatQty(item.stockOnHand)}</td>
+                      <td>${formatQty(item.pastConsumption)}</td>
+                      <td>${formatQty(item.averageConsumptionPerDay)}</td>
+                      <td class="${Number(item.availableAtArrival || 0) <= 0 ? "red" : "warn"}">${formatQty(item.availableAtArrival)}</td>
+                      <td>${formatQty(item.daysOfCoverAtArrival)}</td>
+                      <td>${formatQty(item.suggestedOrder)}</td>
+                      <td class="warn">${escapeHtml(item.reason || "")}</td>
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      alert("The print window was blocked. Allow popups and try again.");
+      return;
+    }
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
   const getRecipesUsingProduct = (product) => {
     const recipes = {};
 
@@ -4746,8 +5057,10 @@ export default function App() {
                 setProductMode("nextorder");
                 setNextOrderRows([]);
                 setFmlMissingRows([]);
+        setFmlLowRows([]);
                 setNextOrderSearch("");
                 setFmlMissingSearch("");
+        setFmlLowSearch("");
                 setNextOrderFilter("all");
                 setNextOrderView("order");
                 setNextOrderMessage("");
@@ -4768,6 +5081,7 @@ export default function App() {
     const nextOrderFilterCounts = getNextOrderFilterCounts();
     const visibleNextOrderRows = getNextOrderRowsForOutput(true);
     const visibleFmlMissingRows = getVisibleFmlMissingRows();
+    const visibleFmlLowRows = getVisibleFmlLowRows();
 
     return (
       <main style={styles.page}>
@@ -4815,6 +5129,7 @@ export default function App() {
               <div style={{ color: "#0057b8" }}>🔵 No stock + no past consumption: <strong>{nextOrderMeta?.blueReviewItems || 0}</strong></div>
               <div style={{ color: "#b00020" }}>🔴 Stock on hand + no past consumption: <strong>{nextOrderMeta?.redReviewItems || 0}</strong></div>
               <div style={{ color: "#0057b8" }}>📘 FML not ordered / not used: <strong>{nextOrderMeta?.fmlMissingItems || 0}</strong></div>
+              <div style={{ color: "#b00020" }}>⚠️ FML running low at arrival: <strong>{nextOrderMeta?.fmlRunningLowItems || 0}</strong></div>
               <div style={{ color: "#8a5a00" }}>
                 Compact order cards show only key ordering fields. Detailed calculation fields remain in Print and Excel export.
               </div>
@@ -4840,18 +5155,27 @@ export default function App() {
 
             <div style={styles.headerActions}>
               <button style={styles.backButton} onClick={printFmlMissingReport} disabled={nextOrderLoading || !fmlMissingRows.length}>
-                🖨️ Print FML Report
+                🖨️ Print FML Not Used
               </button>
 
               <button style={styles.primaryButton} onClick={exportFmlMissingReportToExcel} disabled={nextOrderLoading || !fmlMissingRows.length}>
-                📥 Export FML Report
+                📥 Export FML Not Used
+              </button>
+
+              <button style={styles.backButton} onClick={printFmlLowReport} disabled={nextOrderLoading || !fmlLowRows.length}>
+                🖨️ Print FML Low
+              </button>
+
+              <button style={styles.primaryButton} onClick={exportFmlLowReportToExcel} disabled={nextOrderLoading || !fmlLowRows.length}>
+                📥 Export FML Low
               </button>
             </div>
 
             <div style={styles.infoBox}>
               <div>🛒 Product lines generated: <strong>{nextOrderRows.length}</strong></div>
               <div>🔎 Showing after filter/search: <strong>{nextOrderRows.length ? visibleNextOrderRows.length : 0}</strong></div>
-              <div>📘 FML report rows: <strong>{fmlMissingRows.length}</strong></div>
+              <div>📘 FML not-used rows: <strong>{fmlMissingRows.length}</strong></div>
+              <div>⚠️ FML running-low rows: <strong>{fmlLowRows.length}</strong></div>
               <div>📋 Order: <strong>Same order as uploaded Excel file</strong></div>
               {nextOrderLoading && <div>Generating next order, please wait...</div>}
               {nextOrderMessage && <div style={{ color: nextOrderRows.length ? "#555" : "#8a5a00" }}>{nextOrderMessage}</div>}
@@ -4877,6 +5201,13 @@ export default function App() {
               onClick={() => setNextOrderView("fml")}
             >
               📘 FML Not Ordered / Not Used ({fmlMissingRows.length})
+            </button>
+
+            <button
+              style={{ ...styles.viewModeButton, ...(nextOrderView === "fmlLow" ? styles.viewModeButtonActive : {}) }}
+              onClick={() => setNextOrderView("fmlLow")}
+            >
+              ⚠️ FML Running Low ({fmlLowRows.length})
             </button>
           </div>
 
@@ -5055,6 +5386,79 @@ export default function App() {
                     <div style={styles.fmlCompactMeta}><strong>Venue(s):</strong> {(item.matchedVenues && item.matchedVenues.length ? item.matchedVenues : item.venues).join(", ")}</div>
                     <div style={styles.fmlCompactMeta}><strong>Template:</strong> {(item.templateLocationNames || []).slice(0, 3).join(", ") || "Matched"}</div>
                     <div style={styles.fmlCompactReason}>No future orders and no past consumption.</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {nextOrderView === "fmlLow" && (
+            <>
+              <div style={styles.reportFilterBox}>
+                <label style={styles.label}>Search FML running-low report</label>
+                <input
+                  placeholder="Search product, code, venue, template or FML row..."
+                  value={fmlLowSearch}
+                  onChange={(e) => setFmlLowSearch(e.target.value)}
+                  style={{ ...styles.searchInput, marginBottom: 0 }}
+                />
+              </div>
+
+              <div style={styles.infoBox}>
+                <div>🚢 Order file ship: <strong>{nextOrderMeta?.shipCode || nextOrderMeta?.shipName || "N/A"}</strong></div>
+                <div>⚠️ FML running-low rows: <strong>{fmlLowRows.length}</strong></div>
+                <div>🔎 Showing after search: <strong>{visibleFmlLowRows.length}</strong></div>
+                <div>Report rule: FML product must match the template for this ship, have venues in FML column F, have 0 future orders, have past consumption, and be at or below one day of stock by order arrival.</div>
+              </div>
+
+              {fmlLowRows.length === 0 && (
+                <p style={styles.emptyText}>Upload the ERP template file and the latest order file. The report will show FML products with no future order that are projected to run low by arrival day.</p>
+              )}
+
+              {fmlLowRows.length > 0 && visibleFmlLowRows.length === 0 && (
+                <p style={styles.emptyText}>No FML running-low rows match this search.</p>
+              )}
+
+              <div style={styles.fmlCompactGrid}>
+                {visibleFmlLowRows.map((item, index) => (
+                  <div key={`${item.code}-${item.excelRow}-fml-low-${index}`} style={{ ...styles.fmlCompactCard, ...styles.orderWarningCard }}>
+                    <div style={styles.nextOrderTopLine}>
+                      <span>#{index + 1}</span>
+                      <span>FML {item.excelRow}</span>
+                    </div>
+
+                    <div style={styles.fmlCompactName}>{item.product}</div>
+                    <div style={styles.fmlCompactMeta}>Code: {item.code || "N/A"} • U/M: {item.uom || "N/A"}</div>
+
+                    <div style={styles.nextOrderMiniGrid}>
+                      <div style={styles.nextOrderMiniBox}>
+                        <span>Stock</span>
+                        <strong>{formatQty(item.stockOnHand)}</strong>
+                      </div>
+                      <div style={styles.nextOrderMiniBox}>
+                        <span>Future</span>
+                        <strong>{formatQty(item.futureOrders)}</strong>
+                      </div>
+                      <div style={styles.nextOrderMiniBox}>
+                        <span>Avg/day</span>
+                        <strong>{formatQty(item.averageConsumptionPerDay)}</strong>
+                      </div>
+                      <div
+                        style={
+                          Number(item.availableAtArrival || 0) <= 0
+                            ? { ...styles.nextOrderMiniBox, ...styles.nextOrderMiniBoxNegative }
+                            : styles.nextOrderMiniBox
+                        }
+                      >
+                        <span>⚠️ At arrival</span>
+                        <strong>{formatQty(item.availableAtArrival)}</strong>
+                      </div>
+                    </div>
+
+                    <div style={styles.fmlCompactBadge}>Template match: {item.templateShipScopeNote || "Used by all ships"}</div>
+                    <div style={styles.fmlCompactMeta}><strong>Venue(s):</strong> {(item.matchedVenues && item.matchedVenues.length ? item.matchedVenues : item.venues).join(", ")}</div>
+                    <div style={styles.fmlCompactMeta}><strong>Template:</strong> {(item.templateLocationNames || []).slice(0, 3).join(", ") || "Matched"}</div>
+                    <div style={styles.fmlCompactReason}>{item.reason}</div>
                   </div>
                 ))}
               </div>
