@@ -14,8 +14,8 @@
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
     "exceljs": "^4.4.0",
-"file-saver": "^2.0.5"
+    "file-saver": "^2.0.5"
   }
 }
