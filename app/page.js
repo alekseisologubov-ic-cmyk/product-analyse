@@ -2861,126 +2861,80 @@ export default function App() {
     XLSX.writeFile(wb, `inventory-status-${ship || "ship"}.xlsx`);
   };
 
-  const printInventorySummary = () => {
-    logUsageEvent("print_clicked", { module: "make_inventory", reportMode: inventoryReportMode, ship: makeInventoryShip || userShip, station: inventoryReportMode === "summary" ? summaryStationFilter : inventoryStation });
+    const printInventorySummary = async () => {
     if (reportBusy || printBusyRef.current) return;
 
-    const ship = makeInventoryShip || userShip;
-    const mode = inventoryReportMode;
-    const rows = getVisibleInventoryReportRows().map((item) => ({
-      ...item,
-      stations: Array.isArray(item.stations) ? [...item.stations] : [],
-      users: Array.isArray(item.users) ? [...item.users] : [],
-    }));
+    logUsageEvent("print_clicked", {
+      module: "make_inventory",
+      reportMode: inventoryReportMode,
+      ship: makeInventoryShip || userShip,
+      station: inventoryReportMode === "summary" ? summaryStationFilter : inventoryStation,
+    });
 
-    if (!rows.length) {
-      const text = mode === "summary"
-        ? "No summary records to print for this ship."
-        : "No personal inventory records to print for this ship, station, and user.";
+    const ship = makeInventoryShip || userShip;
+
+    if (!ship) {
+      const text = "Choose ship before creating the PDF report.";
       setMakeInventoryMessage(text);
       window.alert(text);
       return;
     }
 
-    const title = mode === "summary" ? "Ship Inventory Summary Report" : "My Inventory Report";
+    setReportBusy(true);
+    printBusyRef.current = true;
 
-    const tableRows = mode === "summary"
-      ? rows
-          .map(
-            (item) => `
-              <tr>
-                <td>${escapeHtml(item.code || "")}</td>
-                <td>${escapeHtml(item.name || "")}</td>
-                <td>${escapeHtml(item.category || "")}</td>
-                <td>${escapeHtml(item.sheetName || "")}</td>
-                <td>${escapeHtml(formatQty(item.totalQty))}</td>
-                <td>${escapeHtml(item.stations.join(", "))}</td>
-                <td>${escapeHtml(item.users.join(", "))}</td>
-                <td>${escapeHtml(item.recordCount)}</td>
-                <td>${escapeHtml(item.confirmedAt)}</td>
-              </tr>
-            `
-          )
-          .join("")
-      : rows
-          .map(
-            (item) => `
-              <tr>
-                <td>${escapeHtml(item.station || "")}</td>
-                <td>${escapeHtml(item.userName || "")}</td>
-                <td>${escapeHtml(item.code || "")}</td>
-                <td>${escapeHtml(item.name || "")}</td>
-                <td>${escapeHtml(item.category || "")}</td>
-                <td>${escapeHtml(item.sheetName || "")}</td>
-                <td>${escapeHtml(formatQty(item.qty))}</td>
-                <td>${escapeHtml(item.confirmedAt)}</td>
-              </tr>
-            `
-          )
-          .join("");
+    try {
+      if (inventoryReportMode === "summary") {
+        const rows = getSummaryInventoryRecordsForDownload();
 
-    const tableHeader = mode === "summary"
-      ? `
-        <tr>
-          <th>Code</th>
-          <th>Name</th>
-          <th>Category</th>
-          <th>Sheet</th>
-          <th>Total Qty</th>
-          <th>Stations</th>
-          <th>Users</th>
-          <th>Records</th>
-          <th>Last Updated</th>
-        </tr>
-      `
-      : `
-        <tr>
-          <th>Station</th>
-          <th>User</th>
-          <th>Code</th>
-          <th>Name</th>
-          <th>Category</th>
-          <th>Sheet</th>
-          <th>Quantity</th>
-          <th>Confirmed</th>
-        </tr>
-      `;
+        if (!rows.length) {
+          const text = "No summary records to export to PDF for this ship.";
+          setMakeInventoryMessage(text);
+          window.alert(text);
+          return;
+        }
 
-    const html = `
-      <html>
-        <head>
-          <title>${escapeHtml(title)}</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 24px; }
-            h1 { margin-bottom: 4px; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
-            th, td { border: 1px solid #ccc; padding: 6px; text-align: left; vertical-align: top; }
-            th { background: #f2f2f2; }
-            tr { break-inside: avoid; }
-          </style>
-        </head>
-        <body>
-          <h1>${escapeHtml(title)}</h1>
-          <div><strong>Ship:</strong> ${escapeHtml(ship)}</div>
-          ${
-            mode === "my"
-              ? `<div><strong>Station:</strong> ${escapeHtml(inventoryStation)}</div>
-                 <div><strong>User:</strong> ${escapeHtml(getEffectiveInventoryUserName())}</div>`
-              : `<div><strong>Report:</strong> All users for this ship</div>
-                 <div><strong>Station Filter:</strong> ${escapeHtml(summaryStationFilter === "ALL" ? "All Stations" : summaryStationFilter)}</div>`
-          }
-          <div><strong>Printed:</strong> ${escapeHtml(new Date().toLocaleString())}</div>
-          <div><strong>Records:</strong> ${escapeHtml(rows.length)}</div>
+        await downloadInventoryPdfReport({
+          items: rows,
+          venueName: getInventoryReportLocationName("summary"),
+          reportTitle: "Summary Report",
+          includeCounts: true,
+          summary: true,
+        });
 
-          <table>
-            <thead>${tableHeader}</thead>
-            <tbody>${tableRows}</tbody>
-          </table>
-        </body>
-      </html>
-    `;
+        setMakeInventoryMessage("Summary PDF report downloaded.");
+        return;
+      }
 
-    openPreparedPrintWindow(html);
+      const rows = getMyInventoryExportItems();
+
+      if (!rows.length) {
+        const text =
+          "No inventory items to export to PDF. Upload or refresh the shared master inventory list first.";
+        setMakeInventoryMessage(text);
+        window.alert(text);
+        return;
+      }
+
+      await downloadInventoryPdfReport({
+        items: rows,
+        venueName: getInventoryReportLocationName("my"),
+        reportTitle: "Inventory Report",
+        includeCounts: true,
+        summary: false,
+      });
+
+      setMakeInventoryMessage(
+        "Inventory PDF report downloaded. Code is in column A, item name is in column F, and count is in column S."
+      );
+    } catch (error) {
+      const text = error?.message || "Could not create PDF report.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+    } finally {
+      printBusyRef.current = false;
+      setReportBusy(false);
+    }
   };
 
   const printInventoryStatus = () => {
