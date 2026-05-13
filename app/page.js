@@ -6337,6 +6337,62 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
                     </div>
                   </div>
                 ))}
+                    </div>
+
+          <div style={styles.finishBar}>
+            {inventoryReportMode === "my" ? (
+              <>
+                <div>
+                  <strong>{inventoryStation || "Station"}</strong>
+                  <div style={styles.recipeMeta}>
+                    Live count: {myReportRows.length} / {makeInventoryItems.length || 0}
+                  </div>
+                  <div style={styles.recipeMeta}>
+                    Status: {currentStationProgress?.statusLabel || "Not Started"}
+                  </div>
+                </div>
+
+                {currentStationSubmitted ? (
+                  <div style={styles.statusWarning}>
+                    ✅ {inventoryStation} - Count Submitted. Waiting for all stations.
+                  </div>
+                ) : (
+                  <button
+                    style={styles.primaryButton}
+                    onClick={submitInventoryStationCount}
+                    disabled={!inventoryReady || reportBusy}
+                  >
+                    ✅ Finish / Submit Station Count
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <div>
+                  <strong>Final Inventory Report</strong>
+                  <div style={styles.recipeMeta}>
+                    Submitted stations: {submittedStations} / {stationProgressRows.length}
+                  </div>
+                  <div style={styles.recipeMeta}>
+                    Uploaded sample: {inventoryCountSheetTemplateName || "Not uploaded"}
+                  </div>
+                </div>
+
+                {allStationsSubmitted ? (
+                  <button
+                    style={styles.primaryButton}
+                    onClick={generateFinalInventoryReport}
+                    disabled={reportBusy}
+                  >
+                    📥 Generate Final Report
+                  </button>
+                ) : (
+                  <div style={styles.statusWarning}>
+                    ⏳ Final report will unlock after all stations submit.
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </section>
 
