@@ -6064,7 +6064,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
           </div>
         </section>
 
-                        <section style={styles.card}>
+                                <section style={styles.card}>
           <h2 style={styles.productTitle}>📦 Select Product for Inventory</h2>
 
           {makeInventoryItems.length === 0 && (
@@ -6235,7 +6235,12 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
                     value={inventoryQty}
                     onChange={(e) => setInventoryQty(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && inventoryReady && !inventoryLoading && !currentStationSubmitted) {
+                      if (
+                        e.key === "Enter" &&
+                        inventoryReady &&
+                        !inventoryLoading &&
+                        !currentStationSubmitted
+                      ) {
                         confirmInventoryQty();
                       }
                     }}
