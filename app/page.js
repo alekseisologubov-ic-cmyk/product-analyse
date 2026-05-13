@@ -661,11 +661,17 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     };
   }, []);
 
-  const scheduleRealtimeRefresh = (type, shipOverride) => {
+    const scheduleRealtimeRefresh = (type, shipOverride) => {
     if (printBusyRef.current) return;
 
     const ship = shipOverride || makeInventoryShip || userShip;
-    const key = type === "master" ? "master" : "counts-" + (ship || "unknown");
+
+    const key =
+      type === "master"
+        ? "master"
+        : type === "stationStatus"
+          ? "station-status-" + (ship || "unknown")
+          : "counts-" + (ship || "unknown");
 
     if (realtimeRefreshTimersRef.current[key]) {
       window.clearTimeout(realtimeRefreshTimersRef.current[key]);
@@ -681,6 +687,11 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
 
       if (type === "counts" && ship) {
         loadInventoryRecords(ship);
+        return;
+      }
+
+      if (type === "stationStatus" && ship) {
+        loadInventoryStationStatuses(ship);
       }
     }, 900);
   };
