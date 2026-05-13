@@ -6221,9 +6221,23 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
                 </button>
               )}
 
-              <button style={styles.primaryButton} onClick={exportInventorySummaryToExcel} disabled={reportBusy}>
-                📥 Export Excel
-              </button>
+              {inventoryReportMode === "summary" ? (
+  <button
+    style={styles.primaryButton}
+    onClick={generateFinalInventoryReport}
+    disabled={reportBusy || !allStationsSubmitted}
+  >
+    📥 Generate Final Report
+  </button>
+) : (
+  <button
+    style={styles.primaryButton}
+    onClick={exportInventorySummaryToExcel}
+    disabled={reportBusy}
+  >
+    📥 Export Excel
+  </button>
+)}
             </div>
           </div>
 
