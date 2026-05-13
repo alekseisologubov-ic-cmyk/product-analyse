@@ -1,5 +1,6 @@
 "use client";
 
+import ExcelJS from "exceljs";
 import { buildInventoryWorkbook } from "./inventoryWorkbookBuilder";
 import {
   buildSummaryReportItems,
@@ -323,4 +324,124 @@ export async function downloadInventoryPdfReport({
       : `${safeFileName(finalReportTitle)}-${safeFileName(finalVenueName)}-${today()}.pdf`;
 
   doc.save(fileName);
+}
+const TEMPLATE_CODE_COL = 1; // A
+const TEMPLATE_NAME_COL = 6; // F
+const TEMPLATE_COUNT_COL = 19; // S
+
+function getExcelCellText(value) {
+  if (value === null || value === undefined) return "";
+
+  if (typeof value === "object") {
+    if (Array.isArray(value.richText)) {
+      return value.richText.map((part) => part.text || "").join("");
+    }
+
+    if (value.text !== undefined) return String(value.text);
+    if (value.result !== undefined) return String(value.result);
+  }
+
+  return String(value);
+}
+
+function makeTemplateReportKey(codeValue, nameValue) {
+  const code = normalizeCode(getExcelCellText(codeValue));
+  const name = normalizeText(getExcelCellText(nameValue)).toUpperCase();
+
+  if (!code || !name) return "";
+
+  return `${code}__${name}`;
+}
+
+function isTemplateItemRow(codeValue, nameValue) {
+  const code = normalizeCode(getExcelCellText(codeValue));
+  const name = normalizeText(getExcelCellText(nameValue)).toUpperCase();
+
+  if (!code || !name) return false;
+
+  if (code === "CODE") return false;
+  if (name === "ITEM NAME") return false;
+  if (name === "NAME") return false;
+  if (name.includes("ITEM NAME")) return false;
+
+  return true;
+}
+
+function buildTemplateCountMap(items = []) {
+  const map = new Map();
+
+  prepareInventoryReportItems(items).forEach((item) => {
+    const key = makeTemplateReportKey(getItemCode(item), getItemName(item));
+    if (!key) return;
+
+    const rawCount = toCountNumber(getItemCount(item));
+    const count = rawCount === "" ? 0 : Number(rawCount || 0);
+    const safeCount = Number.isFinite(count) ? count : 0;
+
+    map.set(key, Number(map.get(key) || 0) + safeCount);
+  });
+
+  return map;
+}
+
+export async function downloadInventoryExcelReportUsingTemplate({
+  templateFile,
+  items = [],
+  venueName = "",
+  reportTitle = "Inventory Report",
+} = {}) {
+  if (!templateFile) {
+    throw new Error("Choose the downloaded count sheet file first.");
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  const arrayBuffer = await templateFile.arrayBuffer();
+
+  await workbook.xlsx.load(arrayBuffer);
+
+  const countMap = buildTemplateCountMap(items);
+
+  let itemRows = 0;
+  let matchedRows = 0;
+
+  workbook.eachSheet((worksheet) => {
+    worksheet.eachRow({ includeEmpty: false }, (row) => {
+      const codeCell = row.getCell(TEMPLATE_CODE_COL);
+      const nameCell = row.getCell(TEMPLATE_NAME_COL);
+
+      const codeText = getExcelCellText(codeCell.value);
+      const nameText = getExcelCellText(nameCell.value);
+
+      if (!isTemplateItemRow(codeText, nameText)) return;
+
+      itemRows += 1;
+
+      const key = makeTemplateReportKey(codeText, nameText);
+      const hasCount = key && countMap.has(key);
+      const count = hasCount ? countMap.get(key) : 0;
+
+      if (hasCount) matchedRows += 1;
+
+      const countCell = row.getCell(TEMPLATE_COUNT_COL);
+
+      countCell.value = count;
+      countCell.numFmt = "0";
+      countCell.alignment = {
+        ...(countCell.alignment || {}),
+        horizontal: "center",
+        vertical: "middle",
+      };
+    });
+  });
+
+  const fileName = `${safeFileName(reportTitle)}-${safeFileName(
+    venueName
+  )}-filled-count-sheet-${today()}.xlsx`;
+
+  await saveWorkbookAsExcel(workbook, fileName);
+
+  return {
+    itemRows,
+    matchedRows,
+  };
 }
