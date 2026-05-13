@@ -6064,7 +6064,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
           </div>
         </section>
 
-                                <section style={styles.card}>
+                                        <section style={styles.card}>
           <h2 style={styles.productTitle}>📦 Select Product for Inventory</h2>
 
           {makeInventoryItems.length === 0 && (
@@ -6150,7 +6150,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
           </div>
         </section>
 
-        {currentInventoryItem && (
+        {currentInventoryItem ? (
           <div
             style={styles.modalBackdrop}
             onClick={() => {
@@ -6159,7 +6159,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
               setEditingInventoryId(null);
             }}
           >
-            <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.modalCard} onClick={(event) => event.stopPropagation()}>
               <button
                 type="button"
                 style={styles.closeButton}
@@ -6233,10 +6233,10 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
                     type="number"
                     min="0"
                     value={inventoryQty}
-                    onChange={(e) => setInventoryQty(e.target.value)}
-                    onKeyDown={(e) => {
+                    onChange={(event) => setInventoryQty(event.target.value)}
+                    onKeyDown={(event) => {
                       if (
-                        e.key === "Enter" &&
+                        event.key === "Enter" &&
                         inventoryReady &&
                         !inventoryLoading &&
                         !currentStationSubmitted
@@ -6278,7 +6278,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
               </div>
             </div>
           </div>
-        )}
+        ) : null}
           
         <section style={styles.card}>
           <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 20 }}>
