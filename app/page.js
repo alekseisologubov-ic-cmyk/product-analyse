@@ -6119,7 +6119,11 @@ setEditingInventoryId(countedRecord?.id || null);
                   <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
                   <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
                   <div style={styles.recipeMeta}>Category: {item.category}</div>
-                  {alreadyCounted && <div style={styles.statusGood}>Already Counted By Me</div>}
+                  {alreadyCounted && (
+  <div style={styles.statusGood}>
+    Already Counted: {formatQty(countedRecord?.qty || 0)}
+  </div>
+)}
                 </button>
               );
             })}
