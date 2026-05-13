@@ -6130,25 +6130,6 @@ setEditingInventoryId(countedRecord?.id || null);
           </div>
         </section>
 
-        {currentInventoryItem && (
-          <section style={styles.card}>
-            <h2 style={styles.productTitle}>
-              {editingInventoryId ? "✏️ Edit Counted Product" : "✅ Confirm Product"}
-            </h2>
-
-            <div style={styles.grid}>
-              <div>
-                {currentInventoryItem.image ? (
-                  <div>
-                    <img
-                      src={getImageUrl(currentInventoryItem.image)}
-                      alt={currentInventoryItem.name}
-                      style={styles.modalImage}
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                        const link = e.currentTarget.nextElementSibling;
-                        if (link) link.style.display = "block";
-                      }}
                     />
                     <a href={currentInventoryItem.image} target="_blank" rel="noreferrer" style={styles.imageLink}>
                       Open Picture
