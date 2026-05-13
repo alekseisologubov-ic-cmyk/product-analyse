@@ -2065,10 +2065,12 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     return true;
   };
 
-  const refreshMakeInventoryData = async (shipOverride) => {
+    const refreshMakeInventoryData = async (shipOverride) => {
     const ship = shipOverride || makeInventoryShip || userShip;
+
     await Promise.all([
       ship ? loadInventoryRecords(ship) : Promise.resolve(),
+      ship ? loadInventoryStationStatuses(ship) : Promise.resolve(),
       loadMasterInventoryItems(ship),
     ]);
   };
