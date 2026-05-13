@@ -8,6 +8,7 @@ import {
   downloadInventoryCountSheet,
   downloadInventoryExcelReport,
   downloadInventoryPdfReport,
+  downloadInventoryExcelReportUsingTemplate,
 } from "./lib/inventoryReportDownloads";
 
 const loadPeopleScheduleModule = () => import("./components/PeopleScheduleModule");
