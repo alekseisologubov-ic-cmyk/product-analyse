@@ -2210,6 +2210,156 @@ export default function App() {
     return inventoryReportMode === "summary" ? getShipSummaryRows() : getMyInventoryRows();
   };
 
+    const getInventoryReportLocationName = (modeOverride = inventoryReportMode) => {
+    const ship = makeInventoryShip || userShip || "ship";
+    const department = activeEquipmentDepartmentLabel || equipmentDepartment || "equipment";
+
+    if (modeOverride === "summary") {
+      const stationLabel =
+        summaryStationFilter === "ALL"
+          ? equipmentDepartment === "bar"
+            ? "All Bars"
+            : "All Stations"
+          : summaryStationFilter;
+
+      return `${ship} - ${department} - ${stationLabel}`;
+    }
+
+    const userName = getEffectiveInventoryUserName() || "User";
+    const stationName = inventoryStation || "Station";
+
+    return `${ship} - ${department} - ${stationName} - ${userName}`;
+  };
+
+  const buildInventoryQtyMap = (rows = []) => {
+    const map = new Map();
+
+    rows.forEach((item) => {
+      const key = getInventoryProductGroupKey(item);
+      if (!key) return;
+
+      const rawQty =
+        item.qty ??
+        item.count ??
+        item.Count ??
+        item.Quantity ??
+        item.quantity ??
+        item.totalQty ??
+        0;
+
+      const qty = Number(rawQty || 0);
+      const safeQty = Number.isFinite(qty) ? qty : 0;
+
+      map.set(key, Number(map.get(key) || 0) + safeQty);
+    });
+
+    return map;
+  };
+
+  const getInventoryCountSheetItems = () => {
+    const sourceItems = makeInventoryItems.length
+      ? makeInventoryItems
+      : getVisibleInventoryReportRows();
+
+    return sourceItems.map((item) => ({
+      ...item,
+      count: "",
+      Count: "",
+      qty: "",
+      quantity: "",
+      Quantity: "",
+    }));
+  };
+
+  const getMyInventoryExportItems = () => {
+    const myRows = getMyInventoryRows();
+    const countMap = buildInventoryQtyMap(myRows);
+
+    const sourceItems = makeInventoryItems.length
+      ? makeInventoryItems
+      : myRows;
+
+    return sourceItems.map((item) => {
+      const key = getInventoryProductGroupKey(item);
+      const count = key && countMap.has(key) ? countMap.get(key) : "";
+
+      return {
+        ...item,
+        code: item.code || "",
+        name: item.name || "",
+        count,
+        Count: count,
+        qty: count,
+        quantity: count,
+        Quantity: count,
+      };
+    });
+  };
+
+  const getSummaryInventoryRecordsForDownload = () => {
+    const ship = makeInventoryShip || userShip;
+    const selectedStation = summaryStationFilter || "ALL";
+
+    return inventorySummary
+      .filter(
+        (item) =>
+          item.ship === ship &&
+          inventoryRecordMatchesCurrentDepartment(item) &&
+          (selectedStation === "ALL" || item.station === selectedStation)
+      )
+      .map((item) => {
+        const qty = Number(item.qty || 0);
+        const safeQty = Number.isFinite(qty) ? qty : 0;
+
+        return {
+          ...item,
+          count: safeQty,
+          Count: safeQty,
+          quantity: safeQty,
+          Quantity: safeQty,
+        };
+      });
+  };
+
+  const downloadInventoryCountSheetForCurrentView = async () => {
+    if (reportBusy) return;
+
+    const rows = getInventoryCountSheetItems();
+
+    if (!rows.length) {
+      const text = "No master inventory items found. Upload or refresh the shared master inventory list first.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
+
+    setReportBusy(true);
+
+    try {
+      await downloadInventoryCountSheet({
+        items: rows,
+        venueName: getInventoryReportLocationName("my"),
+      });
+
+      setMakeInventoryMessage(
+        "Count sheet downloaded. Code is in column A, item name is in column F, and count is blank in column S."
+      );
+
+      logUsageEvent("download_count_sheet_clicked", {
+        module: "make_inventory",
+        ship: makeInventoryShip || userShip,
+        station: inventoryStation,
+        userName: getEffectiveInventoryUserName(),
+        rows: rows.length,
+      });
+    } catch (error) {
+      const text = error?.message || "Could not download count sheet.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+    } finally {
+      setReportBusy(false);
+    }
+  };
   const getMyInventoryStatusRows = () => {
     const countedMap = {};
 
