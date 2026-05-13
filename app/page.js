@@ -6064,7 +6064,6 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
           </div>
         </section>
                            
-
         <section style={styles.card}>
           <h2 style={styles.productTitle}>📦 Select Product for Inventory</h2>
 
