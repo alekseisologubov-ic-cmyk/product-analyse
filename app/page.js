@@ -5879,6 +5879,30 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     const userName = getEffectiveInventoryUserName();
     const inventoryReady = Boolean(makeInventoryShip && inventoryStation && userName && supabase);
     const countedKeysForMe = new Set(myReportRows.map((item) => item.itemKey || cleanText(item.code || item.name)));
+        const countedRecordByKey = new Map(
+      myReportRows.map((item) => [
+        item.itemKey || cleanText(item.code || item.name),
+        item,
+      ])
+    );
+
+    const sortedMakeInventoryItems = filteredMakeInventoryItems
+      .map((item, index) => ({
+        item,
+        index,
+        itemKey: getInventoryItemKey(item),
+      }))
+      .sort((a, b) => {
+        const aCounted = countedKeysForMe.has(a.itemKey);
+        const bCounted = countedKeysForMe.has(b.itemKey);
+
+        if (aCounted !== bCounted) {
+          return aCounted ? 1 : -1;
+        }
+
+        return a.index - b.index;
+      })
+      .map((entry) => entry.item);
 
     return (
       <main style={styles.page}>
