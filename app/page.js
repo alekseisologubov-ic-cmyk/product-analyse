@@ -5853,8 +5853,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     );
   }
 
-  if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "makeinventory") {
-        const filteredMakeInventoryItems = getFilteredMakeInventoryItems();
+      const filteredMakeInventoryItems = getFilteredMakeInventoryItems();
     const myReportRows = getMyInventoryRows();
     const summaryReportRows = getShipSummaryRows();
     const visibleReportRows = getVisibleInventoryReportRows();
@@ -5888,30 +5887,6 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     );
 
     const countedRecordByKey = new Map(
-      myReportRows.map((item) => [
-        item.itemKey || cleanText(item.code || item.name),
-        item,
-      ])
-    );
-
-    const sortedMakeInventoryItems = filteredMakeInventoryItems
-      .map((item, index) => ({
-        item,
-        index,
-        itemKey: getInventoryItemKey(item),
-      }))
-      .sort((a, b) => {
-        const aCounted = countedKeysForMe.has(a.itemKey);
-        const bCounted = countedKeysForMe.has(b.itemKey);
-
-        if (aCounted !== bCounted) {
-          return aCounted ? 1 : -1;
-        }
-
-        return a.index - b.index;
-      })
-      .map((entry) => entry.item);
-        const countedRecordByKey = new Map(
       myReportRows.map((item) => [
         item.itemKey || cleanText(item.code || item.name),
         item,
