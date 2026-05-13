@@ -6057,11 +6057,13 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
           </div>
         </section>
 
-        <section style={styles.card}>
+                <section style={styles.card}>
           <h2 style={styles.productTitle}>📦 Select Product for Inventory</h2>
 
           {makeInventoryItems.length === 0 && (
-            <p style={styles.emptyText}>Upload the shared master inventory file once for this ship, or click Refresh if another user already uploaded it.</p>
+            <p style={styles.emptyText}>
+              Upload the shared master inventory file once for this ship, or click Refresh if another user already uploaded it.
+            </p>
           )}
 
           <div style={styles.equipmentGrid}>
@@ -6073,26 +6075,30 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
               return (
                 <button
                   key={`${item.sheetName}-${item.code}-${index}`}
-                  style={{ ...styles.equipmentCard, ...(alreadyCounted ? styles.countedCard : {}) }}
+                  style={{
+                    ...styles.equipmentCard,
+                    ...(alreadyCounted ? styles.countedCard : {}),
+                  }}
                   onClick={() => {
                     if (!inventoryReady) {
                       setMakeInventoryMessage("Choose ship, station and user before counting.");
                       return;
                     }
+
                     if (currentStationSubmitted) {
-  setMakeInventoryMessage(
-    `${inventoryStation} has already submitted count. Waiting for all stations before final report.`
-  );
-  return;
-}
+                      setMakeInventoryMessage(
+                        `${inventoryStation} has already submitted count. Waiting for all stations before final report.`
+                      );
+                      return;
+                    }
 
                     setCurrentInventoryItem({
-  ...item,
-  itemKey,
-});
+                      ...item,
+                      itemKey,
+                    });
 
-setInventoryQty(countedRecord ? String(countedRecord.qty ?? "") : "");
-setEditingInventoryId(countedRecord?.id || null);
+                    setInventoryQty(countedRecord ? String(countedRecord.qty ?? "") : "");
+                    setEditingInventoryId(countedRecord?.id || null);
                   }}
                 >
                   {item.image ? (
@@ -6107,7 +6113,13 @@ setEditingInventoryId(countedRecord?.id || null);
                           if (link) link.style.display = "block";
                         }}
                       />
-                      <a href={item.image} target="_blank" rel="noreferrer" style={styles.imageLink}>
+                      <a
+                        href={item.image}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={styles.imageLink}
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         Open Picture
                       </a>
                     </div>
@@ -6119,11 +6131,12 @@ setEditingInventoryId(countedRecord?.id || null);
                   <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
                   <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
                   <div style={styles.recipeMeta}>Category: {item.category}</div>
+
                   {alreadyCounted && (
-  <div style={styles.statusGood}>
-    Already Counted: {formatQty(countedRecord?.qty || 0)}
-  </div>
-)}
+                    <div style={styles.statusGood}>
+                      Already Counted: {formatQty(countedRecord?.qty || 0)}
+                    </div>
+                  )}
                 </button>
               );
             })}
