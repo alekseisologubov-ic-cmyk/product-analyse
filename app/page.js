@@ -2350,44 +2350,44 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
   };
 
   const downloadInventoryCountSheetForCurrentView = async () => {
-    if (reportBusy) return;
+  if (reportBusy) return;
 
-    const rows = getInventoryCountSheetItems();
+  const rows = getInventoryCountSheetItems();
 
-    if (!rows.length) {
-      const text = "No master inventory items found. Upload or refresh the shared master inventory list first.";
-      setMakeInventoryMessage(text);
-      window.alert(text);
-      return;
-    }
+  if (!rows.length) {
+    const text = "No master inventory items found. Upload or refresh the shared master inventory list first.";
+    setMakeInventoryMessage(text);
+    window.alert(text);
+    return;
+  }
 
-    setReportBusy(true);
+  setReportBusy(true);
 
-    try {
-      await downloadInventoryCountSheet({
-        items: rows,
-        venueName: getInventoryReportLocationName("my"),
-      });
+  try {
+    await downloadInventoryCountSheet({
+      items: rows,
+      venueName: getInventoryReportLocationName("my"),
+    });
 
-      setMakeInventoryMessage(
-        "Count sheet downloaded. Code is in column A, item name is in column F, and count is blank in column S."
-      );
+    setMakeInventoryMessage(
+      "Count sheet downloaded. Because count sheets can be different, choose this downloaded file below before clicking Export Excel."
+    );
 
-      logUsageEvent("download_count_sheet_clicked", {
-        module: "make_inventory",
-        ship: makeInventoryShip || userShip,
-        station: inventoryStation,
-        userName: getEffectiveInventoryUserName(),
-        rows: rows.length,
-      });
-    } catch (error) {
-      const text = error?.message || "Could not download count sheet.";
-      setMakeInventoryMessage(text);
-      window.alert(text);
-    } finally {
-      setReportBusy(false);
-    }
-  };
+    logUsageEvent("download_count_sheet_clicked", {
+      module: "make_inventory",
+      ship: makeInventoryShip || userShip,
+      station: inventoryStation,
+      userName: getEffectiveInventoryUserName(),
+      rows: rows.length,
+    });
+  } catch (error) {
+    const text = error?.message || "Could not download count sheet.";
+    setMakeInventoryMessage(text);
+    window.alert(text);
+  } finally {
+    setReportBusy(false);
+  }
+};
     const handleInventoryCountSheetTemplateFile = (event) => {
     const file = event.target.files?.[0];
 
