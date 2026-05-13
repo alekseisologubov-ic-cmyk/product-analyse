@@ -6089,7 +6089,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
           </div>
         </section>
 
-                <section style={styles.card}>
+                        <section style={styles.card}>
           <h2 style={styles.productTitle}>📦 Select Product for Inventory</h2>
 
           {makeInventoryItems.length === 0 && (
@@ -6106,31 +6106,32 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
 
               return (
                 <button
-  key={`${item.sheetName}-${item.code}-${index}`}
-  style={{
-    ...styles.equipmentCard,
-    ...(alreadyCounted ? styles.countedCard : {}),
-  }}
-  onClick={() => {
-    setCurrentInventoryItem({
-      ...item,
-      itemKey,
-    });
+                  key={`${item.sheetName}-${item.code}-${index}`}
+                  type="button"
+                  style={{
+                    ...styles.equipmentCard,
+                    ...(alreadyCounted ? styles.countedCard : {}),
+                  }}
+                  onClick={() => {
+                    setCurrentInventoryItem({
+                      ...item,
+                      itemKey,
+                    });
 
-    setInventoryQty(countedRecord ? String(countedRecord.qty ?? "") : "");
-    setEditingInventoryId(countedRecord?.id || null);
+                    setInventoryQty(countedRecord ? String(countedRecord.qty ?? "") : "");
+                    setEditingInventoryId(countedRecord?.id || null);
 
-    if (!inventoryReady) {
-      setMakeInventoryMessage("Choose ship, station and user before confirming quantity.");
-    }
+                    if (!inventoryReady) {
+                      setMakeInventoryMessage("Choose ship, station and user before confirming quantity.");
+                    }
 
-    if (currentStationSubmitted) {
-      setMakeInventoryMessage(
-        `${inventoryStation} has already submitted count. You can view the item, but cannot update the count.`
-      );
-    }
-  }}
->
+                    if (currentStationSubmitted) {
+                      setMakeInventoryMessage(
+                        `${inventoryStation} has already submitted count. You can view the item, but cannot update the count.`
+                      );
+                    }
+                  }}
+                >
                   {item.image ? (
                     <div>
                       <img
@@ -6143,6 +6144,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
                           if (link) link.style.display = "block";
                         }}
                       />
+
                       <a
                         href={item.image}
                         target="_blank"
@@ -6172,6 +6174,131 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
             })}
           </div>
         </section>
+
+        {currentInventoryItem && (
+          <div
+            style={styles.modalBackdrop}
+            onClick={() => {
+              setCurrentInventoryItem(null);
+              setInventoryQty("");
+              setEditingInventoryId(null);
+            }}
+          >
+            <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                style={styles.closeButton}
+                onClick={() => {
+                  setCurrentInventoryItem(null);
+                  setInventoryQty("");
+                  setEditingInventoryId(null);
+                }}
+              >
+                ✕
+              </button>
+
+              <h2 style={styles.productTitle}>
+                {editingInventoryId ? "✏️ Update Quantity" : "✅ Insert Quantity"}
+              </h2>
+
+              <div style={styles.grid}>
+                <div>
+                  {currentInventoryItem.image ? (
+                    <div>
+                      <img
+                        src={getImageUrl(currentInventoryItem.image)}
+                        alt={currentInventoryItem.name}
+                        style={styles.modalImage}
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                          const link = e.currentTarget.nextElementSibling;
+                          if (link) link.style.display = "block";
+                        }}
+                      />
+
+                      <a
+                        href={currentInventoryItem.image}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={styles.imageLink}
+                      >
+                        Open Picture
+                      </a>
+                    </div>
+                  ) : (
+                    <div style={styles.equipmentNoImage}>No image</div>
+                  )}
+                </div>
+
+                <div>
+                  <h3 style={{ marginTop: 0 }}>{currentInventoryItem.name}</h3>
+
+                  <p><strong>Ship:</strong> {makeInventoryShip || userShip}</p>
+                  <p><strong>Station:</strong> {inventoryStation || "N/A"}</p>
+                  <p><strong>User:</strong> {userName || "N/A"}</p>
+                  <p><strong>Code:</strong> {currentInventoryItem.code || "N/A"}</p>
+                  <p><strong>Sheet:</strong> {currentInventoryItem.sheetName}</p>
+                  <p><strong>Category:</strong> {currentInventoryItem.category}</p>
+
+                  {!inventoryReady && (
+                    <div style={styles.warningText}>
+                      Choose ship, station, and user before confirming quantity.
+                    </div>
+                  )}
+
+                  {currentStationSubmitted && (
+                    <div style={styles.statusWarning}>
+                      This station has already submitted count. You can view this item, but cannot update quantity.
+                    </div>
+                  )}
+
+                  <label style={styles.label}>Insert quantity</label>
+                  <input
+                    autoFocus
+                    type="number"
+                    min="0"
+                    value={inventoryQty}
+                    onChange={(e) => setInventoryQty(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && inventoryReady && !inventoryLoading && !currentStationSubmitted) {
+                        confirmInventoryQty();
+                      }
+                    }}
+                    style={styles.searchInput}
+                    placeholder="Enter quantity..."
+                  />
+
+                  <div style={styles.headerActions}>
+                    <button
+                      type="button"
+                      style={styles.backButton}
+                      onClick={() => {
+                        setCurrentInventoryItem(null);
+                        setInventoryQty("");
+                        setEditingInventoryId(null);
+                      }}
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      type="button"
+                      style={styles.primaryButton}
+                      onClick={confirmInventoryQty}
+                      disabled={!inventoryReady || inventoryLoading || currentStationSubmitted}
+                    >
+                      {inventoryLoading
+                        ? "Saving..."
+                        : editingInventoryId
+                          ? "Update Quantity"
+                          : "Confirm Quantity"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
   
         <section style={styles.card}>
           <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 20 }}>
