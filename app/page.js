@@ -2347,30 +2347,6 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     });
   };
 
-  const downloadInventoryCountSheetForCurrentView = async () => {
-  if (reportBusy) return;
-
-  const rows = getInventoryCountSheetItems();
-
-  if (!rows.length) {
-    const text = "No master inventory items found. Upload or refresh the shared master inventory list first.";
-    setMakeInventoryMessage(text);
-    window.alert(text);
-    return;
-  }
-
-  setReportBusy(true);
-
-  try {
-    await downloadInventoryCountSheet({
-      items: rows,
-      venueName: getInventoryReportLocationName("my"),
-    });
-
-    setMakeInventoryMessage(
-      "Count sheet downloaded. Because count sheets can be different, choose this downloaded file below before clicking Export Excel."
-    );
-
     logUsageEvent("download_count_sheet_clicked", {
       module: "make_inventory",
       ship: makeInventoryShip || userShip,
