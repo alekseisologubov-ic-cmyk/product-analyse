@@ -2822,10 +2822,11 @@ export default function App() {
           return;
         }
 
-        await downloadSummaryExcelReport({
-          items: rows,
-          venueName: getInventoryReportLocationName("summary"),
-        });
+        await downloadInventoryExcelReport({
+  items: rows,
+  venueName: getInventoryReportLocationName("summary"),
+  reportTitle: "Summary Report",
+});
 
         setMakeInventoryMessage(
           "Summary Excel report downloaded. Same product code and name are combined into one total row."
