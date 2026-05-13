@@ -2783,7 +2783,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     }, 250);
   };
 
-      const exportInventorySummaryToExcel = async () => {
+        const exportInventorySummaryToExcel = async () => {
     if (reportBusy) return;
 
     logUsageEvent("export_excel_clicked", {
@@ -2803,42 +2803,29 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
       return;
     }
 
+    if (!inventoryCountSheetTemplateFile) {
+      const text =
+        "Upload the inventory sheet sample first. Export Excel will use that uploaded file and write counts into column S.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
+
     setReportBusy(true);
 
     try {
       if (inventoryReportMode === "summary") {
         const rows = getSummaryInventoryRecordsForDownload();
 
-        if (inventoryCountSheetTemplateFile) {
-          const result = await downloadInventoryExcelReportUsingTemplate({
-            templateFile: inventoryCountSheetTemplateFile,
-            items: rows,
-            venueName: getInventoryReportLocationName("summary"),
-            reportTitle: "Summary Report",
-          });
-
-          setMakeInventoryMessage(
-            `Summary Excel report downloaded using the selected count sheet. Row positions stayed exactly the same. ${result.matchedRows} of ${result.itemRows} item rows matched counts; unmatched rows were set to 0.`
-          );
-
-          return;
-        }
-
-        if (!rows.length) {
-          const text = "No summary records to export for this ship.";
-          setMakeInventoryMessage(text);
-          window.alert(text);
-          return;
-        }
-
-        await downloadInventoryExcelReport({
+        const result = await downloadInventoryExcelReportUsingTemplate({
+          templateFile: inventoryCountSheetTemplateFile,
           items: rows,
           venueName: getInventoryReportLocationName("summary"),
           reportTitle: "Summary Report",
         });
 
         setMakeInventoryMessage(
-          "Summary Excel report downloaded. Items stayed in the same positions as the count sheet, and counts were totaled by code and name."
+          `Summary Excel report downloaded from uploaded sample. Positions stayed the same. ${result.matchedRows} of ${result.itemRows} item rows matched counts; unmatched rows were set to 0.`
         );
 
         return;
@@ -2846,37 +2833,15 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
 
       const rows = getMyInventoryExportItems();
 
-      if (inventoryCountSheetTemplateFile) {
-        const result = await downloadInventoryExcelReportUsingTemplate({
-          templateFile: inventoryCountSheetTemplateFile,
-          items: rows,
-          venueName: getInventoryReportLocationName("my"),
-          reportTitle: "Inventory Report",
-        });
-
-        setMakeInventoryMessage(
-          `Inventory Excel report downloaded using the selected count sheet. Row positions stayed exactly the same. ${result.matchedRows} of ${result.itemRows} item rows matched counts; unmatched rows were set to 0.`
-        );
-
-        return;
-      }
-
-      if (!rows.length) {
-        const text =
-          "No inventory items to export. Upload or refresh the shared master inventory list first.";
-        setMakeInventoryMessage(text);
-        window.alert(text);
-        return;
-      }
-
-      await downloadInventoryExcelReport({
+      const result = await downloadInventoryExcelReportUsingTemplate({
+        templateFile: inventoryCountSheetTemplateFile,
         items: rows,
         venueName: getInventoryReportLocationName("my"),
         reportTitle: "Inventory Report",
       });
 
       setMakeInventoryMessage(
-        "Inventory Excel report downloaded. Code is in column A, item name is in column F, and count is in column S."
+        `Inventory Excel report downloaded from uploaded sample. Positions stayed the same. ${result.matchedRows} of ${result.itemRows} item rows matched counts; unmatched rows were set to 0.`
       );
     } catch (error) {
       const text = error?.message || "Could not export Excel report.";
