@@ -2362,7 +2362,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     setReportBusy(false);
   }
 };
-    const handleInventoryCountSheetTemplateFile = (event) => {
+      const handleInventoryCountSheetTemplateFile = (event) => {
     const file = event.target.files?.[0];
 
     if (!file) {
@@ -2375,7 +2375,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     setInventoryCountSheetTemplateName(file.name);
 
     setMakeInventoryMessage(
-      `Count sheet template selected: ${file.name}. Export Excel will keep this file's row positions and write counts into column S.`
+      `Inventory sheet sample uploaded: ${file.name}. Export Excel will keep this file's item positions and write counts into column S.`
     );
   };
   const getMyInventoryStatusRows = () => {
