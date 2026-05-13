@@ -7334,6 +7334,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
       </main>
     );
   }
+                      
   if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "inuse") {
     const inUseItems = parseInUseItems();
     const missingItems = inUseItems.filter((item) => item.status === "Missing");
