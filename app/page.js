@@ -6068,6 +6068,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
             {sortedMakeInventoryItems.map((item, index) => {
               const itemKey = getInventoryItemKey(item);
               const alreadyCounted = countedKeysForMe.has(itemKey);
+              const countedRecord = countedRecordByKey.get(itemKey);
 
               return (
                 <button
