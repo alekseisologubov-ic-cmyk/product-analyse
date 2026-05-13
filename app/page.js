@@ -2270,7 +2270,7 @@ export default function App() {
     }));
   };
 
-  const getMyInventoryExportItems = () => {
+    const getMyInventoryExportItems = () => {
     const myRows = getMyInventoryRows();
     const countMap = buildInventoryQtyMap(myRows);
 
@@ -2280,7 +2280,7 @@ export default function App() {
 
     return sourceItems.map((item) => {
       const key = getInventoryProductGroupKey(item);
-      const count = key && countMap.has(key) ? countMap.get(key) : "";
+      const count = key && countMap.has(key) ? countMap.get(key) : 0;
 
       return {
         ...item,
@@ -2291,6 +2291,7 @@ export default function App() {
         qty: count,
         quantity: count,
         Quantity: count,
+        totalQty: count,
       };
     });
   };
