@@ -348,6 +348,58 @@ function buildTemplateCountMap(items = []) {
   return map;
 }
 
+function addStationSummarySheet(workbook, stationSummaryRows = []) {
+  if (!stationSummaryRows.length) return;
+
+  const existingSheet = workbook.getWorksheet("Station Summary");
+  if (existingSheet) {
+    workbook.removeWorksheet(existingSheet.id);
+  }
+
+  const worksheet = workbook.addWorksheet("Station Summary");
+
+  worksheet.columns = [
+    { header: "Station", key: "station", width: 26 },
+    { header: "Code", key: "code", width: 18 },
+    { header: "Item Name", key: "name", width: 60 },
+    { header: "Category", key: "category", width: 24 },
+    { header: "Sheet", key: "sheetName", width: 24 },
+    { header: "Count", key: "count", width: 14 },
+    { header: "Users", key: "users", width: 40 },
+  ];
+
+  worksheet.getRow(1).font = {
+    bold: true,
+  };
+
+  stationSummaryRows.forEach((item) => {
+    worksheet.addRow({
+      station: item.station || "",
+      code: item.code || "",
+      name: item.name || "",
+      category: item.category || "",
+      sheetName: item.sheetName || "",
+      count: Number(item.count || 0),
+      users: Array.isArray(item.users) ? item.users.join(", ") : item.users || "",
+    });
+  });
+
+  worksheet.eachRow((row) => {
+    row.eachCell((cell) => {
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+
+      cell.alignment = {
+        vertical: "middle",
+        wrapText: true,
+      };
+    });
+  });
+}
 export async function downloadInventoryExcelReportUsingTemplate({
   templateFile,
   items = [],
