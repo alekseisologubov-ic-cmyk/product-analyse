@@ -1,7 +1,6 @@
 "use client";
 
 import ExcelJS from "exceljs";
-import { buildInventoryWorkbook } from "./inventoryWorkbookBuilder";
 import {
   buildSummaryReportItems,
   getItemCode,
@@ -40,56 +39,11 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export async function downloadInventoryCountSheet({
-  items = [],
-  venueName = "",
-} = {}) {
-  const workbook = buildInventoryWorkbook({
-    items,
-    venueName,
-    reportTitle: "Inventory Count Sheet",
-    includeCounts: false,
-  });
-
-  const fileName = `count-sheet-${safeFileName(venueName)}-${today()}.xlsx`;
-
-  await saveWorkbookAsExcel(workbook, fileName);
-}
-
-export async function downloadInventoryExcelReport({
-  items = [],
-  venueName = "",
-  reportTitle = "Inventory Report",
-} = {}) {
-  const workbook = buildInventoryWorkbook({
-    items,
-    venueName,
-    reportTitle,
-    includeCounts: true,
-  });
-
-  const fileName = `${safeFileName(reportTitle)}-${safeFileName(venueName)}-${today()}.xlsx`;
-
-  await saveWorkbookAsExcel(workbook, fileName);
-}
-
-export async function downloadSummaryExcelReport({
-  items = [],
-  venueName = "All Venues",
-} = {}) {
-  const summaryItems = buildSummaryReportItems(items);
-
-  const workbook = buildInventoryWorkbook({
-    items: summaryItems,
-    venueName,
-    reportTitle: "Summary Report",
-    includeCounts: true,
-  });
-
-  const fileName = `summary-report-${safeFileName(venueName)}-${today()}.xlsx`;
-
-  await saveWorkbookAsExcel(workbook, fileName);
-}
+/* =========================================================
+   PDF EXPORT
+   This still creates the app-generated PDF layout.
+   Excel export below uses the uploaded sample file.
+========================================================= */
 
 function getPdfColumns(pageWidth) {
   const margin = 18;
@@ -155,9 +109,14 @@ function drawPdfHeader({
   });
 
   doc.setFontSize(10);
-  doc.text(venueName ? `Venue: ${venueName}` : "Venue: All Venues", pageWidth / 2, 48, {
-    align: "center",
-  });
+  doc.text(
+    venueName ? `Venue: ${venueName}` : "Venue: All Venues",
+    pageWidth / 2,
+    48,
+    {
+      align: "center",
+    }
+  );
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
@@ -253,23 +212,19 @@ function drawInventoryPdf({
 
     doc.text(String(code || ""), codeX + 3, y + 11);
 
-    const wrappedName = doc.splitTextToSize(
-      String(name || ""),
-      columns[5] - 6
-    );
-
+    const wrappedName = doc.splitTextToSize(String(name || ""), columns[5] - 6);
     doc.text(wrappedName.slice(0, 2), nameX + 3, y + 10);
 
     if (includeCounts) {
-  const countText =
-    count === "" || count === null || count === undefined
-      ? ""
-      : String(count);
+      const countText =
+        count === "" || count === null || count === undefined
+          ? ""
+          : String(count);
 
-  doc.text(countText, countX + columns[18] / 2, y + 17, {
-    align: "center",
-  });
-}
+      doc.text(countText, countX + columns[18] / 2, y + 17, {
+        align: "center",
+      });
+    }
 
     y += rowHeight;
   });
@@ -325,6 +280,15 @@ export async function downloadInventoryPdfReport({
 
   doc.save(fileName);
 }
+
+/* =========================================================
+   EXCEL EXPORT USING UPLOADED SAMPLE FILE
+   This keeps the uploaded file row positions exactly.
+   Code = column A
+   Name = column F
+   Count = column S
+========================================================= */
+
 const TEMPLATE_CODE_COL = 1; // A
 const TEMPLATE_NAME_COL = 6; // F
 const TEMPLATE_COUNT_COL = 19; // S
@@ -391,7 +355,13 @@ export async function downloadInventoryExcelReportUsingTemplate({
   reportTitle = "Inventory Report",
 } = {}) {
   if (!templateFile) {
-    throw new Error("Choose the downloaded count sheet file first.");
+    throw new Error("Upload the inventory sheet sample first.");
+  }
+
+  const fileNameLower = String(templateFile.name || "").toLowerCase();
+
+  if (fileNameLower.endsWith(".xls") && !fileNameLower.endsWith(".xlsx")) {
+    throw new Error("Please upload an .xlsx inventory sheet sample. Old .xls files are not supported.");
   }
 
   const workbook = new ExcelJS.Workbook();
@@ -434,11 +404,11 @@ export async function downloadInventoryExcelReportUsingTemplate({
     });
   });
 
-  const fileName = `${safeFileName(reportTitle)}-${safeFileName(
+  const outputFileName = `${safeFileName(reportTitle)}-${safeFileName(
     venueName
-  )}-filled-count-sheet-${today()}.xlsx`;
+  )}-from-uploaded-sample-${today()}.xlsx`;
 
-  await saveWorkbookAsExcel(workbook, fileName);
+  await saveWorkbookAsExcel(workbook, outputFileName);
 
   return {
     itemRows,
