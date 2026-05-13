@@ -2862,6 +2862,8 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
 
     const savedRecord = normalizeInventoryRecord(saveResult.data);
 
+        await upsertInventoryStationStatus("started");
+
     setInventorySummary((prev) => {
       const withoutSavedRecord = prev.filter(
         (item) =>
