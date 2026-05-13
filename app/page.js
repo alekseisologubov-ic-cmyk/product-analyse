@@ -6065,7 +6065,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
           )}
 
           <div style={styles.equipmentGrid}>
-            {filteredMakeInventoryItems.map((item, index) => {
+            {sortedMakeInventoryItems.map((item, index) => {
               const itemKey = getInventoryItemKey(item);
               const alreadyCounted = countedKeysForMe.has(itemKey);
 
