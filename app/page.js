@@ -2210,7 +2210,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     return inventoryReportMode === "summary" ? getShipSummaryRows() : getMyInventoryRows();
   };
 
-    const getInventoryReportLocationName = (modeOverride = inventoryReportMode) => {
+      const getInventoryReportLocationName = (modeOverride = inventoryReportMode) => {
     const ship = makeInventoryShip || userShip || "ship";
     const department = activeEquipmentDepartmentLabel || equipmentDepartment || "equipment";
 
@@ -2256,22 +2256,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     return map;
   };
 
-  const getInventoryCountSheetItems = () => {
-    const sourceItems = makeInventoryItems.length
-      ? makeInventoryItems
-      : getVisibleInventoryReportRows();
-
-    return sourceItems.map((item) => ({
-      ...item,
-      count: "",
-      Count: "",
-      qty: "",
-      quantity: "",
-      Quantity: "",
-    }));
-  };
-
-    const getMyInventoryExportItems = () => {
+  const getMyInventoryExportItems = () => {
     const myRows = getMyInventoryRows();
     const countMap = buildInventoryQtyMap(myRows);
 
@@ -2297,7 +2282,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     });
   };
 
-    const getSummaryInventoryRecordsForDownload = () => {
+  const getSummaryInventoryRecordsForDownload = () => {
     const ship = makeInventoryShip || userShip;
     const selectedStation = summaryStationFilter || "ALL";
 
@@ -2347,22 +2332,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     });
   };
 
-    logUsageEvent("download_count_sheet_clicked", {
-      module: "make_inventory",
-      ship: makeInventoryShip || userShip,
-      station: inventoryStation,
-      userName: getEffectiveInventoryUserName(),
-      rows: rows.length,
-    });
-  } catch (error) {
-    const text = error?.message || "Could not download count sheet.";
-    setMakeInventoryMessage(text);
-    window.alert(text);
-  } finally {
-    setReportBusy(false);
-  }
-};
-      const handleInventoryCountSheetTemplateFile = (event) => {
+  const handleInventoryCountSheetTemplateFile = (event) => {
     const file = event.target.files?.[0];
 
     if (!file) {
