@@ -2123,6 +2123,338 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
 
     return !hasKnownDepartmentPrefix && departmentKey === "CULINARY";
   };
+    const normalizeInventoryStationStatusRecord = (record) => ({
+    id: record.id,
+    ship: record.ship || "",
+    department: record.department || "",
+    station: record.station || "",
+    status: record.status || "not_started",
+    userName: record.user_name || "",
+    userPosition: record.user_position || "",
+    startedAt: record.started_at || "",
+    submittedAt: record.submitted_at || "",
+    updatedAt: record.updated_at || "",
+  });
+
+  const loadInventoryStationStatuses = async (shipOverride) => {
+    const ship = shipOverride || makeInventoryShip || userShip;
+
+    if (!ship) {
+      setInventoryStationStatuses([]);
+      return;
+    }
+
+    if (!supabase) {
+      return;
+    }
+
+    const departmentKey = getCurrentEquipmentDepartmentKey();
+
+    const { data, error } = await supabase
+      .from("inventory_station_status")
+      .select("*")
+      .eq("ship", ship)
+      .eq("department", departmentKey)
+      .order("station", { ascending: true });
+
+    if (error) {
+      setMakeInventoryMessage(`Could not load station status: ${error.message}`);
+      return;
+    }
+
+    setInventoryStationStatuses((data || []).map(normalizeInventoryStationStatusRecord));
+  };
+
+  const getInventoryStationProgressRows = (statusRows = inventoryStationStatuses) => {
+    const ship = makeInventoryShip || userShip;
+    const departmentKey = getCurrentEquipmentDepartmentKey();
+    const activeStations = getActiveInventoryStationList();
+
+    return activeStations.map((station) => {
+      const statusRecord = statusRows.find(
+        (item) =>
+          item.ship === ship &&
+          item.department === departmentKey &&
+          cleanText(item.station) === cleanText(station)
+      );
+
+      const stationRows = inventorySummary.filter(
+        (item) =>
+          item.ship === ship &&
+          cleanText(item.station) === cleanText(station) &&
+          inventoryRecordMatchesCurrentDepartment(item)
+      );
+
+      const countedKeys = new Set(
+        stationRows.map((item) => item.itemKey || cleanText(item.code || item.name))
+      );
+
+      const countedItems = countedKeys.size;
+      const totalQty = stationRows.reduce((sum, item) => sum + Number(item.qty || 0), 0);
+
+      const status =
+        statusRecord?.status ||
+        (countedItems > 0 ? "started" : "not_started");
+
+      const statusLabel =
+        status === "submitted"
+          ? "Count Submitted"
+          : status === "started"
+            ? "Count Started"
+            : "Not Started";
+
+      return {
+        station,
+        status,
+        statusLabel,
+        countedItems,
+        totalQty,
+        userName: statusRecord?.userName || "",
+        userPosition: statusRecord?.userPosition || "",
+        startedAt: statusRecord?.startedAt || "",
+        submittedAt: statusRecord?.submittedAt || "",
+        updatedAt: statusRecord?.updatedAt || "",
+      };
+    });
+  };
+
+  const getCurrentStationProgress = () => {
+    const station = inventoryStation;
+    if (!station) return null;
+
+    return getInventoryStationProgressRows().find(
+      (item) => cleanText(item.station) === cleanText(station)
+    );
+  };
+
+  const getAllInventoryStationsSubmitted = () => {
+    const rows = getInventoryStationProgressRows();
+    return rows.length > 0 && rows.every((item) => item.status === "submitted");
+  };
+
+  const upsertInventoryStationStatus = async (nextStatus) => {
+    if (!supabase) {
+      throw new Error("Supabase is not connected.");
+    }
+
+    const ship = makeInventoryShip || userShip;
+    const station = inventoryStation;
+    const userName = getEffectiveInventoryUserName();
+    const departmentKey = getCurrentEquipmentDepartmentKey();
+
+    if (!ship || !station || !userName) {
+      throw new Error("Choose ship, station, and user before updating station status.");
+    }
+
+    const existing = getCurrentStationProgress();
+    const now = new Date().toISOString();
+
+    const finalStatus =
+      existing?.status === "submitted" && nextStatus === "started"
+        ? "submitted"
+        : nextStatus;
+
+    const payload = {
+      ship,
+      department: departmentKey,
+      station,
+      status: finalStatus,
+      user_name: userName,
+      user_position: inventoryUserPosition || "",
+      updated_at: now,
+    };
+
+    if (!existing?.startedAt) {
+      payload.started_at = now;
+    }
+
+    if (finalStatus === "submitted") {
+      payload.submitted_at = now;
+    }
+
+    const { data, error } = await supabase
+      .from("inventory_station_status")
+      .upsert(payload, {
+        onConflict: "ship,department,station",
+      })
+      .select("*")
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    const normalized = normalizeInventoryStationStatusRecord(data);
+
+    setInventoryStationStatuses((prev) => {
+      const withoutCurrent = prev.filter(
+        (item) =>
+          !(
+            item.ship === normalized.ship &&
+            item.department === normalized.department &&
+            cleanText(item.station) === cleanText(normalized.station)
+          )
+      );
+
+      return [...withoutCurrent, normalized].sort((a, b) =>
+        a.station.localeCompare(b.station)
+      );
+    });
+
+    scheduleRealtimeRefresh("stationStatus", ship);
+
+    return normalized;
+  };
+
+  const submitInventoryStationCount = async () => {
+    if (reportBusy) return;
+
+    const ship = makeInventoryShip || userShip;
+    const userName = getEffectiveInventoryUserName();
+
+    if (!ship || !inventoryStation || !userName) {
+      const text = "Choose ship, station, and user before finishing inventory.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
+
+    const myRows = getMyInventoryRows();
+
+    const confirmed = window.confirm(
+      `Submit inventory count for ${inventoryStation}? You counted ${myRows.length} item(s). After submit, this station will wait until all stations submit.`
+    );
+
+    if (!confirmed) return;
+
+    setReportBusy(true);
+
+    try {
+      await upsertInventoryStationStatus("submitted");
+
+      setMakeInventoryMessage(
+        `${inventoryStation} - Count Submitted. Waiting until all stations submit.`
+      );
+
+      logUsageEvent("inventory_station_submitted", {
+        module: "make_inventory",
+        ship,
+        station: inventoryStation,
+        userName,
+        userPosition: inventoryUserPosition,
+        rows: myRows.length,
+      });
+    } catch (error) {
+      const text = error?.message || "Could not submit station inventory.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+    } finally {
+      setReportBusy(false);
+    }
+  };
+
+  const getFinalStationSummaryRows = () => {
+    const ship = makeInventoryShip || userShip;
+    const grouped = new Map();
+
+    inventorySummary
+      .filter(
+        (item) =>
+          item.ship === ship &&
+          inventoryRecordMatchesCurrentDepartment(item)
+      )
+      .forEach((item) => {
+        const productKey = getInventoryProductGroupKey(item);
+        if (!productKey) return;
+
+        const station = item.station || "Unknown Station";
+        const key = `${cleanText(station)}__${productKey}`;
+        const qty = Number(item.qty || 0);
+        const safeQty = Number.isFinite(qty) ? qty : 0;
+
+        if (!grouped.has(key)) {
+          grouped.set(key, {
+            station,
+            code: item.code || "",
+            name: item.name || "",
+            category: item.category || "",
+            sheetName: item.sheetName || "",
+            count: 0,
+            users: new Set(),
+          });
+        }
+
+        const existing = grouped.get(key);
+        existing.count += safeQty;
+
+        if (item.userName) existing.users.add(item.userName);
+      });
+
+    return Array.from(grouped.values())
+      .map((item) => ({
+        ...item,
+        users: [...item.users].sort(),
+      }))
+      .sort(
+        (a, b) =>
+          a.station.localeCompare(b.station) ||
+          a.name.localeCompare(b.name)
+      );
+  };
+
+  const generateFinalInventoryReport = async () => {
+    if (reportBusy) return;
+
+    if (!getAllInventoryStationsSubmitted()) {
+      const text = "Final report is not ready yet. All stations must submit first.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
+
+    if (!inventoryCountSheetTemplateFile) {
+      const text =
+        "Upload the inventory sheet sample first. The final report will use that uploaded file and write counts into column S.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
+
+    setReportBusy(true);
+
+    try {
+      const rows = getSummaryInventoryRecordsForDownload();
+      const stationSummaryRows = getFinalStationSummaryRows();
+
+      const result = await downloadInventoryExcelReportUsingTemplate({
+        templateFile: inventoryCountSheetTemplateFile,
+        items: rows,
+        venueName: getInventoryReportLocationName("summary"),
+        reportTitle: "Final Inventory Report",
+        stationSummaryRows,
+      });
+
+      setInventoryReportMode("summary");
+
+      setMakeInventoryMessage(
+        `Final report generated. Uploaded template positions stayed the same. ${result.matchedRows} of ${result.itemRows} item rows matched counts. Station Summary sheet was added.`
+      );
+
+      logUsageEvent("final_inventory_report_generated", {
+        module: "make_inventory",
+        ship: makeInventoryShip || userShip,
+        rows: result.itemRows,
+        matchedRows: result.matchedRows,
+        stationSummaryRows: stationSummaryRows.length,
+      });
+    } catch (error) {
+      const text = error?.message || "Could not generate final inventory report.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+    } finally {
+      setReportBusy(false);
+    }
+  };
 
   const getMyInventoryRows = () => {
     const ship = makeInventoryShip || userShip;
