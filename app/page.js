@@ -7,7 +7,6 @@ import { createClient } from "@supabase/supabase-js";
 import {
   downloadInventoryCountSheet,
   downloadInventoryExcelReport,
-  downloadSummaryExcelReport,
   downloadInventoryPdfReport,
 } from "./lib/inventoryReportDownloads";
 
