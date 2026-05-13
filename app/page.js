@@ -5900,6 +5900,29 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
               </div>
             </div>
           )}
+<div style={styles.reportFilterBox}>
+  <label style={styles.label}>
+    📄 Choose Downloaded Count Sheet File For Excel Export
+  </label>
+
+  <input
+    type="file"
+    accept=".xlsx,.xlsm,.xls"
+    onChange={handleInventoryCountSheetTemplateFile}
+    style={styles.fileInput}
+  />
+
+  <div style={styles.recipeMeta}>
+    Export Excel will use this selected file as the template. It will keep the same
+    item positions and only write counts into column S.
+  </div>
+
+  {inventoryCountSheetTemplateName && (
+    <div style={styles.statusGood}>
+      Selected count sheet: {inventoryCountSheetTemplateName}
+    </div>
+  )}
+</div>
 
           <div style={styles.infoBox}>
             <div>🚢 Ship: <strong>{makeInventoryShip || userShip}</strong></div>
