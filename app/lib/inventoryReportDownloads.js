@@ -353,6 +353,7 @@ export async function downloadInventoryExcelReportUsingTemplate({
   items = [],
   venueName = "",
   reportTitle = "Inventory Report",
+  stationSummaryRows = [],
 } = {}) {
   if (!templateFile) {
     throw new Error("Upload the inventory sheet sample first.");
