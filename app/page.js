@@ -2921,12 +2921,12 @@ export default function App() {
         }
 
         await downloadInventoryPdfReport({
-          items: rows,
-          venueName: getInventoryReportLocationName("summary"),
-          reportTitle: "Summary Report",
-          includeCounts: true,
-          summary: true,
-        });
+  items: rows,
+  venueName: getInventoryReportLocationName("summary"),
+  reportTitle: "Summary Report",
+  includeCounts: true,
+  summary: false,
+});
 
         setMakeInventoryMessage("Summary PDF report downloaded.");
         return;
