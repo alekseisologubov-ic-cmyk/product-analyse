@@ -7562,6 +7562,45 @@ const styles = {
   statusWarning: { marginTop: 8, padding: 8, borderRadius: 10, background: "#fff4d6", color: "#8a5a00", fontWeight: "bold", textAlign: "center" },
   statusNeutral: { marginTop: 8, padding: 8, borderRadius: 10, background: "#f2f2f2", color: "#555", fontWeight: "bold", textAlign: "center" },
   statusBad: { marginTop: 8, padding: 8, borderRadius: 10, background: "#b00020", color: "#fff", fontWeight: "bold", textAlign: "center" },
+              stationStatusGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+    gap: 10,
+    marginTop: 14,
+  },
+
+  stationStatusCard: {
+    border: "1px solid #ddd",
+    borderRadius: 12,
+    padding: 12,
+    background: "#f2f2f2",
+    display: "grid",
+    gap: 5,
+    fontSize: 13,
+  },
+
+  stationStatusStarted: {
+    border: "2px solid #8a5a00",
+    background: "#fff4d6",
+  },
+
+  stationStatusSubmitted: {
+    border: "2px solid #2e7d32",
+    background: "#e8f5e9",
+  },
+
+  finishBar: {
+    marginTop: 18,
+    padding: 16,
+    borderRadius: 14,
+    background: "#f7f7f7",
+    border: "1px solid #ddd",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    flexWrap: "wrap",
+  },
   timelineScroll: { width: "100%", overflowX: "auto", border: "1px solid #ddd", borderRadius: 14, background: "#fff" },
   timelineGrid: { display: "grid", minWidth: 1280, alignItems: "stretch" },
   timelineHeaderCell: { position: "sticky", top: 0, zIndex: 2, padding: "10px 8px", background: "#111", color: "#fff", fontSize: 12, fontWeight: "bold", borderRight: "1px solid #333", borderBottom: "1px solid #333", textAlign: "center" },
