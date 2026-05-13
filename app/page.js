@@ -4,6 +4,12 @@ import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "rea
 import * as XLSX from "xlsx";
 import JSZip from "jszip";
 import { createClient } from "@supabase/supabase-js";
+import {
+  downloadInventoryCountSheet,
+  downloadInventoryExcelReport,
+  downloadSummaryExcelReport,
+  downloadInventoryPdfReport,
+} from "./lib/inventoryReportDownloads";
 
 const loadPeopleScheduleModule = () => import("./components/PeopleScheduleModule");
 const PeopleScheduleModule = lazy(loadPeopleScheduleModule);
