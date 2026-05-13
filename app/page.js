@@ -5857,6 +5857,12 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     const filteredMakeInventoryItems = getFilteredMakeInventoryItems();
     const myReportRows = getMyInventoryRows();
     const summaryReportRows = getShipSummaryRows();
+        const stationProgressRows = getInventoryStationProgressRows();
+    const currentStationProgress = getCurrentStationProgress();
+    const allStationsSubmitted = getAllInventoryStationsSubmitted();
+    const startedStations = stationProgressRows.filter((item) => item.status === "started").length;
+    const submittedStations = stationProgressRows.filter((item) => item.status === "submitted").length;
+    const currentStationSubmitted = currentStationProgress?.status === "submitted";
     const visibleReportRows = getVisibleInventoryReportRows();
     const summaryStationOptions = getSummaryStationOptions();
     const activeInventoryStations = getActiveInventoryStationList();
