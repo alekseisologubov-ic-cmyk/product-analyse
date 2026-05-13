@@ -300,7 +300,7 @@ export async function downloadInventoryPdfReport({
   });
 
   const finalItems = summary ? buildSummaryReportItems(items) : items;
-  const finalVenueName = summary ? "All Venues" : venueName;
+  const finalVenueName = summary ? venueName || "All Venues" : venueName;
   const finalReportTitle = summary ? "Summary Report" : reportTitle;
 
   drawInventoryPdf({
