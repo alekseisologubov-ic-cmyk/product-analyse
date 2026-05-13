@@ -5,8 +5,6 @@ import * as XLSX from "xlsx";
 import JSZip from "jszip";
 import { createClient } from "@supabase/supabase-js";
 import {
-  downloadInventoryCountSheet,
-  downloadInventoryExcelReport,
   downloadInventoryPdfReport,
   downloadInventoryExcelReportUsingTemplate,
 } from "./lib/inventoryReportDownloads";
