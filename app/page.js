@@ -6074,35 +6074,31 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
 
               return (
                 <button
-                  key={`${item.sheetName}-${item.code}-${index}`}
-                  style={{
-                    ...styles.equipmentCard,
-                    ...(alreadyCounted ? styles.countedCard : {}),
-                  }}
-                  onClick={() => {
-  setCurrentInventoryItem({
-    ...item,
-    itemKey,
-  });
+  key={`${item.sheetName}-${item.code}-${index}`}
+  style={{
+    ...styles.equipmentCard,
+    ...(alreadyCounted ? styles.countedCard : {}),
+  }}
+  onClick={() => {
+    setCurrentInventoryItem({
+      ...item,
+      itemKey,
+    });
 
-  setInventoryQty(countedRecord ? String(countedRecord.qty ?? "") : "");
-  setEditingInventoryId(countedRecord?.id || null);
+    setInventoryQty(countedRecord ? String(countedRecord.qty ?? "") : "");
+    setEditingInventoryId(countedRecord?.id || null);
 
-  if (!inventoryReady) {
-    setMakeInventoryMessage("Choose ship, station and user before confirming quantity.");
-  }
+    if (!inventoryReady) {
+      setMakeInventoryMessage("Choose ship, station and user before confirming quantity.");
+    }
 
-  if (currentStationSubmitted) {
-    setMakeInventoryMessage(
-      `${inventoryStation} has already submitted count. You can view the item, but cannot update the count.`
-    );
-  }
-}}
-
-                    setInventoryQty(countedRecord ? String(countedRecord.qty ?? "") : "");
-                    setEditingInventoryId(countedRecord?.id || null);
-                  }}
-                >
+    if (currentStationSubmitted) {
+      setMakeInventoryMessage(
+        `${inventoryStation} has already submitted count. You can view the item, but cannot update the count.`
+      );
+    }
+  }}
+>
                   {item.image ? (
                     <div>
                       <img
