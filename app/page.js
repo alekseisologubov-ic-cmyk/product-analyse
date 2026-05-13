@@ -647,6 +647,23 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
 
       channels.push(countsChannel);
     }
+          const stationStatusChannel = supabase
+        .channel("inventory-station-status-" + makeInventoryShip + "-" + getMasterInventoryScope(equipmentDepartment))
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "inventory_station_status",
+            filter: "ship=eq." + makeInventoryShip,
+          },
+          () => {
+            scheduleRealtimeRefresh("stationStatus", makeInventoryShip);
+          }
+        )
+        .subscribe();
+
+      channels.push(stationStatusChannel);
 
     return () => {
       channels.forEach((channel) => supabase.removeChannel(channel));
