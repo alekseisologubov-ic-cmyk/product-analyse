@@ -6587,6 +6587,753 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     );
   }
 
+              if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "makeinventory") {
+    const filteredMakeInventoryItems = getFilteredMakeInventoryItems();
+    const myReportRows = getMyInventoryRows();
+    const summaryReportRows = getShipSummaryRows();
+    const visibleReportRows = getVisibleInventoryReportRows();
+    const summaryStationOptions = getSummaryStationOptions();
+    const activeInventoryStations = getActiveInventoryStationList();
+    const inventoryStationLabel = getInventoryStationLabel();
+
+    const selectedSummaryStationLabel =
+      summaryStationFilter === "ALL"
+        ? equipmentDepartment === "bar"
+          ? "All Bars"
+          : "All Stations"
+        : summaryStationFilter;
+
+    const inventoryStatusRows = getMyInventoryStatusRows();
+    const statusCountedItems = inventoryStatusRows.filter((item) => item.status === "Counted");
+    const statusPendingItems = inventoryStatusRows.filter((item) => item.status !== "Counted");
+
+    const userName = getEffectiveInventoryUserName();
+    const inventoryReady = Boolean(makeInventoryShip && inventoryStation && userName && supabase);
+
+    const stationProgressRows = getInventoryStationProgressRows();
+    const currentStationProgress = getCurrentStationProgress();
+    const allStationsSubmitted = getAllInventoryStationsSubmitted();
+    const startedStations = stationProgressRows.filter((item) => item.status === "started").length;
+    const submittedStations = stationProgressRows.filter((item) => item.status === "submitted").length;
+    const currentStationSubmitted = currentStationProgress?.status === "submitted";
+
+    const countedKeysForMe = new Set(
+      myReportRows.map((item) => item.itemKey || cleanText(item.code || item.name))
+    );
+
+    const countedRecordByKey = new Map(
+      myReportRows.map((item) => [
+        item.itemKey || cleanText(item.code || item.name),
+        item,
+      ])
+    );
+
+    const sortedMakeInventoryItems = filteredMakeInventoryItems
+      .map((item, index) => ({
+        item,
+        index,
+        itemKey: getInventoryItemKey(item),
+      }))
+      .sort((a, b) => {
+        const aCounted = countedKeysForMe.has(a.itemKey);
+        const bCounted = countedKeysForMe.has(b.itemKey);
+
+        if (aCounted !== bCounted) {
+          return aCounted ? 1 : -1;
+        }
+
+        return a.index - b.index;
+      })
+      .map((entry) => entry.item);
+
+    return (
+      <main style={styles.page}>
+        <header style={styles.header}>
+          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
+          <div style={styles.headerActions}>
+            <button style={styles.backButton} onClick={() => setEquipmentMode("inventory")}>
+              ← Back
+            </button>
+            <div style={styles.shipBadge}>🚢 {makeInventoryShip || userShip}</div>
+          </div>
+        </header>
+
+        <section style={styles.card}>
+          <h2 style={styles.productTitle}>📡 Live Inventory Station Status</h2>
+
+          <div style={styles.infoBox}>
+            <div>
+              Current station:{" "}
+              <strong>
+                {inventoryStation || "Not selected"} -{" "}
+                {currentStationProgress?.statusLabel || "Not Started"}
+              </strong>
+            </div>
+
+            <div>
+              My live count:{" "}
+              <strong>
+                {myReportRows.length} / {makeInventoryItems.length || 0}
+              </strong>
+            </div>
+
+            <div>
+              Stations started: <strong>{startedStations}</strong>
+            </div>
+
+            <div>
+              Stations submitted:{" "}
+              <strong>
+                {submittedStations} / {stationProgressRows.length}
+              </strong>
+            </div>
+
+            {allStationsSubmitted ? (
+              <div style={{ color: "#2e7d32", fontWeight: "bold" }}>
+                ✅ All stations submitted. Final report is ready.
+              </div>
+            ) : (
+              <div style={{ color: "#8a5a00", fontWeight: "bold" }}>
+                ⏳ Waiting for all stations to submit before final report.
+              </div>
+            )}
+          </div>
+
+          <div style={styles.stationStatusGrid}>
+            {stationProgressRows.map((item) => (
+              <div
+                key={item.station}
+                style={{
+                  ...styles.stationStatusCard,
+                  ...(item.status === "started" ? styles.stationStatusStarted : {}),
+                  ...(item.status === "submitted" ? styles.stationStatusSubmitted : {}),
+                }}
+              >
+                <strong>{item.station}</strong>
+                <span>{item.statusLabel}</span>
+                <small>
+                  Counted items: {item.countedItems} / {makeInventoryItems.length || 0}
+                </small>
+                {item.userName && <small>User: {item.userName}</small>}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section style={styles.grid}>
+          <div style={styles.card}>
+            <h2 style={styles.cardTitle}>📝 {activeEquipmentDepartmentLabel} Make Inventory</h2>
+
+            <label style={styles.label}>Choose ship for this inventory</label>
+            <select
+              value={makeInventoryShip}
+              onChange={(e) => setMakeInventoryShip(e.target.value)}
+              style={styles.select}
+            >
+              <option value="">Choose ship</option>
+              {SHIPS.map((ship) => (
+                <option key={ship} value={ship}>{ship}</option>
+              ))}
+            </select>
+
+            <label style={styles.label}>Choose {inventoryStationLabel}</label>
+            <select
+              value={inventoryStation}
+              onChange={(e) => setInventoryStation(e.target.value)}
+              style={styles.select}
+            >
+              <option value="">Choose {inventoryStationLabel}</option>
+              {activeInventoryStations.map((station) => (
+                <option key={station} value={station}>{station}</option>
+              ))}
+            </select>
+
+            <label style={styles.label}>Choose user</label>
+            <input
+              placeholder="Type your name..."
+              value={inventoryUserName}
+              onChange={(e) => setInventoryUserName(e.target.value)}
+              style={styles.searchInput}
+            />
+
+            <label style={styles.label}>Position</label>
+            <input
+              placeholder="Type your position..."
+              value={inventoryUserPosition}
+              onChange={(e) => setInventoryUserPosition(e.target.value)}
+              style={styles.searchInput}
+            />
+
+            <label style={styles.label}>Upload / Replace Shared Master Inventory List</label>
+            <input
+              type="file"
+              accept=".xlsx,.xls,.xlsm"
+              onChange={uploadMakeInventoryFile}
+              style={styles.fileInput}
+            />
+
+            {makeInventoryMessage && <p style={styles.message}>{makeInventoryMessage}</p>}
+
+            <div style={styles.infoBox}>
+              <div>🚢 Inventory ship: <strong>{makeInventoryShip || "Not selected"}</strong></div>
+              <div>📍 {equipmentDepartment === "bar" ? "Bar" : "Station"}: <strong>{inventoryStation || "Not selected"}</strong></div>
+              <div>👤 User: <strong>{userName || "Not selected"}</strong></div>
+              <div>📋 Shared master items: <strong>{makeInventoryItems.length}</strong></div>
+              <div>📂 Master source: <strong>{masterInventorySource || "Not loaded"}</strong></div>
+              {masterInventoryLoading && <div>Loading shared master inventory...</div>}
+              <div>✅ My counted items: <strong>{myReportRows.length}</strong></div>
+              <div>🌍 Ship summary records: <strong>{summaryReportRows.length}</strong></div>
+              <div>Duplicate entries are automatically updated instead of added twice.</div>
+              {inventoryLoading && <div>Loading shared inventory records...</div>}
+              {inventoryError && <div style={{ color: "#b00020" }}>{inventoryError}</div>}
+            </div>
+          </div>
+
+          <div style={styles.card}>
+            <h2 style={styles.cardTitle}>🔍 Search Product</h2>
+
+            <input
+              placeholder="Search code, name, category or sheet..."
+              value={makeInventorySearch}
+              onChange={(e) => setMakeInventorySearch(e.target.value)}
+              style={styles.searchInput}
+            />
+
+            {!inventoryReady && (
+              <p style={styles.warningText}>
+                Choose ship, station and user before confirming quantity. You can still open items to view them.
+              </p>
+            )}
+
+            <p style={styles.emptyText}>
+              Click a product to open the quantity popup. Green means already counted by this user for this station.
+            </p>
+          </div>
+        </section>
+
+        <section style={styles.card}>
+          <h2 style={styles.productTitle}>📦 Select Product for Inventory</h2>
+
+          {makeInventoryItems.length === 0 && (
+            <p style={styles.emptyText}>
+              Upload the shared master inventory file once for this ship, or click Refresh if another user already uploaded it.
+            </p>
+          )}
+
+          <div style={styles.equipmentGrid}>
+            {sortedMakeInventoryItems.map((item, index) => {
+              const itemKey = getInventoryItemKey(item);
+              const alreadyCounted = countedKeysForMe.has(itemKey);
+              const countedRecord = countedRecordByKey.get(itemKey);
+
+              return (
+                <button
+                  key={`${item.sheetName}-${item.code}-${index}`}
+                  type="button"
+                  style={{
+                    ...styles.equipmentCard,
+                    ...(alreadyCounted ? styles.countedCard : {}),
+                  }}
+                  onClick={() => {
+                    setCurrentInventoryItem({
+                      ...item,
+                      itemKey,
+                    });
+
+                    setInventoryQty(countedRecord ? String(countedRecord.qty ?? "") : "");
+                    setEditingInventoryId(countedRecord?.id || null);
+
+                    if (!inventoryReady) {
+                      setMakeInventoryMessage("Choose ship, station and user before confirming quantity.");
+                    }
+
+                    if (currentStationSubmitted) {
+                      setMakeInventoryMessage(
+                        `${inventoryStation} has already submitted count. You can view the item, but cannot update the count.`
+                      );
+                    }
+                  }}
+                >
+                  {item.image ? (
+                    <div>
+                      <img
+                        src={getImageUrl(item.image)}
+                        alt={item.name}
+                        style={styles.equipmentImage}
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                          const link = e.currentTarget.nextElementSibling;
+                          if (link) link.style.display = "block";
+                        }}
+                      />
+
+                      <a
+                        href={item.image}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={styles.imageLink}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Open Picture
+                      </a>
+                    </div>
+                  ) : (
+                    <div style={styles.equipmentNoImage}>No image</div>
+                  )}
+
+                  <div style={styles.recipeName}>{item.name}</div>
+                  <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
+                  <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
+                  <div style={styles.recipeMeta}>Category: {item.category}</div>
+
+                  {alreadyCounted && (
+                    <div style={styles.statusGood}>
+                      Already Counted: {formatQty(countedRecord?.qty || 0)}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {currentInventoryItem ? (
+          <div
+            style={styles.modalBackdrop}
+            onClick={() => {
+              setCurrentInventoryItem(null);
+              setInventoryQty("");
+              setEditingInventoryId(null);
+            }}
+          >
+            <div style={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+              <button
+                type="button"
+                style={styles.closeButton}
+                onClick={() => {
+                  setCurrentInventoryItem(null);
+                  setInventoryQty("");
+                  setEditingInventoryId(null);
+                }}
+              >
+                ✕
+              </button>
+
+              <h2 style={styles.productTitle}>
+                {editingInventoryId ? "✏️ Update Quantity" : "✅ Insert Quantity"}
+              </h2>
+
+              <div style={styles.grid}>
+                <div>
+                  {currentInventoryItem.image ? (
+                    <div>
+                      <img
+                        src={getImageUrl(currentInventoryItem.image)}
+                        alt={currentInventoryItem.name}
+                        style={styles.modalImage}
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                          const link = e.currentTarget.nextElementSibling;
+                          if (link) link.style.display = "block";
+                        }}
+                      />
+
+                      <a
+                        href={currentInventoryItem.image}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={styles.imageLink}
+                      >
+                        Open Picture
+                      </a>
+                    </div>
+                  ) : (
+                    <div style={styles.equipmentNoImage}>No image</div>
+                  )}
+                </div>
+
+                <div>
+                  <h3 style={{ marginTop: 0 }}>{currentInventoryItem.name}</h3>
+
+                  <p><strong>Ship:</strong> {makeInventoryShip || userShip}</p>
+                  <p><strong>Station:</strong> {inventoryStation || "N/A"}</p>
+                  <p><strong>User:</strong> {userName || "N/A"}</p>
+                  <p><strong>Code:</strong> {currentInventoryItem.code || "N/A"}</p>
+                  <p><strong>Sheet:</strong> {currentInventoryItem.sheetName}</p>
+                  <p><strong>Category:</strong> {currentInventoryItem.category}</p>
+
+                  {!inventoryReady && (
+                    <div style={styles.warningText}>
+                      Choose ship, station, and user before confirming quantity.
+                    </div>
+                  )}
+
+                  {currentStationSubmitted && (
+                    <div style={styles.statusWarning}>
+                      This station has already submitted count. You can view this item, but cannot update quantity.
+                    </div>
+                  )}
+
+                  <label style={styles.label}>Insert quantity</label>
+                  <input
+                    autoFocus
+                    type="number"
+                    min="0"
+                    value={inventoryQty}
+                    onChange={(event) => setInventoryQty(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (
+                        event.key === "Enter" &&
+                        inventoryReady &&
+                        !inventoryLoading &&
+                        !currentStationSubmitted
+                      ) {
+                        confirmInventoryQty();
+                      }
+                    }}
+                    style={styles.searchInput}
+                    placeholder="Enter quantity..."
+                  />
+
+                  <div style={styles.headerActions}>
+                    <button
+                      type="button"
+                      style={styles.backButton}
+                      onClick={() => {
+                        setCurrentInventoryItem(null);
+                        setInventoryQty("");
+                        setEditingInventoryId(null);
+                      }}
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      type="button"
+                      style={styles.primaryButton}
+                      onClick={confirmInventoryQty}
+                      disabled={!inventoryReady || inventoryLoading || currentStationSubmitted}
+                    >
+                      {inventoryLoading
+                        ? "Saving..."
+                        : editingInventoryId
+                          ? "Update Quantity"
+                          : "Confirm Quantity"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <section style={styles.card}>
+          <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 20 }}>
+            <h2 style={styles.productTitle}>📄 Inventory Report</h2>
+
+            <div style={styles.headerActions}>
+              <button
+                style={{
+                  ...styles.viewModeButton,
+                  ...(inventoryReportMode === "my" ? styles.viewModeButtonActive : {}),
+                }}
+                onClick={() => setInventoryReportMode("my")}
+              >
+                👤 My Report
+              </button>
+
+              <button
+                style={{
+                  ...styles.viewModeButton,
+                  ...(inventoryReportMode === "summary" ? styles.viewModeButtonActive : {}),
+                }}
+                onClick={() => setInventoryReportMode("summary")}
+              >
+                🌍 Summary Report
+              </button>
+
+              <button
+                style={styles.backButton}
+                onClick={() => refreshMakeInventoryData(makeInventoryShip || userShip)}
+                disabled={inventoryLoading || reportBusy}
+              >
+                🔄 Refresh
+              </button>
+
+              <button style={styles.backButton} onClick={printInventorySummary} disabled={reportBusy}>
+                {reportBusy ? "Preparing..." : "🖨️ Print / PDF"}
+              </button>
+
+              {inventoryReportMode === "my" && (
+                <button style={styles.deleteButton} onClick={clearMyInventory} disabled={inventoryLoading || reportBusy}>
+                  🧹 Clear My Report
+                </button>
+              )}
+
+              {inventoryReportMode === "summary" && (
+                <button style={styles.deleteButton} onClick={clearShipInventory} disabled={inventoryLoading || reportBusy}>
+                  🧹 Clear Ship Records
+                </button>
+              )}
+
+              {inventoryReportMode === "summary" ? (
+                <button
+                  style={styles.primaryButton}
+                  onClick={generateFinalInventoryReport}
+                  disabled={reportBusy || !allStationsSubmitted}
+                >
+                  📥 Generate Final Report
+                </button>
+              ) : (
+                <button
+                  style={styles.primaryButton}
+                  onClick={exportInventorySummaryToExcel}
+                  disabled={reportBusy}
+                >
+                  📥 Export Excel
+                </button>
+              )}
+            </div>
+          </div>
+
+          {inventoryReportMode === "summary" && (
+            <div style={styles.reportFilterBox}>
+              <label style={styles.label}>📍 {equipmentDepartment === "bar" ? "Bar Filter" : "Station Filter"}</label>
+              <select
+                value={summaryStationFilter}
+                onChange={(e) => setSummaryStationFilter(e.target.value)}
+                style={styles.select}
+              >
+                <option value="ALL">{equipmentDepartment === "bar" ? "All Bars" : "All Stations"}</option>
+                {summaryStationOptions.map((station) => (
+                  <option key={station} value={station}>{station}</option>
+                ))}
+              </select>
+
+              <div style={styles.recipeMeta}>
+                Managers can filter the ship summary by galley/station to see where equipment is being consumed.
+              </div>
+            </div>
+          )}
+
+          <div style={styles.reportFilterBox}>
+            <label style={styles.label}>
+              📤 Upload Inventory Sheet Sample For Excel Report
+            </label>
+
+            <input
+              type="file"
+              accept=".xlsx,.xlsm"
+              onChange={handleInventoryCountSheetTemplateFile}
+              style={styles.fileInput}
+            />
+
+            <div style={styles.recipeMeta}>
+              Export Excel will use this uploaded file as the sample/template. It will keep
+              the same item positions and only write counts into column S.
+            </div>
+
+            {inventoryCountSheetTemplateName && (
+              <div style={styles.statusGood}>
+                Uploaded sample: {inventoryCountSheetTemplateName}
+              </div>
+            )}
+          </div>
+
+          <div style={styles.infoBox}>
+            <div>🚢 Ship: <strong>{makeInventoryShip || userShip}</strong></div>
+            {inventoryReportMode === "my" ? (
+              <>
+                <div>📍 {equipmentDepartment === "bar" ? "Bar" : "Station"}: <strong>{inventoryStation || "Not selected"}</strong></div>
+                <div>👤 User: <strong>{userName || "Not selected"}</strong></div>
+                <div>✅ My records: <strong>{myReportRows.length}</strong></div>
+              </>
+            ) : (
+              <>
+                <div>🌍 Report: <strong>All users for selected ship</strong></div>
+                <div>📍 Station Filter: <strong>{selectedSummaryStationLabel}</strong></div>
+                <div>📦 Summary items shown: <strong>{summaryReportRows.length}</strong></div>
+              </>
+            )}
+          </div>
+
+          {visibleReportRows.length === 0 && (
+            <p style={styles.emptyText}>
+              {inventoryReportMode === "summary"
+                ? `No ship summary records yet for ${selectedSummaryStationLabel}.`
+                : "Your confirmed quantities will appear here."}
+            </p>
+          )}
+
+          <div style={styles.equipmentGrid}>
+            {inventoryReportMode === "summary"
+              ? visibleReportRows.map((item, index) => (
+                  <div key={`${item.itemKey}-summary-${index}`} style={styles.equipmentCard}>
+                    <div style={styles.recipeName}>{item.name}</div>
+                    <div style={styles.recipeMeta}>Ship: {item.ship}</div>
+                    <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
+                    <div style={styles.recipeMeta}>Category: {item.category}</div>
+                    <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
+                    <div style={styles.statusGood}>Total Quantity: {formatQty(item.totalQty)}</div>
+                    <div style={styles.recipeMeta}>Stations: {item.stations.join(", ") || "N/A"}</div>
+                    {summaryStationFilter !== "ALL" && (
+                      <div style={styles.statusWarning}>Filtered Station: {summaryStationFilter}</div>
+                    )}
+                    <div style={styles.recipeMeta}>Users: {item.users.join(", ") || "N/A"}</div>
+                    <div style={styles.recipeMeta}>Records: {item.recordCount}</div>
+                    <div style={styles.recipeMeta}>Last Updated: {item.confirmedAt}</div>
+                  </div>
+                ))
+              : visibleReportRows.map((item) => (
+                  <div key={item.id} style={styles.equipmentCard}>
+                    <div style={styles.recipeName}>{item.name}</div>
+                    <div style={styles.recipeMeta}>Ship: {item.ship}</div>
+                    <div style={styles.recipeMeta}>Station: {item.station}</div>
+                    <div style={styles.recipeMeta}>User: {item.userName}</div>
+                    <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
+                    <div style={styles.recipeMeta}>Category: {item.category}</div>
+                    <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
+                    <div style={styles.statusGood}>Quantity: {formatQty(item.qty)}</div>
+                    <div style={styles.recipeMeta}>Confirmed: {item.confirmedAt}</div>
+
+                    <div style={styles.headerActions}>
+                      <button style={styles.backButton} onClick={() => editInventoryItem(item)}>
+                        ✏️ Edit
+                      </button>
+
+                      <button style={styles.deleteButton} onClick={() => deleteInventoryItem(item)}>
+                        🗑️ Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+          </div>
+
+          <div style={styles.finishBar}>
+            {inventoryReportMode === "my" ? (
+              <>
+                <div>
+                  <strong>{inventoryStation || "Station"}</strong>
+                  <div style={styles.recipeMeta}>
+                    Live count: {myReportRows.length} / {makeInventoryItems.length || 0}
+                  </div>
+                  <div style={styles.recipeMeta}>
+                    Status: {currentStationProgress?.statusLabel || "Not Started"}
+                  </div>
+                </div>
+
+                {currentStationSubmitted ? (
+                  <div style={styles.statusWarning}>
+                    ✅ {inventoryStation} - Count Submitted. Waiting for all stations.
+                  </div>
+                ) : (
+                  <button
+                    style={styles.primaryButton}
+                    onClick={submitInventoryStationCount}
+                    disabled={!inventoryReady || reportBusy}
+                  >
+                    ✅ Finish / Submit Station Count
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <div>
+                  <strong>Final Inventory Report</strong>
+                  <div style={styles.recipeMeta}>
+                    Submitted stations: {submittedStations} / {stationProgressRows.length}
+                  </div>
+                  <div style={styles.recipeMeta}>
+                    Uploaded sample: {inventoryCountSheetTemplateName || "Not uploaded"}
+                  </div>
+                </div>
+
+                {allStationsSubmitted ? (
+                  <button
+                    style={styles.primaryButton}
+                    onClick={generateFinalInventoryReport}
+                    disabled={reportBusy}
+                  >
+                    📥 Generate Final Report
+                  </button>
+                ) : (
+                  <div style={styles.statusWarning}>
+                    ⏳ Final report will unlock after all stations submit.
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </section>
+
+        <section style={styles.card}>
+          <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: showVariance ? 20 : 0 }}>
+            <h2 style={styles.productTitle}>📊 Count Status</h2>
+
+            <div style={styles.headerActions}>
+              <button
+                style={styles.backButton}
+                onClick={() => setShowVariance((value) => !value)}
+              >
+                {showVariance ? "Hide Status" : "Open Status"}
+              </button>
+
+              {showVariance && (
+                <>
+                  <button style={styles.backButton} onClick={printInventoryStatus}>
+                    🖨️ Print
+                  </button>
+
+                  <button style={styles.primaryButton} onClick={exportInventoryStatusToExcel}>
+                    📥 Export Excel
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {showVariance && (
+            <>
+              <div style={styles.infoBox}>
+                <div>📋 Master items: <strong>{makeInventoryItems.length}</strong></div>
+                <div>✅ Counted by me: <strong>{statusCountedItems.length}</strong></div>
+                <div>📋 Remaining for me: <strong>{statusPendingItems.length}</strong></div>
+              </div>
+
+              {makeInventoryItems.length === 0 && (
+                <p style={styles.emptyText}>Upload the master inventory file to see count status.</p>
+              )}
+
+              <h3 style={styles.sectionTitle}>📋 My Master Inventory Status</h3>
+
+              <div style={styles.equipmentGrid}>
+                {inventoryStatusRows.map((item, index) => (
+                  <div
+                    key={`${item.code}-status-${index}`}
+                    style={{ ...styles.equipmentCard, ...(item.status === "Counted" ? styles.countedCard : {}) }}
+                  >
+                    <div style={styles.recipeName}>{item.name}</div>
+                    <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
+                    <div style={styles.recipeMeta}>Category: {item.category}</div>
+                    <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
+
+                    {item.status === "Counted" ? (
+                      <>
+                        <div style={styles.statusGood}>Counted: {formatQty(item.countedQty)}</div>
+                        <div style={styles.recipeMeta}>Counted: {item.countedAt}</div>
+                      </>
+                    ) : (
+                      <div style={styles.statusNeutral}>Pending Count</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </section>
+      </main>
+    );
+  }
   if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "inuse") {
     const inUseItems = parseInUseItems();
     const missingItems = inUseItems.filter((item) => item.status === "Missing");
