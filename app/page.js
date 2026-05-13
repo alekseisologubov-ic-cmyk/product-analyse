@@ -5889,6 +5889,63 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
             <div style={styles.shipBadge}>🚢 {makeInventoryShip || userShip}</div>
           </div>
         </header>
+      <section style={styles.card}>
+  <h2 style={styles.productTitle}>📡 Live Inventory Station Status</h2>
+
+  <div style={styles.infoBox}>
+    <div>
+      Current station:{" "}
+      <strong>
+        {inventoryStation || "Not selected"} -{" "}
+        {currentStationProgress?.statusLabel || "Not Started"}
+      </strong>
+    </div>
+    <div>
+      My live count:{" "}
+      <strong>
+        {myReportRows.length} / {makeInventoryItems.length || 0}
+      </strong>
+    </div>
+    <div>
+      Stations started: <strong>{startedStations}</strong>
+    </div>
+    <div>
+      Stations submitted:{" "}
+      <strong>
+        {submittedStations} / {stationProgressRows.length}
+      </strong>
+    </div>
+    {allStationsSubmitted ? (
+      <div style={{ color: "#2e7d32", fontWeight: "bold" }}>
+        ✅ All stations submitted. Final report is ready.
+      </div>
+    ) : (
+      <div style={{ color: "#8a5a00", fontWeight: "bold" }}>
+        ⏳ Waiting for all stations to submit before final report.
+      </div>
+    )}
+  </div>
+
+  <div style={styles.stationStatusGrid}>
+    {stationProgressRows.map((item) => (
+      <div
+        key={item.station}
+        style={{
+          ...styles.stationStatusCard,
+          ...(item.status === "started" ? styles.stationStatusStarted : {}),
+          ...(item.status === "submitted" ? styles.stationStatusSubmitted : {}),
+        }}
+      >
+        <strong>{item.station}</strong>
+        <span>{item.statusLabel}</span>
+        <small>
+          Counted items: {item.countedItems} / {makeInventoryItems.length || 0}
+        </small>
+        {item.userName && <small>User: {item.userName}</small>}
+      </div>
+    ))}
+  </div>
+</section>
 
         <section style={styles.grid}>
           <div style={styles.card}>
