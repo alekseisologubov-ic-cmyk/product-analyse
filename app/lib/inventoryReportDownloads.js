@@ -260,10 +260,15 @@ function drawInventoryPdf({
     doc.text(wrappedName.slice(0, 2), nameX + 3, y + 10);
 
     if (includeCounts) {
-      doc.text(String(count || ""), countX + columns[18] / 2, y + 17, {
-        align: "center",
-      });
-    }
+  const countText =
+    count === "" || count === null || count === undefined
+      ? ""
+      : String(count);
+
+  doc.text(countText, countX + columns[18] / 2, y + 17, {
+    align: "center",
+  });
+}
 
     y += rowHeight;
   });
