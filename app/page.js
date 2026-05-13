@@ -6162,7 +6162,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
                   <button
                     style={styles.primaryButton}
                     onClick={confirmInventoryQty}
-                    disabled={!inventoryReady || inventoryLoading}
+                    disabled={!inventoryReady || inventoryLoading || currentStationSubmitted}
                   >
                     {inventoryLoading ? "Saving..." : editingInventoryId ? "Update Quantity" : "Confirm Quantity"}
                   </button>
