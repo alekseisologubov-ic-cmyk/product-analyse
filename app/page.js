@@ -2809,7 +2809,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     }, 250);
   };
 
-    const exportInventorySummaryToExcel = async () => {
+      const exportInventorySummaryToExcel = async () => {
     if (reportBusy) return;
 
     logUsageEvent("export_excel_clicked", {
@@ -2817,6 +2817,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
       reportMode: inventoryReportMode,
       ship: makeInventoryShip || userShip,
       station: inventoryReportMode === "summary" ? summaryStationFilter : inventoryStation,
+      templateFile: inventoryCountSheetTemplateName || "",
     });
 
     const ship = makeInventoryShip || userShip;
@@ -2834,6 +2835,21 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
       if (inventoryReportMode === "summary") {
         const rows = getSummaryInventoryRecordsForDownload();
 
+        if (inventoryCountSheetTemplateFile) {
+          const result = await downloadInventoryExcelReportUsingTemplate({
+            templateFile: inventoryCountSheetTemplateFile,
+            items: rows,
+            venueName: getInventoryReportLocationName("summary"),
+            reportTitle: "Summary Report",
+          });
+
+          setMakeInventoryMessage(
+            `Summary Excel report downloaded using the selected count sheet. Row positions stayed exactly the same. ${result.matchedRows} of ${result.itemRows} item rows matched counts; unmatched rows were set to 0.`
+          );
+
+          return;
+        }
+
         if (!rows.length) {
           const text = "No summary records to export for this ship.";
           setMakeInventoryMessage(text);
@@ -2842,19 +2858,34 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
         }
 
         await downloadInventoryExcelReport({
-  items: rows,
-  venueName: getInventoryReportLocationName("summary"),
-  reportTitle: "Summary Report",
-});
+          items: rows,
+          venueName: getInventoryReportLocationName("summary"),
+          reportTitle: "Summary Report",
+        });
 
         setMakeInventoryMessage(
-          "Summary Excel report downloaded. Same product code and name are combined into one total row."
+          "Summary Excel report downloaded. Items stayed in the same positions as the count sheet, and counts were totaled by code and name."
         );
 
         return;
       }
 
       const rows = getMyInventoryExportItems();
+
+      if (inventoryCountSheetTemplateFile) {
+        const result = await downloadInventoryExcelReportUsingTemplate({
+          templateFile: inventoryCountSheetTemplateFile,
+          items: rows,
+          venueName: getInventoryReportLocationName("my"),
+          reportTitle: "Inventory Report",
+        });
+
+        setMakeInventoryMessage(
+          `Inventory Excel report downloaded using the selected count sheet. Row positions stayed exactly the same. ${result.matchedRows} of ${result.itemRows} item rows matched counts; unmatched rows were set to 0.`
+        );
+
+        return;
+      }
 
       if (!rows.length) {
         const text =
@@ -2867,6 +2898,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
       await downloadInventoryExcelReport({
         items: rows,
         venueName: getInventoryReportLocationName("my"),
+        reportTitle: "Inventory Report",
       });
 
       setMakeInventoryMessage(
