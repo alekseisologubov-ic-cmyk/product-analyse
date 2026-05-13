@@ -2783,6 +2783,16 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
 
     saveBusyRef.current = true;
 
+        const currentStationProgress = getCurrentStationProgress();
+
+    if (currentStationProgress?.status === "submitted") {
+      const text =
+        "This station has already submitted its inventory count. Clear/reopen the station before editing counts.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
+    
     const itemKey = getInventoryItemKey(currentInventoryItem);
 
     const payload = {
