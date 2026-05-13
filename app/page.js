@@ -6278,8 +6278,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
               </div>
             </div>
           </div>
-        ) : null}
-          
+        ) : null} 
         <section style={styles.card}>
           <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 20 }}>
             <h2 style={styles.productTitle}>📄 Inventory Report</h2>
