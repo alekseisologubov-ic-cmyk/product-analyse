@@ -6080,22 +6080,24 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
                     ...(alreadyCounted ? styles.countedCard : {}),
                   }}
                   onClick={() => {
-                    if (!inventoryReady) {
-                      setMakeInventoryMessage("Choose ship, station and user before counting.");
-                      return;
-                    }
+  setCurrentInventoryItem({
+    ...item,
+    itemKey,
+  });
 
-                    if (currentStationSubmitted) {
-                      setMakeInventoryMessage(
-                        `${inventoryStation} has already submitted count. Waiting for all stations before final report.`
-                      );
-                      return;
-                    }
+  setInventoryQty(countedRecord ? String(countedRecord.qty ?? "") : "");
+  setEditingInventoryId(countedRecord?.id || null);
 
-                    setCurrentInventoryItem({
-                      ...item,
-                      itemKey,
-                    });
+  if (!inventoryReady) {
+    setMakeInventoryMessage("Choose ship, station and user before confirming quantity.");
+  }
+
+  if (currentStationSubmitted) {
+    setMakeInventoryMessage(
+      `${inventoryStation} has already submitted count. You can view the item, but cannot update the count.`
+    );
+  }
+}}
 
                     setInventoryQty(countedRecord ? String(countedRecord.qty ?? "") : "");
                     setEditingInventoryId(countedRecord?.id || null);
