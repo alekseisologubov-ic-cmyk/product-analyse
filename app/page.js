@@ -6185,7 +6185,120 @@ setEditingInventoryId(countedRecord?.id || null);
             </div>
           </section>
         )}
+        {currentInventoryItem && (
+          <div
+            style={styles.modalBackdrop}
+            onClick={() => {
+              setCurrentInventoryItem(null);
+              setInventoryQty("");
+              setEditingInventoryId(null);
+            }}
+          >
+            <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+              <button
+                style={styles.closeButton}
+                onClick={() => {
+                  setCurrentInventoryItem(null);
+                  setInventoryQty("");
+                  setEditingInventoryId(null);
+                }}
+              >
+                ✕
+              </button>
 
+              <h2 style={styles.productTitle}>
+                {editingInventoryId ? "✏️ Update Quantity" : "✅ Insert Quantity"}
+              </h2>
+
+              <div style={styles.grid}>
+                <div>
+                  {currentInventoryItem.image ? (
+                    <div>
+                      <img
+                        src={getImageUrl(currentInventoryItem.image)}
+                        alt={currentInventoryItem.name}
+                        style={styles.modalImage}
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                          const link = e.currentTarget.nextElementSibling;
+                          if (link) link.style.display = "block";
+                        }}
+                      />
+                      <a
+                        href={currentInventoryItem.image}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={styles.imageLink}
+                      >
+                        Open Picture
+                      </a>
+                    </div>
+                  ) : (
+                    <div style={styles.equipmentNoImage}>No image</div>
+                  )}
+                </div>
+
+                <div>
+                  <h3 style={{ marginTop: 0 }}>{currentInventoryItem.name}</h3>
+
+                  <p><strong>Ship:</strong> {makeInventoryShip || userShip}</p>
+                  <p><strong>Station:</strong> {inventoryStation || "N/A"}</p>
+                  <p><strong>User:</strong> {userName || "N/A"}</p>
+                  <p><strong>Code:</strong> {currentInventoryItem.code || "N/A"}</p>
+                  <p><strong>Sheet:</strong> {currentInventoryItem.sheetName}</p>
+                  <p><strong>Category:</strong> {currentInventoryItem.category}</p>
+
+                  <label style={styles.label}>Insert quantity</label>
+                  <input
+                    autoFocus
+                    type="number"
+                    min="0"
+                    value={inventoryQty}
+                    onChange={(e) => setInventoryQty(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        confirmInventoryQty();
+                      }
+                    }}
+                    style={styles.searchInput}
+                    placeholder="Enter quantity..."
+                  />
+
+                  <div style={styles.headerActions}>
+                    <button
+                      style={styles.backButton}
+                      onClick={() => {
+                        setCurrentInventoryItem(null);
+                        setInventoryQty("");
+                        setEditingInventoryId(null);
+                      }}
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      style={styles.primaryButton}
+                      onClick={confirmInventoryQty}
+                      disabled={!inventoryReady || inventoryLoading || currentStationSubmitted}
+                    >
+                      {inventoryLoading
+                        ? "Saving..."
+                        : editingInventoryId
+                          ? "Update Quantity"
+                          : "Confirm Quantity"}
+                    </button>
+                  </div>
+
+                  {currentStationSubmitted && (
+                    <div style={styles.statusWarning}>
+                      This station has already submitted count.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         <section style={styles.card}>
           <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 20 }}>
             <h2 style={styles.productTitle}>📄 Inventory Report</h2>
