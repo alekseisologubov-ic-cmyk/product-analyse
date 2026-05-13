@@ -6054,6 +6054,12 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
                       setMakeInventoryMessage("Choose ship, station and user before counting.");
                       return;
                     }
+                    if (currentStationSubmitted) {
+  setMakeInventoryMessage(
+    `${inventoryStation} has already submitted count. Waiting for all stations before final report.`
+  );
+  return;
+}
 
                     setCurrentInventoryItem(item);
                     setInventoryQty("");
