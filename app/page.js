@@ -5781,14 +5781,6 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
               >
                 🌍 Summary Report
               </button>
-                  
-                  <button
-  style={styles.backButton}
-  onClick={downloadInventoryCountSheetForCurrentView}
-  disabled={inventoryLoading || reportBusy}
->
-  📄 Download Count Sheet
-</button>
 
               <button
                 style={styles.backButton}
