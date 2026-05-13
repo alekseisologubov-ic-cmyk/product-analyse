@@ -409,6 +409,8 @@ export async function downloadInventoryExcelReportUsingTemplate({
     venueName
   )}-from-uploaded-sample-${today()}.xlsx`;
 
+  addStationSummarySheet(workbook, stationSummaryRows);
+  
   await saveWorkbookAsExcel(workbook, outputFileName);
 
   return {
