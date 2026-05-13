@@ -2296,11 +2296,11 @@ export default function App() {
     });
   };
 
-  const getSummaryInventoryRecordsForDownload = () => {
+    const getSummaryInventoryRecordsForDownload = () => {
     const ship = makeInventoryShip || userShip;
     const selectedStation = summaryStationFilter || "ALL";
 
-    return inventorySummary
+    const summaryCountRecords = inventorySummary
       .filter(
         (item) =>
           item.ship === ship &&
@@ -2315,10 +2315,35 @@ export default function App() {
           ...item,
           count: safeQty,
           Count: safeQty,
+          qty: safeQty,
           quantity: safeQty,
           Quantity: safeQty,
+          totalQty: safeQty,
         };
       });
+
+    const countMap = buildInventoryQtyMap(summaryCountRecords);
+
+    const sourceItems = makeInventoryItems.length
+      ? makeInventoryItems
+      : getShipSummaryRows();
+
+    return sourceItems.map((item) => {
+      const key = getInventoryProductGroupKey(item);
+      const count = key && countMap.has(key) ? countMap.get(key) : 0;
+
+      return {
+        ...item,
+        code: item.code || "",
+        name: item.name || "",
+        count,
+        Count: count,
+        qty: count,
+        quantity: count,
+        Quantity: count,
+        totalQty: count,
+      };
+    });
   };
 
   const downloadInventoryCountSheetForCurrentView = async () => {
