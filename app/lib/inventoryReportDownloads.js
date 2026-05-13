@@ -73,17 +73,18 @@ export async function downloadInventoryExcelReport({
 
 export async function downloadSummaryExcelReport({
   items = [],
+  venueName = "All Venues",
 } = {}) {
   const summaryItems = buildSummaryReportItems(items);
 
   const workbook = buildInventoryWorkbook({
     items: summaryItems,
-    venueName: "All Venues",
+    venueName,
     reportTitle: "Summary Report",
     includeCounts: true,
   });
 
-  const fileName = `summary-report-all-venues-${today()}.xlsx`;
+  const fileName = `summary-report-${safeFileName(venueName)}-${today()}.xlsx`;
 
   await saveWorkbookAsExcel(workbook, fileName);
 }
