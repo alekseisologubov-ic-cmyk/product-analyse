@@ -5783,8 +5783,8 @@ export default function App() {
               </button>
 
               <button style={styles.backButton} onClick={printInventorySummary} disabled={reportBusy}>
-                {reportBusy ? "Preparing..." : "🖨️ Print"}
-              </button>
+  {reportBusy ? "Preparing..." : "🖨️ Print / PDF"}
+</button>
 
               {inventoryReportMode === "my" && (
                 <button style={styles.deleteButton} onClick={clearMyInventory} disabled={inventoryLoading || reportBusy}>
