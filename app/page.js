@@ -5853,40 +5853,33 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     );
   }
 
-      const filteredMakeInventoryItems = getFilteredMakeInventoryItems();
+  if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "makeinventory") {
+    const filteredMakeInventoryItems = getFilteredMakeInventoryItems();
     const myReportRows = getMyInventoryRows();
     const summaryReportRows = getShipSummaryRows();
+        const stationProgressRows = getInventoryStationProgressRows();
+    const currentStationProgress = getCurrentStationProgress();
+    const allStationsSubmitted = getAllInventoryStationsSubmitted();
+    const startedStations = stationProgressRows.filter((item) => item.status === "started").length;
+    const submittedStations = stationProgressRows.filter((item) => item.status === "submitted").length;
+    const currentStationSubmitted = currentStationProgress?.status === "submitted";
     const visibleReportRows = getVisibleInventoryReportRows();
     const summaryStationOptions = getSummaryStationOptions();
     const activeInventoryStations = getActiveInventoryStationList();
     const inventoryStationLabel = getInventoryStationLabel();
-
     const selectedSummaryStationLabel =
       summaryStationFilter === "ALL"
         ? equipmentDepartment === "bar"
           ? "All Bars"
           : "All Stations"
         : summaryStationFilter;
-
     const inventoryStatusRows = getMyInventoryStatusRows();
     const statusCountedItems = inventoryStatusRows.filter((item) => item.status === "Counted");
     const statusPendingItems = inventoryStatusRows.filter((item) => item.status !== "Counted");
-
     const userName = getEffectiveInventoryUserName();
     const inventoryReady = Boolean(makeInventoryShip && inventoryStation && userName && supabase);
-
-    const stationProgressRows = getInventoryStationProgressRows();
-    const currentStationProgress = getCurrentStationProgress();
-    const allStationsSubmitted = getAllInventoryStationsSubmitted();
-    const startedStations = stationProgressRows.filter((item) => item.status === "started").length;
-    const submittedStations = stationProgressRows.filter((item) => item.status === "submitted").length;
-    const currentStationSubmitted = currentStationProgress?.status === "submitted";
-
-    const countedKeysForMe = new Set(
-      myReportRows.map((item) => item.itemKey || cleanText(item.code || item.name))
-    );
-
-    const countedRecordByKey = new Map(
+    const countedKeysForMe = new Set(myReportRows.map((item) => item.itemKey || cleanText(item.code || item.name)));
+        const countedRecordByKey = new Map(
       myReportRows.map((item) => [
         item.itemKey || cleanText(item.code || item.name),
         item,
@@ -6063,8 +6056,8 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
             </p>
           </div>
         </section>
-                           
-        <section style={styles.card}>
+
+                <section style={styles.card}>
           <h2 style={styles.productTitle}>📦 Select Product for Inventory</h2>
 
           {makeInventoryItems.length === 0 && (
@@ -6082,12 +6075,23 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
               return (
                 <button
                   key={`${item.sheetName}-${item.code}-${index}`}
-                  type="button"
                   style={{
                     ...styles.equipmentCard,
                     ...(alreadyCounted ? styles.countedCard : {}),
                   }}
                   onClick={() => {
+                    if (!inventoryReady) {
+                      setMakeInventoryMessage("Choose ship, station and user before counting.");
+                      return;
+                    }
+
+                    if (currentStationSubmitted) {
+                      setMakeInventoryMessage(
+                        `${inventoryStation} has already submitted count. Waiting for all stations before final report.`
+                      );
+                      return;
+                    }
+
                     setCurrentInventoryItem({
                       ...item,
                       itemKey,
@@ -6095,16 +6099,6 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
 
                     setInventoryQty(countedRecord ? String(countedRecord.qty ?? "") : "");
                     setEditingInventoryId(countedRecord?.id || null);
-
-                    if (!inventoryReady) {
-                      setMakeInventoryMessage("Choose ship, station and user before confirming quantity.");
-                    }
-
-                    if (currentStationSubmitted) {
-                      setMakeInventoryMessage(
-                        `${inventoryStation} has already submitted count. You can view the item, but cannot update the count.`
-                      );
-                    }
                   }}
                 >
                   {item.image ? (
@@ -6119,7 +6113,6 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
                           if (link) link.style.display = "block";
                         }}
                       />
-
                       <a
                         href={item.image}
                         target="_blank"
@@ -6149,137 +6142,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
             })}
           </div>
         </section>
-
-        {currentInventoryItem ? (
-          <div
-            style={styles.modalBackdrop}
-            onClick={() => {
-              setCurrentInventoryItem(null);
-              setInventoryQty("");
-              setEditingInventoryId(null);
-            }}
-          >
-            <div style={styles.modalCard} onClick={(event) => event.stopPropagation()}>
-              <button
-                type="button"
-                style={styles.closeButton}
-                onClick={() => {
-                  setCurrentInventoryItem(null);
-                  setInventoryQty("");
-                  setEditingInventoryId(null);
-                }}
-              >
-                ✕
-              </button>
-
-              <h2 style={styles.productTitle}>
-                {editingInventoryId ? "✏️ Update Quantity" : "✅ Insert Quantity"}
-              </h2>
-
-              <div style={styles.grid}>
-                <div>
-                  {currentInventoryItem.image ? (
-                    <div>
-                      <img
-                        src={getImageUrl(currentInventoryItem.image)}
-                        alt={currentInventoryItem.name}
-                        style={styles.modalImage}
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
-                          const link = e.currentTarget.nextElementSibling;
-                          if (link) link.style.display = "block";
-                        }}
-                      />
-
-                      <a
-                        href={currentInventoryItem.image}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={styles.imageLink}
-                      >
-                        Open Picture
-                      </a>
-                    </div>
-                  ) : (
-                    <div style={styles.equipmentNoImage}>No image</div>
-                  )}
-                </div>
-
-                <div>
-                  <h3 style={{ marginTop: 0 }}>{currentInventoryItem.name}</h3>
-
-                  <p><strong>Ship:</strong> {makeInventoryShip || userShip}</p>
-                  <p><strong>Station:</strong> {inventoryStation || "N/A"}</p>
-                  <p><strong>User:</strong> {userName || "N/A"}</p>
-                  <p><strong>Code:</strong> {currentInventoryItem.code || "N/A"}</p>
-                  <p><strong>Sheet:</strong> {currentInventoryItem.sheetName}</p>
-                  <p><strong>Category:</strong> {currentInventoryItem.category}</p>
-
-                  {!inventoryReady && (
-                    <div style={styles.warningText}>
-                      Choose ship, station, and user before confirming quantity.
-                    </div>
-                  )}
-
-                  {currentStationSubmitted && (
-                    <div style={styles.statusWarning}>
-                      This station has already submitted count. You can view this item, but cannot update quantity.
-                    </div>
-                  )}
-
-                  <label style={styles.label}>Insert quantity</label>
-                  <input
-                    autoFocus
-                    type="number"
-                    min="0"
-                    value={inventoryQty}
-                    onChange={(event) => setInventoryQty(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (
-                        event.key === "Enter" &&
-                        inventoryReady &&
-                        !inventoryLoading &&
-                        !currentStationSubmitted
-                      ) {
-                        confirmInventoryQty();
-                      }
-                    }}
-                    style={styles.searchInput}
-                    placeholder="Enter quantity..."
-                  />
-
-                  <div style={styles.headerActions}>
-                    <button
-                      type="button"
-                      style={styles.backButton}
-                      onClick={() => {
-                        setCurrentInventoryItem(null);
-                        setInventoryQty("");
-                        setEditingInventoryId(null);
-                      }}
-                    >
-                      Cancel
-                    </button>
-
-                    <button
-                      type="button"
-                      style={styles.primaryButton}
-                      onClick={confirmInventoryQty}
-                      disabled={!inventoryReady || inventoryLoading || currentStationSubmitted}
-                    >
-                      {inventoryLoading
-                        ? "Saving..."
-                        : editingInventoryId
-                          ? "Update Quantity"
-                          : "Confirm Quantity"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : null}
-
+  
         <section style={styles.card}>
           <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 20 }}>
             <h2 style={styles.productTitle}>📄 Inventory Report</h2>
@@ -6314,8 +6177,8 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
               </button>
 
               <button style={styles.backButton} onClick={printInventorySummary} disabled={reportBusy}>
-                {reportBusy ? "Preparing..." : "🖨️ Print / PDF"}
-              </button>
+  {reportBusy ? "Preparing..." : "🖨️ Print / PDF"}
+</button>
 
               {inventoryReportMode === "my" && (
                 <button style={styles.deleteButton} onClick={clearMyInventory} disabled={inventoryLoading || reportBusy}>
@@ -6330,22 +6193,22 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
               )}
 
               {inventoryReportMode === "summary" ? (
-                <button
-                  style={styles.primaryButton}
-                  onClick={generateFinalInventoryReport}
-                  disabled={reportBusy || !allStationsSubmitted}
-                >
-                  📥 Generate Final Report
-                </button>
-              ) : (
-                <button
-                  style={styles.primaryButton}
-                  onClick={exportInventorySummaryToExcel}
-                  disabled={reportBusy}
-                >
-                  📥 Export Excel
-                </button>
-              )}
+  <button
+    style={styles.primaryButton}
+    onClick={generateFinalInventoryReport}
+    disabled={reportBusy || !allStationsSubmitted}
+  >
+    📥 Generate Final Report
+  </button>
+) : (
+  <button
+    style={styles.primaryButton}
+    onClick={exportInventorySummaryToExcel}
+    disabled={reportBusy}
+  >
+    📥 Export Excel
+  </button>
+)}
             </div>
           </div>
 
@@ -6368,30 +6231,29 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
               </div>
             </div>
           )}
+<div style={styles.reportFilterBox}>
+  <label style={styles.label}>
+    📤 Upload Inventory Sheet Sample For Excel Report
+  </label>
 
-          <div style={styles.reportFilterBox}>
-            <label style={styles.label}>
-              📤 Upload Inventory Sheet Sample For Excel Report
-            </label>
+  <input
+    type="file"
+    accept=".xlsx,.xlsm"
+    onChange={handleInventoryCountSheetTemplateFile}
+    style={styles.fileInput}
+  />
 
-            <input
-              type="file"
-              accept=".xlsx,.xlsm"
-              onChange={handleInventoryCountSheetTemplateFile}
-              style={styles.fileInput}
-            />
+  <div style={styles.recipeMeta}>
+    Export Excel will use this uploaded file as the sample/template. It will keep
+    the same item positions and only write counts into column S.
+  </div>
 
-            <div style={styles.recipeMeta}>
-              Export Excel will use this uploaded file as the sample/template. It will keep
-              the same item positions and only write counts into column S.
-            </div>
-
-            {inventoryCountSheetTemplateName && (
-              <div style={styles.statusGood}>
-                Uploaded sample: {inventoryCountSheetTemplateName}
-              </div>
-            )}
-          </div>
+  {inventoryCountSheetTemplateName && (
+    <div style={styles.statusGood}>
+      Uploaded sample: {inventoryCountSheetTemplateName}
+    </div>
+  )}
+</div>
 
           <div style={styles.infoBox}>
             <div>🚢 Ship: <strong>{makeInventoryShip || userShip}</strong></div>
@@ -6460,7 +6322,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
                     </div>
                   </div>
                 ))}
-          </div>
+                    </div>
 
           <div style={styles.finishBar}>
             {inventoryReportMode === "my" ? (
@@ -6587,7 +6449,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
       </main>
     );
   }
-                      
+
   if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "inuse") {
     const inUseItems = parseInUseItems();
     const missingItems = inUseItems.filter((item) => item.status === "Missing");
