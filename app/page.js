@@ -5765,6 +5765,14 @@ export default function App() {
               >
                 🌍 Summary Report
               </button>
+                  
+                  <button
+  style={styles.backButton}
+  onClick={downloadInventoryCountSheetForCurrentView}
+  disabled={inventoryLoading || reportBusy}
+>
+  📄 Download Count Sheet
+</button>
 
               <button
                 style={styles.backButton}
