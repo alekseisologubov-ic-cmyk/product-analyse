@@ -598,8 +598,9 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     }
 
     if (equipmentMode === "makeinventory" && makeInventoryShip) {
-      loadInventoryRecords(makeInventoryShip);
-    }
+  loadInventoryRecords(makeInventoryShip);
+  loadInventoryStationStatuses(makeInventoryShip);
+}
   }, [module, equipmentMode, makeInventoryShip, userShip]);
 
   useEffect(() => {
