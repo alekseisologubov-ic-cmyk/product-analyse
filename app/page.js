@@ -5854,31 +5854,63 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
   }
 
   if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "makeinventory") {
-    const filteredMakeInventoryItems = getFilteredMakeInventoryItems();
+        const filteredMakeInventoryItems = getFilteredMakeInventoryItems();
     const myReportRows = getMyInventoryRows();
     const summaryReportRows = getShipSummaryRows();
-        const stationProgressRows = getInventoryStationProgressRows();
-    const currentStationProgress = getCurrentStationProgress();
-    const allStationsSubmitted = getAllInventoryStationsSubmitted();
-    const startedStations = stationProgressRows.filter((item) => item.status === "started").length;
-    const submittedStations = stationProgressRows.filter((item) => item.status === "submitted").length;
-    const currentStationSubmitted = currentStationProgress?.status === "submitted";
     const visibleReportRows = getVisibleInventoryReportRows();
     const summaryStationOptions = getSummaryStationOptions();
     const activeInventoryStations = getActiveInventoryStationList();
     const inventoryStationLabel = getInventoryStationLabel();
+
     const selectedSummaryStationLabel =
       summaryStationFilter === "ALL"
         ? equipmentDepartment === "bar"
           ? "All Bars"
           : "All Stations"
         : summaryStationFilter;
+
     const inventoryStatusRows = getMyInventoryStatusRows();
     const statusCountedItems = inventoryStatusRows.filter((item) => item.status === "Counted");
     const statusPendingItems = inventoryStatusRows.filter((item) => item.status !== "Counted");
+
     const userName = getEffectiveInventoryUserName();
     const inventoryReady = Boolean(makeInventoryShip && inventoryStation && userName && supabase);
-    const countedKeysForMe = new Set(myReportRows.map((item) => item.itemKey || cleanText(item.code || item.name)));
+
+    const stationProgressRows = getInventoryStationProgressRows();
+    const currentStationProgress = getCurrentStationProgress();
+    const allStationsSubmitted = getAllInventoryStationsSubmitted();
+    const startedStations = stationProgressRows.filter((item) => item.status === "started").length;
+    const submittedStations = stationProgressRows.filter((item) => item.status === "submitted").length;
+    const currentStationSubmitted = currentStationProgress?.status === "submitted";
+
+    const countedKeysForMe = new Set(
+      myReportRows.map((item) => item.itemKey || cleanText(item.code || item.name))
+    );
+
+    const countedRecordByKey = new Map(
+      myReportRows.map((item) => [
+        item.itemKey || cleanText(item.code || item.name),
+        item,
+      ])
+    );
+
+    const sortedMakeInventoryItems = filteredMakeInventoryItems
+      .map((item, index) => ({
+        item,
+        index,
+        itemKey: getInventoryItemKey(item),
+      }))
+      .sort((a, b) => {
+        const aCounted = countedKeysForMe.has(a.itemKey);
+        const bCounted = countedKeysForMe.has(b.itemKey);
+
+        if (aCounted !== bCounted) {
+          return aCounted ? 1 : -1;
+        }
+
+        return a.index - b.index;
+      })
+      .map((entry) => entry.item);
         const countedRecordByKey = new Map(
       myReportRows.map((item) => [
         item.itemKey || cleanText(item.code || item.name),
