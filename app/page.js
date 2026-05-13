@@ -2120,6 +2120,20 @@ export default function App() {
       .sort((a, b) => a.localeCompare(b));
   };
 
+    const getInventoryProductGroupKey = (item) => {
+    const codeKey = cleanText(item?.code || "")
+      .replace(/\s+/g, "")
+      .replace(/\.0$/, "");
+
+    const nameKey = cleanText(item?.name || "");
+
+    if (codeKey && nameKey) return `${codeKey}__${nameKey}`;
+    if (codeKey) return `CODE__${codeKey}`;
+    if (nameKey) return `NAME__${nameKey}`;
+
+    return "";
+  };
+
   const getShipSummaryRows = () => {
     const ship = makeInventoryShip || userShip;
     const grouped = {};
@@ -2133,17 +2147,21 @@ export default function App() {
           (selectedStation === "ALL" || item.station === selectedStation)
       )
       .forEach((item) => {
-        const key = item.itemKey || cleanText(item.code || item.name);
+        const key = getInventoryProductGroupKey(item);
+        if (!key) return;
 
         if (!grouped[key]) {
           grouped[key] = {
             itemKey: key,
             ship: item.ship,
-            code: item.code,
-            name: item.name,
-            category: item.category,
-            sheetName: item.sheetName,
+            code: item.code || "",
+            name: item.name || "",
+            categorySet: new Set(),
+            sheetSet: new Set(),
             totalQty: 0,
+            count: 0,
+            qty: 0,
+            Quantity: 0,
             stations: new Set(),
             users: new Set(),
             recordCount: 0,
@@ -2151,9 +2169,16 @@ export default function App() {
           };
         }
 
-        grouped[key].totalQty += Number(item.qty || 0);
+        const qty = Number(item.qty || 0);
+
+        grouped[key].totalQty += Number.isFinite(qty) ? qty : 0;
+        grouped[key].count = grouped[key].totalQty;
+        grouped[key].qty = grouped[key].totalQty;
+        grouped[key].Quantity = grouped[key].totalQty;
         grouped[key].recordCount += 1;
 
+        if (item.category) grouped[key].categorySet.add(item.category);
+        if (item.sheetName) grouped[key].sheetSet.add(item.sheetName);
         if (item.station) grouped[key].stations.add(item.station);
         if (item.userName) grouped[key].users.add(item.userName);
 
@@ -2163,16 +2188,24 @@ export default function App() {
       });
 
     return Object.values(grouped)
-      .map((item) => ({
-        ...item,
-        stationFilter: selectedStation,
-        stations: [...item.stations].sort(),
-        users: [...item.users].sort(),
-        confirmedAt: item.lastUpdated ? new Date(item.lastUpdated).toLocaleString() : "",
-      }))
+      .map((item) => {
+        const totalQty = Number(item.totalQty || 0);
+
+        return {
+          ...item,
+          category: [...item.categorySet].sort().join(", "),
+          sheetName: [...item.sheetSet].sort().join(", "),
+          stationFilter: selectedStation,
+          stations: [...item.stations].sort(),
+          users: [...item.users].sort(),
+          confirmedAt: item.lastUpdated ? new Date(item.lastUpdated).toLocaleString() : "",
+          count: totalQty,
+          qty: totalQty,
+          Quantity: totalQty,
+        };
+      })
       .sort((a, b) => b.totalQty - a.totalQty || a.name.localeCompare(b.name));
   };
-
   const getVisibleInventoryReportRows = () => {
     return inventoryReportMode === "summary" ? getShipSummaryRows() : getMyInventoryRows();
   };
