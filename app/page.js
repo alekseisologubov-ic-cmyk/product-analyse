@@ -6086,9 +6086,13 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
   return;
 }
 
-                    setCurrentInventoryItem(item);
-                    setInventoryQty("");
-                    setEditingInventoryId(null);
+                    setCurrentInventoryItem({
+  ...item,
+  itemKey,
+});
+
+setInventoryQty(countedRecord ? String(countedRecord.qty ?? "") : "");
+setEditingInventoryId(countedRecord?.id || null);
                   }}
                 >
                   {item.image ? (
