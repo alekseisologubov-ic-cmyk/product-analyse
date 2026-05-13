@@ -2765,50 +2765,75 @@ export default function App() {
     }, 250);
   };
 
-  const exportInventorySummaryToExcel = () => {
-    logUsageEvent("export_excel_clicked", { module: "make_inventory", reportMode: inventoryReportMode, ship: makeInventoryShip || userShip, station: inventoryReportMode === "summary" ? summaryStationFilter : inventoryStation });
+    const exportInventorySummaryToExcel = async () => {
+    if (reportBusy) return;
+
+    logUsageEvent("export_excel_clicked", {
+      module: "make_inventory",
+      reportMode: inventoryReportMode,
+      ship: makeInventoryShip || userShip,
+      station: inventoryReportMode === "summary" ? summaryStationFilter : inventoryStation,
+    });
+
     const ship = makeInventoryShip || userShip;
-    const rows = getVisibleInventoryReportRows();
 
-    if (!rows.length) return;
+    if (!ship) {
+      const text = "Choose ship before exporting.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
 
-    const exportRows =
-      inventoryReportMode === "summary"
-        ? rows.map((item) => ({
-            Ship: ship,
-            Code: item.code || "",
-            Name: item.name || "",
-            Category: item.category || "",
-            Sheet: item.sheetName || "",
-            StationFilter: summaryStationFilter === "ALL" ? "All Stations" : summaryStationFilter,
-            TotalQuantity: item.totalQty,
-            Stations: item.stations.join(", "),
-            Users: item.users.join(", "),
-            Records: item.recordCount,
-            LastUpdated: item.confirmedAt,
-          }))
-        : rows.map((item) => ({
-            Ship: item.ship,
-            Station: item.station,
-            User: item.userName,
-            Code: item.code || "",
-            Name: item.name || "",
-            Category: item.category || "",
-            Sheet: item.sheetName || "",
-            Quantity: item.qty,
-            Confirmed: item.confirmedAt,
-          }));
+    setReportBusy(true);
 
-    const ws = XLSX.utils.json_to_sheet(exportRows);
-    const wb = XLSX.utils.book_new();
+    try {
+      if (inventoryReportMode === "summary") {
+        const rows = getSummaryInventoryRecordsForDownload();
 
-    XLSX.utils.book_append_sheet(
-      wb,
-      ws,
-      inventoryReportMode === "summary" ? "Ship Summary" : "My Report"
-    );
+        if (!rows.length) {
+          const text = "No summary records to export for this ship.";
+          setMakeInventoryMessage(text);
+          window.alert(text);
+          return;
+        }
 
-    XLSX.writeFile(wb, `inventory-${inventoryReportMode}-${ship || "ship"}.xlsx`);
+        await downloadSummaryExcelReport({
+          items: rows,
+          venueName: getInventoryReportLocationName("summary"),
+        });
+
+        setMakeInventoryMessage(
+          "Summary Excel report downloaded. Same product code and name are combined into one total row."
+        );
+
+        return;
+      }
+
+      const rows = getMyInventoryExportItems();
+
+      if (!rows.length) {
+        const text =
+          "No inventory items to export. Upload or refresh the shared master inventory list first.";
+        setMakeInventoryMessage(text);
+        window.alert(text);
+        return;
+      }
+
+      await downloadInventoryExcelReport({
+        items: rows,
+        venueName: getInventoryReportLocationName("my"),
+      });
+
+      setMakeInventoryMessage(
+        "Inventory Excel report downloaded. Code is in column A, item name is in column F, and count is in column S."
+      );
+    } catch (error) {
+      const text = error?.message || "Could not export Excel report.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+    } finally {
+      setReportBusy(false);
+    }
   };
 
   const exportInventoryStatusToExcel = () => {
