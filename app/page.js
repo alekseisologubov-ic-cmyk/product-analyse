@@ -524,6 +524,7 @@ export default function App() {
   const [inventoryError, setInventoryError] = useState("");
   const [showVariance, setShowVariance] = useState(false);
   const [reportBusy, setReportBusy] = useState(false);
+  const [inventoryStationStatuses, setInventoryStationStatuses] = useState([]);
   const [inventoryCountSheetTemplateFile, setInventoryCountSheetTemplateFile] = useState(null);
 const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = useState("");
 
