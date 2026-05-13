@@ -2388,6 +2388,22 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
       setReportBusy(false);
     }
   };
+    const handleInventoryCountSheetTemplateFile = (event) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      setInventoryCountSheetTemplateFile(null);
+      setInventoryCountSheetTemplateName("");
+      return;
+    }
+
+    setInventoryCountSheetTemplateFile(file);
+    setInventoryCountSheetTemplateName(file.name);
+
+    setMakeInventoryMessage(
+      `Count sheet template selected: ${file.name}. Export Excel will keep this file's row positions and write counts into column S.`
+    );
+  };
   const getMyInventoryStatusRows = () => {
     const countedMap = {};
 
