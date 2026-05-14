@@ -3096,6 +3096,134 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     setMakeInventoryMessage(`All ${ship} inventory records were cleared.`);
   };
 
+    const resetInventoryRun = async () => {
+    if (reportBusy) return;
+
+    if (!supabase) {
+      const text = "Supabase is not connected. Cannot reset inventory.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
+
+    const ship = makeInventoryShip || userShip;
+    const departmentKey = getCurrentEquipmentDepartmentKey();
+    const departmentLabel = activeEquipmentDepartmentLabel || equipmentDepartment || "Equipment";
+
+    if (!ship) {
+      const text = "Choose ship before resetting inventory.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
+
+    const rowsToDelete = inventorySummary.filter(
+      (item) =>
+        item.ship === ship &&
+        inventoryRecordMatchesCurrentDepartment(item)
+    );
+
+    const firstConfirm = window.confirm(
+      `Reset inventory for ${ship} / ${departmentLabel}?\n\nThis will delete all counted quantities and all station started/submitted statuses for this inventory run.\n\nThis cannot be undone.`
+    );
+
+    if (!firstConfirm) return;
+
+    const copyConfirm = window.confirm(
+      "Before reset: did you make/download a copy of the final report?\n\nClick OK only if you already made a copy.\nClick Cancel to stop reset."
+    );
+
+    if (!copyConfirm) {
+      setMakeInventoryMessage("Reset cancelled. Please make/download a copy before resetting inventory.");
+      return;
+    }
+
+    setReportBusy(true);
+    setInventoryLoading(true);
+    setMakeInventoryMessage("Resetting inventory...");
+
+    try {
+      const idsToDelete = rowsToDelete
+        .map((item) => item.id)
+        .filter(Boolean);
+
+      const batchSize = 500;
+
+      for (let index = 0; index < idsToDelete.length; index += batchSize) {
+        const batchIds = idsToDelete.slice(index, index + batchSize);
+
+        if (!batchIds.length) continue;
+
+        const { error } = await supabase
+          .from("inventory_counts")
+          .delete()
+          .in("id", batchIds);
+
+        if (error) {
+          throw error;
+        }
+      }
+
+      const { error: statusError } = await supabase
+        .from("inventory_station_status")
+        .delete()
+        .eq("ship", ship)
+        .eq("department", departmentKey);
+
+      if (statusError) {
+        throw statusError;
+      }
+
+      setInventorySummary((prev) =>
+        prev.filter(
+          (item) =>
+            !(
+              item.ship === ship &&
+              inventoryRecordMatchesCurrentDepartment(item)
+            )
+        )
+      );
+
+      setInventoryStationStatuses((prev) =>
+        prev.filter(
+          (item) =>
+            !(
+              item.ship === ship &&
+              item.department === departmentKey
+            )
+        )
+      );
+
+      setCurrentInventoryItem(null);
+      setInventoryQty("");
+      setEditingInventoryId(null);
+      setInventoryReportMode("my");
+      setSummaryStationFilter("ALL");
+      setShowVariance(false);
+
+      scheduleRealtimeRefresh("counts", ship);
+      scheduleRealtimeRefresh("stationStatus", ship);
+
+      setMakeInventoryMessage(
+        `${ship} / ${departmentLabel} inventory was reset. You can start a new inventory now.`
+      );
+
+      logUsageEvent("inventory_run_reset", {
+        module: "make_inventory",
+        ship,
+        equipmentDepartment,
+        departmentKey,
+        recordsDeleted: idsToDelete.length,
+      });
+    } catch (error) {
+      const text = error?.message || "Could not reset inventory.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+    } finally {
+      setInventoryLoading(false);
+      setReportBusy(false);
+    }
+  };
   const openPreparedPrintWindow = (html) => {
     if (printBusyRef.current) return;
 
