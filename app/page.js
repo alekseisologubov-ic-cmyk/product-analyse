@@ -6043,7 +6043,89 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
           </div>
         </header>
       <section style={styles.card}>
-  <h2 style={styles.productTitle}>📡 Live Inventory Station Status</h2>
+  <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 16 }}>
+    <h2 style={styles.productTitle}>📡 Live Inventory Station Status</h2>
+
+    <div style={styles.headerActions}>
+      <button
+        style={{
+          ...styles.viewModeButton,
+          ...(inventoryReportMode === "my" ? styles.viewModeButtonActive : {}),
+        }}
+        onClick={() => setInventoryReportMode("my")}
+      >
+        👤 My Report
+      </button>
+
+      <button
+        style={{
+          ...styles.viewModeButton,
+          ...(inventoryReportMode === "summary" ? styles.viewModeButtonActive : {}),
+        }}
+        onClick={() => setInventoryReportMode("summary")}
+      >
+        🌍 Summary Report
+      </button>
+
+      <button
+        style={styles.backButton}
+        onClick={() => refreshMakeInventoryData(makeInventoryShip || userShip)}
+        disabled={inventoryLoading || reportBusy}
+      >
+        🔄 Refresh
+      </button>
+
+      <button
+        style={styles.deleteButton}
+        onClick={resetInventoryRun}
+        disabled={inventoryLoading || reportBusy}
+      >
+        ♻️ Reset Inventory
+      </button>
+
+      <button style={styles.backButton} onClick={printInventorySummary} disabled={reportBusy}>
+        {reportBusy ? "Preparing..." : "🖨️ Print / PDF"}
+      </button>
+
+      {inventoryReportMode === "my" && (
+        <button
+          style={styles.deleteButton}
+          onClick={clearMyInventory}
+          disabled={inventoryLoading || reportBusy}
+        >
+          🧹 Clear My Report
+        </button>
+      )}
+
+      {inventoryReportMode === "summary" && (
+        <button
+          style={styles.deleteButton}
+          onClick={clearShipInventory}
+          disabled={inventoryLoading || reportBusy}
+        >
+          🧹 Clear Ship Records
+        </button>
+      )}
+
+      {inventoryReportMode === "summary" ? (
+        <button
+          style={styles.primaryButton}
+          onClick={generateFinalInventoryReport}
+          disabled={reportBusy || !allStationsSubmitted}
+        >
+          📥 Generate Final Report
+        </button>
+      ) : (
+        <button
+          style={styles.primaryButton}
+          onClick={exportInventorySummaryToExcel}
+          disabled={reportBusy}
+        >
+          📥 Export Excel
+        </button>
+      )}
+    </div>
+  </div>
 
   <div style={styles.infoBox}>
     <div>
