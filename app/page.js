@@ -374,6 +374,27 @@ const getImageUrl = (url) => {
 
   return value;
 };
+const isUsableImageValue = (value) => {
+  const text = String(value || "").trim();
+
+  if (!text) return false;
+  if (text.startsWith("data:image/")) return true;
+  if (/^https?:\/\//i.test(text)) return true;
+  if (text.includes("drive.google.com")) return true;
+  if (text.includes("sharepoint.com")) return true;
+  if (text.includes("1drv.ms")) return true;
+
+  return false;
+};
+
+const getUsableImageValue = (...values) => {
+  for (const value of values) {
+    const text = String(value || "").trim();
+    if (isUsableImageValue(text)) return text;
+  }
+
+  return "";
+};
 const escapeHtml = (value) =>
   String(value ?? "")
     .replace(/&/g, "&amp;")
