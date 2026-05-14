@@ -6373,9 +6373,9 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
                 <button
                   key={`${item.sheetName}-${item.code}-${index}`}
                   style={{
-                    ...styles.equipmentCard,
-                    ...(alreadyCounted ? styles.countedCard : {}),
-                  }}
+  ...styles.inventoryItemCard,
+  ...(alreadyCounted ? styles.countedCard : {}),
+}}
                   onClick={() => {
   setCurrentInventoryItem({
     ...item,
