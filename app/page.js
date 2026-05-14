@@ -6397,31 +6397,25 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
 }}
                 >
                   {item.image ? (
-                    <div>
-                      <img
-                        src={getImageUrl(item.image)}
-                        alt={item.name}
-                        style={styles.equipmentImage}
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
-                          const link = e.currentTarget.nextElementSibling;
-                          if (link) link.style.display = "block";
-                        }}
-                      />
-                      <a
-                        href={item.image}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={styles.imageLink}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        Open Picture
-                      </a>
-                    </div>
-                  ) : (
-                    <div style={styles.equipmentNoImage}>No image</div>
-                  )}
+  <div style={styles.inventoryImageFrame}>
+    <img
+      src={getImageUrl(item.image)}
+      alt={item.name}
+      style={styles.inventoryCardImage}
+      onError={(e) => {
+        e.currentTarget.style.display = "none";
+        const fallback = e.currentTarget.nextElementSibling;
+        if (fallback) fallback.style.display = "flex";
+      }}
+    />
 
+    <div style={{ ...styles.inventoryNoImage, display: "none" }}>
+      No image
+    </div>
+  </div>
+) : (
+  <div style={styles.inventoryNoImage}>No image</div>
+)}
                   <div style={styles.recipeName}>{item.name}</div>
                   <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
                   <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
