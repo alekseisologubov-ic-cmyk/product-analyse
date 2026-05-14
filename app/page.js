@@ -1798,24 +1798,33 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
   };
 
   const parseEquipmentMasterFile = async (file) => {
-    if (equipmentDepartment === "bar") {
-      return parseBarInventoryFile(file);
-    }
+  if (equipmentDepartment === "bar") {
+    return parseBarInventoryFile(file);
+  }
 
-    const arrayBuffer = await file.arrayBuffer();
-    const workbook = XLSX.read(arrayBuffer, { type: "array" });
+  const arrayBuffer = await file.arrayBuffer();
+  const workbook = XLSX.read(arrayBuffer, { type: "array" });
 
-    const items = parseMusterWorkbook(workbook).map((item) => ({
-      ...item,
-      equipmentDepartment: equipmentDepartment || "culinary",
-    }));
+  const imageMapsBySheet = {};
 
-    return {
-      workbook,
-      items,
-      sourceSheetName: workbook.SheetNames.join(", "),
-    };
+  for (const sheetName of workbook.SheetNames) {
+    imageMapsBySheet[sheetName] = await extractEmbeddedImagesByCell(
+      arrayBuffer,
+      sheetName
+    );
+  }
+
+  const items = parseMusterWorkbook(workbook, imageMapsBySheet).map((item) => ({
+    ...item,
+    equipmentDepartment: equipmentDepartment || "culinary",
+  }));
+
+  return {
+    workbook,
+    items,
+    sourceSheetName: workbook.SheetNames.join(", "),
   };
+};
 
   const parseWarehouseItems = () => {
     const masterItems = makeInventoryItems.length ? makeInventoryItems : musterItems;
