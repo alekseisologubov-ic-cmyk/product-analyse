@@ -1435,73 +1435,118 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     return map;
   };
 
-  const parseMusterWorkbook = (workbook) => {
-    const items = [];
+  const parseMusterWorkbook = (workbook, imageMapsBySheet = {}) => {
+  const items = [];
 
-    const findHeaderIndexes = (rows) => {
-      let headerRowIndex = 0;
-      let headerRow = rows[0] || [];
+  const findHeaderIndexes = (rows) => {
+    let headerRowIndex = 0;
+    let headerRow = rows[0] || [];
 
-      rows.slice(0, 12).some((row, index) => {
-        const cleanRow = row.map((cell) => cleanText(cell));
-        const hasCode = cleanRow.some((cell) => cell.includes("CODE"));
-        const hasName = cleanRow.some(
-          (cell) =>
-            cell.includes("FINAL DESCRIPTION") ||
-            cell.includes("DESCRIPTION") ||
-            cell.includes("ITEM NAME") ||
-            cell === "NAME"
-        );
+    rows.slice(0, 12).some((row, index) => {
+      const cleanRow = row.map((cell) => cleanText(cell));
+      const hasCode = cleanRow.some((cell) => cell.includes("CODE"));
+      const hasName = cleanRow.some(
+        (cell) =>
+          cell.includes("FINAL DESCRIPTION") ||
+          cell.includes("DESCRIPTION") ||
+          cell.includes("ITEM NAME") ||
+          cell === "NAME"
+      );
 
-        if (hasCode && hasName) {
-          headerRowIndex = index;
-          headerRow = row;
-          return true;
-        }
+      if (hasCode && hasName) {
+        headerRowIndex = index;
+        headerRow = row;
+        return true;
+      }
 
-        return false;
-      });
-
-      const cleanHeaders = headerRow.map((cell) => cleanText(cell));
-      const findIndex = (patterns, fallback) => {
-        const found = cleanHeaders.findIndex((header) =>
-          patterns.some((pattern) => header.includes(pattern))
-        );
-        return found >= 0 ? found : fallback;
-      };
-
-      return {
-        headerRowIndex,
-        categoryIndex: findIndex(["SUB CATEG", "SUB CATEGORY", "CATEGORY"], 2),
-        codeIndex: findIndex(["CODE", "APOLLO", "VV"], 3),
-        nameIndex: findIndex(["FINAL DESCRIPTION", "DESCRIPTION", "ITEM NAME", "NAME"], 4),
-        imageIndex: findIndex(["PHOTO", "PICTURE", "IMAGE", "LINK"], 7),
-      };
-    };
-
-    workbook.SheetNames.forEach((sheetName) => {
-      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: "" });
-      if (!rows.length) return;
-
-      const indexes = findHeaderIndexes(rows);
-
-      rows.slice(indexes.headerRowIndex + 1).forEach((row, dataIndex) => {
-        const sourceRow = indexes.headerRowIndex + 2 + dataIndex;
-        const category = String(row[indexes.categoryIndex] || "").trim();
-        const code = String(row[indexes.codeIndex] || "").trim();
-        const name = String(row[indexes.nameIndex] || "").replace(/\s+/g, " ").trim();
-        const image = String(row[indexes.imageIndex] || "").trim();
-
-        if (!name) return;
-        if (cleanText(name).includes("FINAL DESCRIPTION")) return;
-        if (cleanText(code) === "CODE" || cleanText(code).includes("APOLLO")) return;
-
-        items.push({ sheetName, category, code, name, image, sourceRow });
-      });
+      return false;
     });
 
-    return items;
+    const cleanHeaders = headerRow.map((cell) => cleanText(cell));
+
+    const findIndex = (patterns, fallback) => {
+      const found = cleanHeaders.findIndex((header) =>
+        patterns.some((pattern) => header.includes(pattern))
+      );
+
+      return found >= 0 ? found : fallback;
+    };
+
+    return {
+      headerRowIndex,
+      categoryIndex: findIndex(["SUB CATEG", "SUB CATEGORY", "CATEGORY"], 2),
+      codeIndex: findIndex(["CODE", "APOLLO", "VV"], 3),
+      nameIndex: findIndex(["FINAL DESCRIPTION", "DESCRIPTION", "ITEM NAME", "NAME"], 4),
+
+      // Existing photo column is usually H.
+      // We now prefer column I first when it has a usable image.
+      imageIndex: findIndex(["PHOTO", "PICTURE", "IMAGE", "LINK"], 7),
+    };
   };
+
+  workbook.SheetNames.forEach((sheetName) => {
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+      header: 1,
+      defval: "",
+    });
+
+    if (!rows.length) return;
+
+    const indexes = findHeaderIndexes(rows);
+    const imageMap = imageMapsBySheet[sheetName] || {};
+
+    rows.slice(indexes.headerRowIndex + 1).forEach((row, dataIndex) => {
+      const sourceRow = indexes.headerRowIndex + 2 + dataIndex;
+
+      const category = String(row[indexes.categoryIndex] || "").trim();
+      const code = String(row[indexes.codeIndex] || "").trim();
+      const name = String(row[indexes.nameIndex] || "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!name) return;
+      if (cleanText(name).includes("FINAL DESCRIPTION")) return;
+      if (cleanText(code) === "CODE" || cleanText(code).includes("APOLLO")) return;
+
+      // Column I = index 8
+      const imageFromColumnI = String(row[8] || "").trim();
+
+      // Existing detected image/photo column, usually H
+      const imageFromDetectedPhotoColumn = String(row[indexes.imageIndex] || "").trim();
+
+      // Embedded image from column I
+      const embeddedImageFromColumnI = imageMap[`I${sourceRow}`] || "";
+
+      const detectedImageColumnLetter =
+        typeof indexes.imageIndex === "number"
+          ? columnNumberToLetters(indexes.imageIndex)
+          : "";
+
+      const embeddedImageFromDetectedPhotoColumn =
+        detectedImageColumnLetter
+          ? imageMap[`${detectedImageColumnLetter}${sourceRow}`] || ""
+          : "";
+
+      const image = getUsableImageValue(
+        embeddedImageFromColumnI,
+        imageFromColumnI,
+        embeddedImageFromDetectedPhotoColumn,
+        imageFromDetectedPhotoColumn
+      );
+
+      items.push({
+        sheetName,
+        category,
+        code,
+        name,
+        image,
+        sourceRow,
+      });
+    });
+  });
+
+  return items;
+};
 
   const normalizeZipPath = (path) => {
     const parts = [];
