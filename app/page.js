@@ -356,13 +356,24 @@ const getImageUrl = (url) => {
   const value = String(url || "").trim();
   if (!value) return "";
 
+  if (value.startsWith("data:image/")) {
+    return value;
+  }
+
+  const googleDriveFileMatch = value.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+  const googleDriveIdMatch = value.match(/[?&]id=([^&]+)/);
+  const googleDriveId = googleDriveFileMatch?.[1] || googleDriveIdMatch?.[1];
+
+  if (googleDriveId) {
+    return `https://drive.google.com/thumbnail?id=${googleDriveId}&sz=w800`;
+  }
+
   if (value.includes("sharepoint.com") || value.includes("1drv.ms")) {
     return value.includes("?") ? `${value}&download=1` : `${value}?download=1`;
   }
 
   return value;
 };
-
 const escapeHtml = (value) =>
   String(value ?? "")
     .replace(/&/g, "&amp;")
