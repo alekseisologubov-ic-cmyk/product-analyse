@@ -6431,6 +6431,14 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
               >
                 🔄 Refresh
               </button>
+                  
+                  <button
+  style={styles.deleteButton}
+  onClick={resetInventoryRun}
+  disabled={inventoryLoading || reportBusy}
+>
+  ♻️ Reset Inventory
+</button>
 
               <button style={styles.backButton} onClick={printInventorySummary} disabled={reportBusy}>
   {reportBusy ? "Preparing..." : "🖨️ Print / PDF"}
