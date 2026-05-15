@@ -1029,6 +1029,16 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
         >
           🛒 Next Order ({nextOrderRows.length})
         </button>
+        
+        <button
+  style={{
+    ...styles.viewModeButton,
+    ...(nextOrderView === "orderedVsSuggested" ? styles.viewModeButtonActive : {}),
+  }}
+  onClick={() => setNextOrderView("orderedVsSuggested")}
+>
+  📊 Ordered vs Suggested ({orderedVsSuggestedRows.length})
+</button>
 
         <button
           style={{ ...styles.viewModeButton, ...(nextOrderView === "fml" ? styles.viewModeButtonActive : {}) }}
