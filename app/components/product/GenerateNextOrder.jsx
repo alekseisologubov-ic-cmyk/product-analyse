@@ -1562,7 +1562,7 @@ const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRu
                 <div style={localStyles.reviewBadge}>{row.reason}</div>
               </div>
             ))}
-          </div>
+                    </div>
         </section>
       )}
 
