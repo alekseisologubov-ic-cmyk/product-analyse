@@ -1529,11 +1529,11 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
           : "";
 
       const image = getUsableImageValue(
-        embeddedImageFromColumnI,
-        imageFromColumnI,
-        embeddedImageFromDetectedPhotoColumn,
-        imageFromDetectedPhotoColumn
-      );
+  imageFromColumnI,
+  imageFromDetectedPhotoColumn,
+  embeddedImageFromColumnI,
+  embeddedImageFromDetectedPhotoColumn
+);
 
       items.push({
         sheetName,
