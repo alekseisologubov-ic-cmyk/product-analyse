@@ -1013,6 +1013,15 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
   const countRunningLowBeforeLoading = nextOrderRows.filter((row) => Number(row.availableAtArrival || 0) < 0).length;
   const countNoConsumption = nextOrderRows.filter((row) => row.pastConsumption === 0).length;
   const countNoStock = nextOrderRows.filter((row) => row.stock === 0).length;
+  const visibleNextOrderRows = filteredNextOrderRows.slice(0, reportDisplayLimit);
+const visibleOrderedVsSuggestedRows = orderedVsSuggestedRows.slice(0, reportDisplayLimit);
+const visibleFmlNotUsedRows = filteredFmlNotUsedRows.slice(0, reportDisplayLimit);
+const visibleFmlRunningLowRows = filteredFmlRunningLowRows.slice(0, reportDisplayLimit);
+
+const hasMoreNextOrderRows = filteredNextOrderRows.length > visibleNextOrderRows.length;
+const hasMoreOrderedVsSuggestedRows = orderedVsSuggestedRows.length > visibleOrderedVsSuggestedRows.length;
+const hasMoreFmlNotUsedRows = filteredFmlNotUsedRows.length > visibleFmlNotUsedRows.length;
+const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRunningLowRows.length;
 
   const orderSheetShip = nextOrderMeta.shipCode || userShip || "";
 
