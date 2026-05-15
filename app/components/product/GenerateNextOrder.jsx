@@ -1342,7 +1342,7 @@ const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRu
           )}
 
           <div style={localStyles.compactGrid}>
-            {filteredNextOrderRows.map((row) => {
+            {visibleNextOrderRows.map((row) => {
               const negativeArrival = Number(row.availableAtArrival || 0) < 0;
               const showPar = Number(nextOrderMeta.voyageDays || 0) === 14 && Number(row.parLevel || 0) > 0;
 
