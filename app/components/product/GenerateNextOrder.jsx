@@ -1385,6 +1385,77 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
           </div>
         </section>
       )}
+            {nextOrderView === "orderedVsSuggested" && (
+        <section style={styles.card}>
+          <h2 style={styles.productTitle}>📊 Ordered vs Suggested Report</h2>
+
+          {orderedVsSuggestedRows.length === 0 && (
+            <p style={styles.emptyText}>
+              Upload the latest order file to compare ordered quantity from column Y against suggested order.
+            </p>
+          )}
+
+          <div style={localStyles.compactGrid}>
+            {orderedVsSuggestedRows.map((row, index) => {
+              const cardStyle = {
+                ...localStyles.orderedVsSuggestedCard,
+                ...(row.orderComparisonStatus === "red"
+                  ? localStyles.orderedVsSuggestedRed
+                  : row.orderComparisonStatus === "blue"
+                    ? localStyles.orderedVsSuggestedBlue
+                    : localStyles.orderedVsSuggestedGreen),
+              };
+
+              const badgeStyle =
+                row.orderComparisonStatus === "red"
+                  ? localStyles.comparisonBadgeRed
+                  : row.orderComparisonStatus === "blue"
+                    ? localStyles.comparisonBadgeBlue
+                    : localStyles.comparisonBadgeGreen;
+
+              return (
+                <div key={row.excelRow + "-" + row.product + "-ordered"} style={cardStyle}>
+                  <div style={localStyles.cardTopLine}>
+                    <span>#{index + 1}</span>
+                    <span>Row {row.excelRow}</span>
+                  </div>
+
+                  <div style={localStyles.productName}>{row.product}</div>
+                  <div style={styles.recipeMeta}>Code: {row.code || "N/A"}</div>
+                  <div style={styles.recipeMeta}>U/M: {row.unit || "N/A"}</div>
+
+                  <div style={localStyles.metricGrid}>
+                    <div style={localStyles.metricBox}>
+                      <span>Ordered Y</span>
+                      <strong>{formatQty(row.orderedQty)}</strong>
+                    </div>
+
+                    <div style={localStyles.metricBox}>
+                      <span>Suggested</span>
+                      <strong>{formatQty(row.suggestedQty)}</strong>
+                    </div>
+
+                    <div style={localStyles.metricBox}>
+                      <span>Diff</span>
+                      <strong>{formatQty(row.orderDifference)}</strong>
+                    </div>
+                  </div>
+
+                  <div style={localStyles.calcStrip}>
+                    <div>
+                      Difference %: <strong>{formatQty(row.orderDifferencePercent)}%</strong>
+                    </div>
+                  </div>
+
+                  <div style={badgeStyle}>
+                    {row.orderComparisonLabel}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {nextOrderView === "fml" && (
         <section style={styles.card}>
