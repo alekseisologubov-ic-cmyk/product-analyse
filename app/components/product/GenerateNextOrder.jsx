@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 
 const SHIPS = ["BRL", "RL", "SC", "VL"];
+const REPORT_RENDER_BATCH = 120;
 
 const cleanText = (value) =>
   String(value || "")
