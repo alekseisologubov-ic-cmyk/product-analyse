@@ -348,15 +348,39 @@ const parseOrderFile = async (file) => {
     let parCapLimit = 0;
 
     if (Number(voyageDays) === 14 && parLevel > 0) {
-      parCapLimit = parLevel * 1.1;
-      if (suggestedOrder > parCapLimit) {
-        suggestedOrder = parCapLimit;
-        parCapApplied = true;
-      }
-    }
+  parCapLimit = parLevel * 1.1;
+  if (suggestedOrder > parCapLimit) {
+    suggestedOrder = parCapLimit;
+    parCapApplied = true;
+  }
+}
 
-    let alertType = "normal";
-    let alertLabel = "Review";
+const suggestedQty = Number(suggestedOrder || 0);
+const orderedQty = Number(orderedByShip || 0);
+const orderDifference = orderedQty - suggestedQty;
+
+let orderDifferencePercent = 0;
+let orderComparisonStatus = "green";
+let orderComparisonLabel = "Within +/- 10%";
+
+if (suggestedQty > 0) {
+  orderDifferencePercent = (orderDifference / suggestedQty) * 100;
+
+  if (orderDifferencePercent > 10) {
+    orderComparisonStatus = "red";
+    orderComparisonLabel = "Ordered over suggested by more than 10%";
+  } else if (orderDifferencePercent < -10) {
+    orderComparisonStatus = "blue";
+    orderComparisonLabel = "Ordered under suggested by more than 10%";
+  }
+} else if (orderedQty > 0) {
+  orderDifferencePercent = 100;
+  orderComparisonStatus = "red";
+  orderComparisonLabel = "Ordered but suggested quantity is 0";
+}
+
+let alertType = "normal";
+let alertLabel = "Review";
 
     if (stock === 0 && pastConsumption === 0) {
       alertType = "no-stock-no-consumption";
