@@ -1431,21 +1431,38 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
                   <div style={styles.recipeMeta}>U/M: {row.unit || "N/A"}</div>
 
                   <div style={localStyles.metricGrid}>
-                    <div style={localStyles.metricBox}>
-                      <span>Ordered Y</span>
-                      <strong>{formatQty(row.orderedQty)}</strong>
-                    </div>
+  <div style={localStyles.metricBox}>
+    <span>On Hand</span>
+    <strong>{formatQty(row.stock)}</strong>
+  </div>
 
-                    <div style={localStyles.metricBox}>
-                      <span>Suggested</span>
-                      <strong>{formatQty(row.suggestedQty)}</strong>
-                    </div>
+  <div style={localStyles.metricBox}>
+    <span>Upcoming</span>
+    <strong>{formatQty(row.futureOrders)}</strong>
+  </div>
 
-                    <div style={localStyles.metricBox}>
-                      <span>Diff</span>
-                      <strong>{formatQty(row.orderDifference)}</strong>
-                    </div>
-                  </div>
+  <div style={localStyles.metricBox}>
+    <span>Daily Use</span>
+    <strong>{formatQty(row.averagePerDay)}</strong>
+  </div>
+</div>
+
+<div style={localStyles.metricGrid}>
+  <div style={localStyles.metricBox}>
+    <span>Ordered Y</span>
+    <strong>{formatQty(row.orderedQty)}</strong>
+  </div>
+
+  <div style={localStyles.metricBox}>
+    <span>Suggested</span>
+    <strong>{formatQty(row.suggestedQty)}</strong>
+  </div>
+
+  <div style={localStyles.metricBox}>
+    <span>Diff</span>
+    <strong>{formatQty(row.orderDifference)}</strong>
+  </div>
+</div>
 
                   <div style={localStyles.calcStrip}>
                     <div>
