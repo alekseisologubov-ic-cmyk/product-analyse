@@ -1419,7 +1419,7 @@ const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRu
           )}
 
           <div style={localStyles.compactGrid}>
-            {orderedVsSuggestedRows.map((row, index) => {
+            {visibleOrderedVsSuggestedRows.map((row, index) => {
               const cardStyle = {
                 ...localStyles.orderedVsSuggestedCard,
                 ...(row.orderComparisonStatus === "red"
