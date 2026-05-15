@@ -6399,9 +6399,11 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
                   {item.image ? (
   <div style={styles.inventoryImageFrame}>
     <img
-      src={getImageUrl(item.image)}
-      alt={item.name}
-      style={styles.inventoryCardImage}
+  src={getImageUrl(item.image, "w360")}
+  alt={item.name}
+  loading="lazy"
+  decoding="async"
+  style={styles.inventoryCardImage}
       onError={(e) => {
         e.currentTarget.style.display = "none";
         const fallback = e.currentTarget.nextElementSibling;
