@@ -365,7 +365,7 @@ const getImageUrl = (url, size = "w800") => {
   const googleDriveId = googleDriveFileMatch?.[1] || googleDriveIdMatch?.[1];
 
   if (googleDriveId) {
-    return `https://drive.google.com/thumbnail?id=${googleDriveId}&sz=w800`;
+    return `https://drive.google.com/thumbnail?id=${googleDriveId}&sz=${size}`;
   }
 
   if (value.includes("sharepoint.com") || value.includes("1drv.ms")) {
