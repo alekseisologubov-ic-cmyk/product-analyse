@@ -1159,6 +1159,65 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
               </div>
             </>
           )}
+                    )}
+
+          {nextOrderView === "orderedVsSuggested" && (
+            <>
+              <input
+                placeholder="Search ordered vs suggested item, code, U/M, or status..."
+                value={nextOrderSearch}
+                onChange={(event) => setNextOrderSearch(event.target.value)}
+                style={styles.searchInput}
+              />
+
+              <div style={styles.infoBox}>
+                <div>📘 Ordered by ship source: <strong>Column Y</strong></div>
+                <div>🔴 Red: <strong>ordered more than suggested by over 10%</strong></div>
+                <div>🔵 Blue: <strong>ordered less than suggested by over 10%</strong></div>
+                <div>🟢 Green: <strong>within -10% to +10%</strong></div>
+              </div>
+
+              <div style={styles.headerActions}>
+                <button
+                  style={styles.backButton}
+                  onClick={() =>
+                    printRows("Ordered vs Suggested", orderedVsSuggestedExportRows, [
+                      { key: "Number", label: "#" },
+                      { key: "ExcelRow", label: "Row" },
+                      { key: "Code", label: "Code" },
+                      { key: "Product", label: "Product" },
+                      { key: "UM", label: "U/M" },
+                      { key: "OrderedByShipColumnY", label: "Ordered Y" },
+                      { key: "SuggestedOrder", label: "Suggested" },
+                      { key: "Difference", label: "Difference" },
+                      { key: "DifferencePercent", label: "Diff %" },
+                      { key: "Status", label: "Status" },
+                    ])
+                  }
+                >
+                  🖨️ Print
+                </button>
+
+                <button
+                  style={styles.primaryButton}
+                  onClick={() =>
+                    exportRowsToExcel(
+                      orderedVsSuggestedExportRows,
+                      "Ordered vs Suggested",
+                      "ordered-vs-suggested.xlsx"
+                    )
+                  }
+                >
+                  📥 Export Excel
+                </button>
+              </div>
+            </>
+          )}
+
+          {nextOrderView === "fml" && (
+            <>
+              <input
+                placeholder="Search FML item, code, venue, or template location..."
 
           {nextOrderView === "fml" && (
             <>
