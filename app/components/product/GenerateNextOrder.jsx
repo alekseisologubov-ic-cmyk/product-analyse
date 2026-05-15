@@ -1177,11 +1177,14 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
               />
 
               <div style={styles.infoBox}>
-                <div>📘 Ordered by ship source: <strong>Column Y</strong></div>
-                <div>🔴 Red: <strong>ordered more than suggested by over 10%</strong></div>
-                <div>🔵 Blue: <strong>ordered less than suggested by over 10%</strong></div>
-                <div>🟢 Green: <strong>within -10% to +10%</strong></div>
-              </div>
+  <div>📘 Ordered by ship source: <strong>Column Y</strong></div>
+  <div>📦 Current quantity on hand: <strong>Stock column D</strong></div>
+  <div>🚚 Upcoming order: <strong>Future orders F:N</strong></div>
+  <div>📊 Daily consumption: <strong>average daily usage from past consumption</strong></div>
+  <div>🔴 Red: <strong>ordered more than suggested by over 10%</strong></div>
+  <div>🔵 Blue: <strong>ordered less than suggested by over 10%</strong></div>
+  <div>🟢 Green: <strong>within -10% to +10%</strong></div>
+</div>
 
               <div style={styles.headerActions}>
                 <button
