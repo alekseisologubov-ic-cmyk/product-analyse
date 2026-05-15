@@ -2164,7 +2164,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
         item_name: normalizedItem.name || "",
         category: normalizedItem.category || "",
         sheet_name: normalizedItem.sheetName || "",
-        image: normalizedItem.image || "",
+        image: cleanSharedMasterImage(normalizedItem.image),
         source_row: Number(normalizedItem.sourceRow || index + 1),
         sort_order: index,
         updated_at: new Date().toISOString(),
