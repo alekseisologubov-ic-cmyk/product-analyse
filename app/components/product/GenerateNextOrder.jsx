@@ -1502,7 +1502,16 @@ const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRu
                 </div>
               );
             })}
-          </div>
+                    </div>
+
+          {hasMoreOrderedVsSuggestedRows && (
+            <button
+              style={styles.backButton}
+              onClick={() => setReportDisplayLimit((value) => value + REPORT_RENDER_BATCH)}
+            >
+              Show more ({visibleOrderedVsSuggestedRows.length} / {orderedVsSuggestedRows.length})
+            </button>
+          )}
         </section>
       )}
 
