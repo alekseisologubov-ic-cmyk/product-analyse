@@ -640,6 +640,9 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
 
     loadDefaultTemplate();
   }, []);
+  useEffect(() => {
+  setReportDisplayLimit(REPORT_RENDER_BATCH);
+}, [nextOrderView, nextOrderSearch, nextOrderFilter, fmlSearch, fmlLowSearch]);
 
   const uploadErpTemplate = (event) => {
     const file = event.target.files?.[0];
