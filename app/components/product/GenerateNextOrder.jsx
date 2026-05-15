@@ -850,6 +850,80 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
 
     return rows;
   }, [nextOrderRows, nextOrderSearch, nextOrderFilter]);
+  const orderedVsSuggestedRows = useMemo(() => {
+  const query = nextOrderSearch.toLowerCase().trim();
+
+  return nextOrderRows
+    .map((row) => {
+      const orderedQty = Number(row.orderedByShip || 0);
+      const suggestedQty = Number(row.suggestedOrder || 0);
+      const orderDifference = orderedQty - suggestedQty;
+
+      let orderDifferencePercent = 0;
+      let orderComparisonStatus = "green";
+      let orderComparisonLabel = "Within +/- 10%";
+
+      if (suggestedQty > 0) {
+        orderDifferencePercent = (orderDifference / suggestedQty) * 100;
+
+        if (orderDifferencePercent > 10) {
+          orderComparisonStatus = "red";
+          orderComparisonLabel = "Ordered over suggested by more than 10%";
+        } else if (orderDifferencePercent < -10) {
+          orderComparisonStatus = "blue";
+          orderComparisonLabel = "Ordered under suggested by more than 10%";
+        }
+      } else if (orderedQty > 0) {
+        orderDifferencePercent = 100;
+        orderComparisonStatus = "red";
+        orderComparisonLabel = "Ordered but suggested quantity is 0";
+      }
+
+      return {
+        ...row,
+        orderedQty,
+        suggestedQty,
+        orderDifference,
+        orderDifferencePercent,
+        orderComparisonStatus,
+        orderComparisonLabel,
+      };
+    })
+    .filter((row) => Number(row.orderedQty || 0) > 0 || Number(row.suggestedQty || 0) > 0)
+    .filter((row) => {
+      if (!query) return true;
+
+      return [
+        row.product,
+        row.code,
+        row.unit,
+        row.orderComparisonLabel,
+        String(row.excelRow),
+        String(row.excelOrder),
+        String(row.orderedQty),
+        String(row.suggestedQty),
+        String(row.orderDifference),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+    })
+    .sort((a, b) => {
+      const statusRank = {
+        red: 0,
+        blue: 1,
+        green: 2,
+      };
+
+      const statusDiff =
+        (statusRank[a.orderComparisonStatus] ?? 9) -
+        (statusRank[b.orderComparisonStatus] ?? 9);
+
+      if (statusDiff !== 0) return statusDiff;
+
+      return Math.abs(Number(b.orderDifferencePercent || 0)) - Math.abs(Number(a.orderDifferencePercent || 0));
+    });
+}, [nextOrderRows, nextOrderSearch]);
 
   const filteredFmlNotUsedRows = useMemo(() => {
     const query = fmlSearch.toLowerCase().trim();
