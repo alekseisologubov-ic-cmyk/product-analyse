@@ -1613,7 +1613,16 @@ const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRu
                 <div style={localStyles.reviewBadge}>{row.reason}</div>
               </div>
             ))}
-          </div>
+                    </div>
+
+          {hasMoreFmlRunningLowRows && (
+            <button
+              style={styles.backButton}
+              onClick={() => setReportDisplayLimit((value) => value + REPORT_RENDER_BATCH)}
+            >
+              Show more ({visibleFmlRunningLowRows.length} / {filteredFmlRunningLowRows.length})
+            </button>
+          )}
         </section>
       )}
     </main>
