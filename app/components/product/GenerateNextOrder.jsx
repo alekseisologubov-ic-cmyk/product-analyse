@@ -949,6 +949,18 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
     );
   }, [fmlRunningLowRows, fmlLowSearch]);
 
+  const orderedVsSuggestedExportRows = orderedVsSuggestedRows.map((row, index) => ({
+  Number: index + 1,
+  ExcelRow: row.excelRow,
+  Code: row.code,
+  Product: row.product,
+  UM: row.unit,
+  OrderedByShipColumnY: row.orderedQty,
+  SuggestedOrder: row.suggestedQty,
+  Difference: row.orderDifference,
+  DifferencePercent: row.orderDifferencePercent,
+  Status: row.orderComparisonLabel,
+}));
   const nextOrderExportRows = filteredNextOrderRows.map((row) => ({
     ExcelOrder: row.excelOrder,
     ExcelRow: row.excelRow,
