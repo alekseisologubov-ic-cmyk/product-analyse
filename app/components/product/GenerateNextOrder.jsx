@@ -1563,7 +1563,7 @@ const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRu
           )}
 
           <div style={localStyles.compactGrid}>
-            {filteredFmlRunningLowRows.map((row, index) => (
+            {visibleFmlRunningLowRows.map((row, index) => (
               <div key={row.id} style={localStyles.fmlCard}>
                 <div style={localStyles.cardTopLine}>
                   <span>#{index + 1}</span>
