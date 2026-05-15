@@ -1189,15 +1189,18 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
                   onClick={() =>
                     printRows("Ordered vs Suggested", orderedVsSuggestedExportRows, [
                       { key: "Number", label: "#" },
-                      { key: "ExcelRow", label: "Row" },
-                      { key: "Code", label: "Code" },
-                      { key: "Product", label: "Product" },
-                      { key: "UM", label: "U/M" },
-                      { key: "OrderedByShipColumnY", label: "Ordered Y" },
-                      { key: "SuggestedOrder", label: "Suggested" },
-                      { key: "Difference", label: "Difference" },
-                      { key: "DifferencePercent", label: "Diff %" },
-                      { key: "Status", label: "Status" },
+{ key: "ExcelRow", label: "Row" },
+{ key: "Code", label: "Code" },
+{ key: "Product", label: "Product" },
+{ key: "UM", label: "U/M" },
+{ key: "CurrentQuantityOnHand", label: "On Hand" },
+{ key: "UpcomingOrder", label: "Upcoming Order" },
+{ key: "DailyConsumption", label: "Daily Consumption" },
+{ key: "OrderedByShipColumnY", label: "Ordered Y" },
+{ key: "SuggestedOrder", label: "Suggested" },
+{ key: "Difference", label: "Difference" },
+{ key: "DifferencePercent", label: "Diff %" },
+{ key: "Status", label: "Status" },
                     ])
                   }
                 >
