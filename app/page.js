@@ -2135,19 +2135,16 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     setMakeInventoryMessage("Sharing " + departmentLabel + " master inventory list for all users...");
     setMusterMessage("Sharing " + departmentLabel + " master inventory list for all users...");
 
-    const deleteResult = await supabase
-      .from("inventory_master_items")
-      .delete()
-      .eq("ship", masterScope);
-
-    if (deleteResult.error) {
-      const text = `Could not replace shared master inventory: ${deleteResult.error.message}`;
-      setMasterInventoryLoading(false);
-      setMakeInventoryMessage(text);
-      setMusterMessage(text);
-      window.alert(text);
-      return false;
-    }
+    try {
+  await deleteMasterInventoryRowsInBatches(masterScope);
+} catch (error) {
+  const text = `Could not replace shared master inventory: ${error.message}`;
+  setMasterInventoryLoading(false);
+  setMakeInventoryMessage(text);
+  setMusterMessage(text);
+  window.alert(text);
+  return false;
+}
 
     const rowMap = new Map();
 
