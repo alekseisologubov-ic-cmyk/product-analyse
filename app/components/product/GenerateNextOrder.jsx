@@ -1084,7 +1084,7 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
           </div>
         </div>
 
-        <div style={styles.card}>
+                <div style={styles.card}>
           <h2 style={styles.cardTitle}>⚙️ Report Actions</h2>
 
           {nextOrderView === "order" && (
@@ -1103,24 +1103,28 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
                 >
                   All ({nextOrderRows.length})
                 </button>
+
                 <button
                   style={{ ...styles.viewModeButton, ...(nextOrderFilter === "needs" ? styles.viewModeButtonActive : {}) }}
                   onClick={() => setNextOrderFilter("needs")}
                 >
                   Needs to Order ({countNeedsOrder})
                 </button>
+
                 <button
                   style={{ ...styles.viewModeButton, ...(nextOrderFilter === "runningLow" ? styles.viewModeButtonActive : {}) }}
                   onClick={() => setNextOrderFilter("runningLow")}
                 >
                   ⚠️ Running Low Before Loading ({countRunningLowBeforeLoading})
                 </button>
+
                 <button
                   style={{ ...styles.viewModeButton, ...(nextOrderFilter === "noConsumption" ? styles.viewModeButtonActive : {}) }}
                   onClick={() => setNextOrderFilter("noConsumption")}
                 >
                   No Consumption ({countNoConsumption})
                 </button>
+
                 <button
                   style={{ ...styles.viewModeButton, ...(nextOrderFilter === "noStock" ? styles.viewModeButtonActive : {}) }}
                   onClick={() => setNextOrderFilter("noStock")}
@@ -1159,7 +1163,6 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
               </div>
             </>
           )}
-                    )}
 
           {nextOrderView === "orderedVsSuggested" && (
             <>
@@ -1213,11 +1216,6 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
               </div>
             </>
           )}
-
-          {nextOrderView === "fml" && (
-            <>
-              <input
-                placeholder="Search FML item, code, venue, or template location..."
 
           {nextOrderView === "fml" && (
             <>
