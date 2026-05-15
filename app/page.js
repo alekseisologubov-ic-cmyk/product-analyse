@@ -2172,7 +2172,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     });
 
     const rows = [...rowMap.values()];
-    const batchSize = 500;
+    const batchSize = 75;
 
     for (let i = 0; i < rows.length; i += batchSize) {
       const insertResult = await supabase
