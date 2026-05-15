@@ -1702,10 +1702,68 @@ const localStyles = {
     fontSize: 9.5,
     lineHeight: 1.1,
   },
-  templateNote: {
+    templateNote: {
     color: "#0057b8",
     fontWeight: "bold",
     fontSize: 9.5,
+    lineHeight: 1.1,
+  },
+
+  orderedVsSuggestedCard: {
+    border: "1px solid #ddd",
+    borderRadius: 14,
+    padding: 8,
+    background: "#fff",
+    display: "grid",
+    gap: 6,
+    fontSize: 11,
+  },
+
+  orderedVsSuggestedRed: {
+    border: "2px solid #b00020",
+    background: "#fff0f0",
+  },
+
+  orderedVsSuggestedBlue: {
+    border: "2px solid #0057b8",
+    background: "#eef5ff",
+  },
+
+  orderedVsSuggestedGreen: {
+    border: "2px solid #2e7d32",
+    background: "#e8f5e9",
+  },
+
+  comparisonBadgeRed: {
+    padding: 6,
+    borderRadius: 8,
+    background: "#b00020",
+    color: "#fff",
+    fontWeight: "bold",
+    textAlign: "center",
+    fontSize: 10,
+    lineHeight: 1.1,
+  },
+
+  comparisonBadgeBlue: {
+    padding: 6,
+    borderRadius: 8,
+    background: "#0057b8",
+    color: "#fff",
+    fontWeight: "bold",
+    textAlign: "center",
+    fontSize: 10,
+    lineHeight: 1.1,
+  },
+
+  comparisonBadgeGreen: {
+    padding: 6,
+    borderRadius: 8,
+    background: "#2e7d32",
+    color: "#fff",
+    fontWeight: "bold",
+    textAlign: "center",
+    fontSize: 10,
     lineHeight: 1.1,
   },
 };
