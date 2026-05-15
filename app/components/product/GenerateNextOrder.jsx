@@ -617,6 +617,7 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
   const [fmlNotUsedPrepared, setFmlNotUsedPrepared] = useState(false);
   const [fmlRunningLowPrepared, setFmlRunningLowPrepared] = useState(false);
   const [nextOrderMessage, setNextOrderMessage] = useState("");
+  const [reportDisplayLimit, setReportDisplayLimit] = useState(REPORT_RENDER_BATCH);
 
   useEffect(() => {
     const loadDefaultTemplate = async () => {
