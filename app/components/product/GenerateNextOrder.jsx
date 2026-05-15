@@ -329,6 +329,7 @@ const parseOrderFile = async (file) => {
     const futureOrders = sumRowRange(row, 5, 13);
     const parLevel = toNumber(row[16]);
     const pastConsumption = sumRowRange(row, 34, 39);
+    const orderedByShip = toNumber(row[24]); // Y - ordered by ship
 
     let historicalSailorDays = 0;
     for (let c = 34; c <= 39; c += 1) {
