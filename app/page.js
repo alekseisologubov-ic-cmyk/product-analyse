@@ -2064,6 +2064,55 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     setMasterInventoryLoading(false);
   };
 
+    const cleanSharedMasterImage = (value) => {
+    const text = String(value || "").trim();
+
+    if (!text) return "";
+
+    // Do not save embedded/base64 images into Supabase.
+    // They are too large and can cause statement timeout.
+    if (text.startsWith("data:image/")) return "";
+
+    // Also protect database from very large accidental values.
+    if (text.length > 5000) return "";
+
+    return text;
+  };
+
+  const deleteMasterInventoryRowsInBatches = async (scope) => {
+    const batchSize = 100;
+
+    while (true) {
+      const { data, error } = await supabase
+        .from("inventory_master_items")
+        .select("id")
+        .eq("ship", scope)
+        .limit(batchSize);
+
+      if (error) {
+        throw error;
+      }
+
+      const ids = (data || []).map((row) => row.id).filter(Boolean);
+
+      if (!ids.length) {
+        break;
+      }
+
+      const deleteResult = await supabase
+        .from("inventory_master_items")
+        .delete()
+        .in("id", ids);
+
+      if (deleteResult.error) {
+        throw deleteResult.error;
+      }
+
+      if (ids.length < batchSize) {
+        break;
+      }
+    }
+  };
   const saveMasterInventoryItems = async (_shipOverride, items) => {
     if (!supabase) {
       const text = "Supabase is not connected. Cannot share the master inventory file.";
