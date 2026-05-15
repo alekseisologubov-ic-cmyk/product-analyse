@@ -352,7 +352,7 @@ const getProductReportKey = (value) => {
 const formatQty = (value) => Number(value || 0).toFixed(2);
 const formatMoney = (value) => "$" + Number(value || 0).toFixed(2);
 
-const getImageUrl = (url) => {
+const getImageUrl = (url, size = "w800") => {
   const value = String(url || "").trim();
   if (!value) return "";
 
