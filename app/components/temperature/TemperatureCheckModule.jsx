@@ -244,9 +244,9 @@ if (!response.ok) {
   };
 
   useEffect(() => {
-    loadSavedChecks();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateFilter, userShip]);
+  loadSavedChecks();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [userShip, isAdmin]);
 
   const saveTemperatureCheck = async () => {
     if (!supabase) {
