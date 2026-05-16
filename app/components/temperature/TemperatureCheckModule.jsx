@@ -191,7 +191,7 @@ if (!response.ok) {
       setConfidence(Number(result.confidence || 0));
       setNotes(result.notes || "");
 
-      setMessage("AI analysis completed. Please verify before saving.");
+      setMessage("Picture read. Confirm product and temperature before saving.");
     } catch (error) {
       setMessage(error?.message || "Could not analyze photo. Enter product and temperature manually.");
     } finally {
