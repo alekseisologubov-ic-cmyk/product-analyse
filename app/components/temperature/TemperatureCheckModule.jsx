@@ -357,7 +357,7 @@ if (!response.ok) {
     }
   };
 
-    return (
+      return (
     <main style={styles.page}>
       <header style={styles.header}>
         <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
@@ -370,13 +370,10 @@ if (!response.ok) {
         </div>
       </header>
 
-      <section style={styles.card}>
-        <h2 style={styles.productTitle}>🌡️ Take Temperature Picture</h2>
-        <p style={styles.emptyText}>
-          Take a picture, confirm product name and temperature, then save.
-        </p>
+      <section style={{ ...styles.card, maxWidth: 920, margin: "0 auto" }}>
+        <h2 style={styles.productTitle}>🌡️ Take Temperature</h2>
 
-        <label style={styles.label}>Take picture / upload picture</label>
+        <label style={styles.label}>Take picture</label>
         <input
           type="file"
           accept="image/*"
@@ -384,6 +381,12 @@ if (!response.ok) {
           onChange={handlePhotoSelected}
           style={styles.fileInput}
         />
+
+        {!previewUrl && (
+          <div style={styles.infoBox}>
+            Take a picture to read the product and temperature.
+          </div>
+        )}
 
         {previewUrl && (
           <div style={styles.infoBox}>
@@ -413,52 +416,135 @@ if (!response.ok) {
           </div>
         )}
 
-        <div style={styles.formRow}>
-          <div>
-            <label style={styles.label}>Product name</label>
-            <input
-              value={productName}
-              onChange={(event) => setProductName(event.target.value)}
-              placeholder="Example: Chicken Breast"
-              style={styles.searchInput}
-            />
-          </div>
+        {previewUrl && (
+          <>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                gap: 10,
+                marginTop: 12,
+              }}
+            >
+              <div
+                style={{
+                  border: "1px solid #ddd",
+                  borderRadius: 12,
+                  padding: 10,
+                  background: "#fafafa",
+                }}
+              >
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: 12,
+                    fontWeight: "bold",
+                    color: "#555",
+                    marginBottom: 5,
+                  }}
+                >
+                  🍽️ Product
+                </label>
 
-          <div>
-            <label style={styles.label}>Temperature</label>
-            <input
-              type="number"
-              value={temperatureValue}
-              onChange={(event) => setTemperatureValue(event.target.value)}
-              placeholder="Example: 38.5"
-              style={styles.searchInput}
-            />
-          </div>
-        </div>
+                <input
+                  value={productName}
+                  onChange={(event) => setProductName(event.target.value)}
+                  style={{
+                    ...styles.searchInput,
+                    marginBottom: 0,
+                    padding: 9,
+                    fontSize: 14,
+                  }}
+                />
+              </div>
 
-        <label style={styles.label}>Unit</label>
-        <select
-          value={temperatureUnit}
-          onChange={(event) => setTemperatureUnit(event.target.value)}
-          style={styles.select}
-        >
-          <option value="F">F</option>
-          <option value="C">C</option>
-          <option value="unknown">Unknown</option>
-        </select>
+              <div
+                style={{
+                  border: "1px solid #ddd",
+                  borderRadius: 12,
+                  padding: 10,
+                  background: "#fafafa",
+                }}
+              >
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: 12,
+                    fontWeight: "bold",
+                    color: "#555",
+                    marginBottom: 5,
+                  }}
+                >
+                  🌡️ Temperature
+                </label>
 
-        <button
-          style={styles.primaryButton}
-          onClick={saveTemperatureCheck}
-          disabled={!canSave || analyzing || saving}
-        >
-          {saving ? "Saving..." : "💾 Save Picture"}
-        </button>
+                <input
+                  type="number"
+                  value={temperatureValue}
+                  onChange={(event) => setTemperatureValue(event.target.value)}
+                  style={{
+                    ...styles.searchInput,
+                    marginBottom: 0,
+                    padding: 9,
+                    fontSize: 14,
+                  }}
+                />
+              </div>
 
-        {!canSave && (
-          <p style={styles.emptyText}>
-            Picture, product name, and temperature are required before saving.
-          </p>
+              <div
+                style={{
+                  border: "1px solid #ddd",
+                  borderRadius: 12,
+                  padding: 10,
+                  background: "#fafafa",
+                }}
+              >
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: 12,
+                    fontWeight: "bold",
+                    color: "#555",
+                    marginBottom: 5,
+                  }}
+                >
+                  ⚙️ Unit
+                </label>
+
+                <select
+                  value={temperatureUnit}
+                  onChange={(event) => setTemperatureUnit(event.target.value)}
+                  style={{
+                    ...styles.select,
+                    padding: 9,
+                    fontSize: 14,
+                  }}
+                >
+                  <option value="F">F</option>
+                  <option value="C">C</option>
+                  <option value="unknown">Unknown</option>
+                </select>
+              </div>
+            </div>
+
+            <button
+              style={{
+                ...styles.primaryButton,
+                width: "100%",
+                marginTop: 16,
+              }}
+              onClick={saveTemperatureCheck}
+              disabled={!canSave || analyzing || saving}
+            >
+              {saving ? "Saving..." : "💾 Save to System"}
+            </button>
+
+            {!canSave && (
+              <p style={styles.emptyText}>
+                Product name and temperature are required before saving.
+              </p>
+            )}
+          </>
         )}
       </section>
     </main>
