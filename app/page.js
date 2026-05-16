@@ -51,10 +51,9 @@ const isVirginVoyagesEmail = (value) => {
 };
 
 const USER_EMAIL_STORAGE_KEY = "vv_app_user_email";
+
 const ADMIN_EMAILS = new Set([
-  const ADMIN_EMAILS = new Set([
   "aleksei.sologubov-ic@virginvoyages.com",
-]);
   // add more admin emails here
 ]);
 
