@@ -103,15 +103,15 @@ export default function MakeInventoryTopBar({
             </button>
           )}
 
-          {inventoryReportMode === "summary" && (
-            <button
-              style={styles.deleteButton}
-              onClick={clearShipInventory}
-              disabled={inventoryLoading || reportBusy}
-            >
-              🧹 Clear Ship Records
-            </button>
-          )}
+          {isAdmin && inventoryReportMode === "summary" && (
+  <button
+    style={styles.deleteButton}
+    onClick={clearShipInventory}
+    disabled={inventoryLoading || reportBusy}
+  >
+    🧹 Clear Ship Records
+  </button>
+)}
 
           {inventoryReportMode === "summary" ? (
             <button
