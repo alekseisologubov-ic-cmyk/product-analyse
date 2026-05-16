@@ -77,6 +77,7 @@ export default function TemperatureCheckModule({
   supabase,
   userShip,
   userEmail,
+  isAdmin = false,
   onBack,
   logUsageEvent = () => {},
 }) {
