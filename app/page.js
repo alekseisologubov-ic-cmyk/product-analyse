@@ -6085,6 +6085,29 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     );
   }
 
+  if (module === "temperature") {
+    return (
+      <Suspense
+        fallback={
+          <main style={styles.page}>
+            <section style={styles.card}>
+              <h2 style={styles.cardTitle}>🌡️ Loading Take Temperature...</h2>
+              <p style={styles.emptyText}>Preparing temperature photo tools.</p>
+            </section>
+          </main>
+        }
+      >
+        <TemperatureCheckModule
+          styles={styles}
+          supabase={supabase}
+          userShip={userShip}
+          userEmail={normalizeAppEmail(userEmail)}
+          onBack={() => setModule("")}
+          logUsageEvent={logUsageEvent}
+        />
+      </Suspense>
+    );
+  }
   if (module === "people") {
     return (
       <Suspense
