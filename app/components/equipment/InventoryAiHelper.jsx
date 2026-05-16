@@ -134,50 +134,65 @@ export default function InventoryAiHelper({
     [items]
   );
 
-  const matchedItem = useMemo(() => {
-    if (!result) return null;
-
-    const index = Number(result.matchedCandidateIndex);
-
-    if (Number.isFinite(index) && items[index]) {
-      return items[index];
-    }
-
-    const codeKey = normalizeText(result.matchedCode).replace(/\s+/g, "");
-    const nameKey = normalizeText(result.matchedName || result.visualName);
-
-    if (codeKey) {
-      const byCode = items.find(
-        (item) => normalizeText(item.code).replace(/\s+/g, "") === codeKey
-      );
-
-      if (byCode) return byCode;
-    }
-
-    if (nameKey) {
-      const byName = items.find((item) => normalizeText(item.name) === nameKey);
-      if (byName) return byName;
-    }
-
-    return null;
-  }, [items, result]);
-
-  const possibleMatches = useMemo(() => {
+    const localMatchEntries = useMemo(() => {
     if (!result) return [];
 
-    const byIndexes = Array.isArray(result.possibleCandidateIndexes)
-      ? result.possibleCandidateIndexes
-          .map((index) => items[Number(index)])
-          .filter(Boolean)
-      : [];
+    const searchText = [
+      result.visualName,
+      result.visualDescription,
+      result.equipmentCategory,
+      ...(result.likelySearchTerms || []),
+    ]
+      .filter(Boolean)
+      .join(" ");
 
-    const localMatches = getLocalPossibleMatches(
-      items,
-      `${result.visualName || ""} ${result.visualDescription || ""} ${result.matchedName || ""}`
-    );
+    const searchTokens = getTokens(searchText);
 
+    if (!searchTokens.length) return [];
+
+    return items
+      .map((item) => {
+        const itemText = `${item.code || ""} ${item.name || ""} ${item.category || ""} ${item.sheetName || ""}`;
+        const itemClean = normalizeText(itemText);
+        const itemNameClean = normalizeText(item.name);
+        const itemTokens = new Set(getTokens(itemText));
+
+        let score = 0;
+
+        searchTokens.forEach((token) => {
+          if (itemTokens.has(token)) score += 12;
+          if (itemClean.includes(token)) score += 5;
+        });
+
+        const visualNameClean = normalizeText(result.visualName);
+
+        if (visualNameClean && itemNameClean === visualNameClean) score += 80;
+        if (visualNameClean && itemNameClean.includes(visualNameClean)) score += 45;
+        if (visualNameClean && visualNameClean.includes(itemNameClean) && itemNameClean.length > 8) score += 35;
+
+        return {
+          item,
+          score,
+        };
+      })
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8);
+  }, [items, result]);
+
+  const matchedItem = useMemo(() => {
+    const best = localMatchEntries[0];
+
+    if (!best) return null;
+
+    return best.score >= 25 ? best.item : null;
+  }, [localMatchEntries]);
+
+  const possibleMatches = useMemo(() => {
     const seen = new Set();
-    return [...(matchedItem ? [matchedItem] : []), ...byIndexes, ...localMatches]
+
+    return localMatchEntries
+      .map((entry) => entry.item)
       .filter((item) => {
         const key = `${item.code || ""}|${item.name || ""}|${item.sheetName || ""}`;
         if (seen.has(key)) return false;
@@ -185,8 +200,7 @@ export default function InventoryAiHelper({
         return true;
       })
       .slice(0, 6);
-  }, [items, matchedItem, result]);
-
+  }, [localMatchEntries]);
   const handlePhotoSelected = async (event) => {
     const file = event.target.files?.[0];
 
