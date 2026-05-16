@@ -79,6 +79,81 @@ const resizeImageFileToDataUrl = (
     image.src = objectUrl;
   });
 
+const waitForBrowser = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+const getComparableImageUrl = (url) => {
+  const value = String(url || "").trim();
+  if (!value) return "";
+
+  if (value.startsWith("data:image/")) return value;
+
+  const googleDriveFileMatch = value.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+  const googleDriveIdMatch = value.match(/[?&]id=([^&]+)/);
+  const googleDriveId = googleDriveFileMatch?.[1] || googleDriveIdMatch?.[1];
+
+  if (googleDriveId) {
+    return `https://drive.google.com/thumbnail?id=${googleDriveId}&sz=w360`;
+  }
+
+  if (value.includes("sharepoint.com") || value.includes("1drv.ms")) {
+    return value.includes("?") ? `${value}&download=1` : `${value}?download=1`;
+  }
+
+  return value;
+};
+
+const loadImageForCompare = (src) =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+
+    image.crossOrigin = "anonymous";
+
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Could not load comparison image."));
+
+    image.src = src;
+  });
+
+const getImageHash = async (src) => {
+  const image = await loadImageForCompare(src);
+
+  const size = 16;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  context.drawImage(image, 0, 0, size, size);
+
+  const imageData = context.getImageData(0, 0, size, size).data;
+  const grayValues = [];
+
+  for (let index = 0; index < imageData.length; index += 4) {
+    const red = imageData[index];
+    const green = imageData[index + 1];
+    const blue = imageData[index + 2];
+
+    grayValues.push(red * 0.299 + green * 0.587 + blue * 0.114);
+  }
+
+  const average =
+    grayValues.reduce((sum, value) => sum + value, 0) / grayValues.length;
+
+  return grayValues.map((value) => (value >= average ? 1 : 0));
+};
+
+const getHashSimilarity = (leftHash, rightHash) => {
+  if (!leftHash?.length || !rightHash?.length) return 0;
+
+  const length = Math.min(leftHash.length, rightHash.length);
+  let same = 0;
+
+  for (let index = 0; index < length; index += 1) {
+    if (leftHash[index] === rightHash[index]) same += 1;
+  }
+
+  return same / length;
+};
 const getLocalPossibleMatches = (items, searchText) => {
   const searchTokens = getTokens(searchText);
   if (!searchTokens.length) return [];
