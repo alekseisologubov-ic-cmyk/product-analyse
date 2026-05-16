@@ -6235,6 +6235,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
         </header>
       <MakeInventoryTopBar
   styles={styles}
+    isAdmin={isAdmin}
   inventoryReportMode={inventoryReportMode}
   setInventoryReportMode={setInventoryReportMode}
   makeInventoryShip={makeInventoryShip}
