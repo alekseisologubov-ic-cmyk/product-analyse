@@ -272,7 +272,7 @@ if (!response.ok) {
     }
 
     const confirmed = window.confirm(
-  `Save picture?\n\nProduct: ${productName}\nTemperature: ${tempNumber} ${temperatureUnit}`
+  `Save to system?\n\nProduct: ${productName}\nTemperature: ${tempNumber} ${temperatureUnit}`
 );
 
     if (!confirmed) return;
