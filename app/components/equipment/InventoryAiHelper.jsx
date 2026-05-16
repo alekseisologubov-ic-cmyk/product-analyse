@@ -348,8 +348,10 @@ setVisualMatches([]);
 setMessage("Reading equipment picture...");
 setPreviewUrl(URL.createObjectURL(file));
 
-    try {
-      const imageDataUrl = await resizeImageFileToDataUrl(file, {
+    let imageDataUrl = "";
+
+try {
+  imageDataUrl = await resizeImageFileToDataUrl(file, {
         maxWidth: 1280,
         maxHeight: 1280,
         quality: 0.72,
