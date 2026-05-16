@@ -403,7 +403,7 @@ try {
       }
 
       setResult(data.result || null);
-      setMessage("AI helper finished. Confirm the match before counting.");
+      setMessage("AI identified the equipment. Master list search completed.");
     } catch (error) {
   const errorText = error?.message || "Could not identify equipment.";
 
