@@ -422,10 +422,10 @@ export default function InventoryAiHelper({
       setManualSearch("");
 
       setMessage(
-        isAiUnavailable
-          ? "AI is unavailable. Type equipment name below to search the uploaded master list."
-          : `${errorText} Type equipment name below to search the uploaded master list.`
-      );
+  isAiUnavailable
+    ? `AI is unavailable: ${errorText}. Type equipment name below to search the uploaded master list.`
+    : `${errorText} Type equipment name below to search the uploaded master list.`
+);
     } finally {
       setBusy(false);
       event.target.value = "";
