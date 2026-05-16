@@ -202,7 +202,7 @@ if (!response.ok) {
     }
   };
 
-  const loadSavedChecks = async () => {
+    const loadSavedChecks = async () => {
     if (!supabase) {
       setMessage("Supabase is not connected.");
       return;
@@ -211,18 +211,21 @@ if (!response.ok) {
     setLoadingSaved(true);
 
     try {
-      const start = new Date(`${dateFilter}T00:00:00`);
-      const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+      const end = new Date();
+      const start = new Date();
+
+      start.setDate(start.getDate() - 6);
+      start.setHours(0, 0, 0, 0);
 
       let query = supabase
         .from("temperature_checks")
         .select("*")
         .gte("taken_at", start.toISOString())
-        .lt("taken_at", end.toISOString())
+        .lte("taken_at", end.toISOString())
         .order("taken_at", { ascending: false })
-        .limit(100);
+        .limit(500);
 
-      if (userShip) {
+      if (!isAdmin && userShip) {
         query = query.eq("ship", userShip);
       }
 
@@ -234,7 +237,7 @@ if (!response.ok) {
 
       setSavedChecks(data || []);
     } catch (error) {
-      setMessage(error?.message || "Could not load saved temperature checks.");
+      setMessage(error?.message || "Could not load saved temperature pictures.");
     } finally {
       setLoadingSaved(false);
     }
