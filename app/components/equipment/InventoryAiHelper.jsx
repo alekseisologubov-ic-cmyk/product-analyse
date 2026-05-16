@@ -271,18 +271,23 @@ export default function InventoryAiHelper({
 }, [localMatchEntries, visualMatches]);
 
   const possibleMatches = useMemo(() => {
-    const seen = new Set();
+  const seen = new Set();
 
-    return localMatchEntries
-      .map((entry) => entry.item)
-      .filter((item) => {
-        const key = `${item.code || ""}|${item.name || ""}|${item.sheetName || ""}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .slice(0, 6);
-  }, [localMatchEntries]);
+  return [
+    ...(matchedItem ? [matchedItem] : []),
+    ...visualMatches.map((entry) => entry.item).filter(Boolean),
+    ...localMatchEntries.map((entry) => entry.item),
+  ]
+    .filter((item) => {
+      const key = `${item.code || ""}|${item.name || ""}|${item.sheetName || ""}`;
+
+      if (seen.has(key)) return false;
+
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 6);
+}, [localMatchEntries, matchedItem, visualMatches]);
   const runVisualMasterListSearch = async (imageDataUrl) => {
   if (!imageDataUrl) return [];
 
