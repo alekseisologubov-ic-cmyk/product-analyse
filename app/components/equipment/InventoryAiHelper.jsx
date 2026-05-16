@@ -348,7 +348,7 @@ export default function InventoryAiHelper({
     return [];
   }
 };
-  const handlePhotoSelected = async (event) => {
+    const handlePhotoSelected = async (event) => {
     const file = event.target.files?.[0];
 
     if (!file) return;
@@ -360,15 +360,14 @@ export default function InventoryAiHelper({
     }
 
     setBusy(true);
-setResult(null);
-setVisualMatches([]);
-setMessage("Reading equipment picture...");
-setPreviewUrl(URL.createObjectURL(file));
+    setResult(null);
+    setVisualMatches([]);
+    setManualSearch("");
+    setMessage("Reading equipment picture...");
+    setPreviewUrl(URL.createObjectURL(file));
 
-    let imageDataUrl = "";
-
-try {
-  imageDataUrl = await resizeImageFileToDataUrl(file, {
+    try {
+      const imageDataUrl = await resizeImageFileToDataUrl(file, {
         maxWidth: 1280,
         maxHeight: 1280,
         quality: 0.72,
@@ -380,8 +379,8 @@ try {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-  imageDataUrl,
-}),
+          imageDataUrl,
+        }),
       });
 
       const responseText = await response.text();
@@ -389,7 +388,7 @@ try {
       let data = {};
 
       try {
-        setMessage("AI identified the equipment. Master list search completed.");
+        data = responseText ? JSON.parse(responseText) : {};
       } catch {
         throw new Error(
           responseText
@@ -404,35 +403,34 @@ try {
 
       const aiResult = data.result || null;
 
-setResult(aiResult);
-setManualSearch(aiResult?.visualName || "");
-setMessage("AI identified the equipment. Master list search completed.");
+      setResult(aiResult);
+      setManualSearch(aiResult?.visualName || "");
+      setVisualMatches([]);
+      setMessage("AI identified the equipment. Master list search completed.");
     } catch (error) {
-  const errorText = error?.message || "Could not identify equipment.";
+      const errorText = error?.message || "Could not identify equipment.";
 
-  const isAiUnavailable =
-    errorText.toLowerCase().includes("quota") ||
-    errorText.toLowerCase().includes("billing") ||
-    errorText.toLowerCase().includes("exceeded") ||
-    errorText.toLowerCase().includes("rate limit") ||
-    errorText.toLowerCase().includes("temporarily unavailable");
+      const isAiUnavailable =
+        errorText.toLowerCase().includes("quota") ||
+        errorText.toLowerCase().includes("billing") ||
+        errorText.toLowerCase().includes("exceeded") ||
+        errorText.toLowerCase().includes("rate limit") ||
+        errorText.toLowerCase().includes("temporarily unavailable");
 
-  setResult(null);
-  setVisualMatches([]);
-  setManualSearch("");
+      setResult(null);
+      setVisualMatches([]);
+      setManualSearch("");
 
-  setMessage(
-    isAiUnavailable
-      ? "AI is unavailable. Type equipment name below to search the uploaded master list."
-      : `${errorText} Type equipment name below to search the uploaded master list.`
-  );
-}
-} finally {
+      setMessage(
+        isAiUnavailable
+          ? "AI is unavailable. Type equipment name below to search the uploaded master list."
+          : `${errorText} Type equipment name below to search the uploaded master list.`
+      );
+    } finally {
       setBusy(false);
       event.target.value = "";
     }
   };
-
   const handleUseItem = (item) => {
     if (!inventoryReady) {
       setMessage("Choose ship, station and user before counting.");
