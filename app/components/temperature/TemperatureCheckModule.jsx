@@ -20,6 +20,52 @@ const fileToDataUrl = (file) =>
     reader.onerror = () => reject(reader.error || new Error("Could not read file."));
     reader.readAsDataURL(file);
   });
+const resizeImageFileToDataUrl = (
+  file,
+  { maxWidth = 1280, maxHeight = 1280, quality = 0.72 } = {}
+) =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    image.onload = () => {
+      try {
+        const originalWidth = image.naturalWidth || image.width;
+        const originalHeight = image.naturalHeight || image.height;
+
+        const scale = Math.min(
+          maxWidth / originalWidth,
+          maxHeight / originalHeight,
+          1
+        );
+
+        const targetWidth = Math.max(1, Math.round(originalWidth * scale));
+        const targetHeight = Math.max(1, Math.round(originalHeight * scale));
+
+        const canvas = document.createElement("canvas");
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+
+        const context = canvas.getContext("2d");
+        context.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+
+        URL.revokeObjectURL(objectUrl);
+        resolve(dataUrl);
+      } catch (error) {
+        URL.revokeObjectURL(objectUrl);
+        reject(error);
+      }
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Could not resize image."));
+    };
+
+    image.src = objectUrl;
+  });
 
 const toNumberOrNull = (value) => {
   const number = Number(String(value ?? "").replace(/[^0-9.\-]/g, ""));
