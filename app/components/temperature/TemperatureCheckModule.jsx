@@ -103,6 +103,7 @@ export default function TemperatureCheckModule({
   const [dateFilter, setDateFilter] = useState(todayDateKey());
   const [savedChecks, setSavedChecks] = useState([]);
   const [loadingSaved, setLoadingSaved] = useState(false);
+  const [showSavedPictures, setShowSavedPictures] = useState(false);
 
   const canSave = useMemo(
     () =>
