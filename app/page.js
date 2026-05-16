@@ -3163,7 +3163,6 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
       itemName: itemToDelete.name || "",
       qty: itemToDelete.qty || 0,
     });
-    scheduleRealtimeRefresh("counts", makeInventoryShip || userShip);
   };
 
   const clearMyInventory = async () => {
