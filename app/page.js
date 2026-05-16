@@ -680,9 +680,40 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
             table: "inventory_counts",
             filter: "ship=eq." + makeInventoryShip,
           },
-          () => {
-            scheduleRealtimeRefresh("counts", makeInventoryShip);
-          }
+          (payload) => {
+  if (printBusyRef.current) return;
+
+  if (payload.eventType === "DELETE") {
+    const deletedId = payload.old?.id;
+
+    setInventorySummary((prev) =>
+      prev.filter((item) => item.id !== deletedId)
+    );
+
+    return;
+  }
+
+  if (!payload.new) return;
+
+  const changedRecord = normalizeInventoryRecord(payload.new);
+
+  if (!inventoryRecordMatchesCurrentDepartment(changedRecord)) return;
+
+  setInventorySummary((prev) => {
+    const withoutChanged = prev.filter(
+      (item) =>
+        item.id !== changedRecord.id &&
+        !(
+          item.ship === changedRecord.ship &&
+          item.station === changedRecord.station &&
+          item.userName === changedRecord.userName &&
+          item.itemKey === changedRecord.itemKey
+        )
+    );
+
+    return [changedRecord, ...withoutChanged];
+  });
+}
         )
         .subscribe();
 
