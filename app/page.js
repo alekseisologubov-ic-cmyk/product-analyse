@@ -729,9 +729,55 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
             table: "inventory_station_status",
             filter: "ship=eq." + makeInventoryShip,
           },
-          () => {
-            scheduleRealtimeRefresh("stationStatus", makeInventoryShip);
-          }
+          (payload) => {
+  if (printBusyRef.current) return;
+
+  const departmentKey = getCurrentEquipmentDepartmentKey();
+
+  if (payload.eventType === "DELETE") {
+    const oldRecord = payload.old || {};
+
+    setInventoryStationStatuses((prev) =>
+      prev.filter(
+        (item) =>
+          !(
+            item.id === oldRecord.id ||
+            (
+              item.ship === oldRecord.ship &&
+              item.department === oldRecord.department &&
+              cleanText(item.station) === cleanText(oldRecord.station)
+            )
+          )
+      )
+    );
+
+    return;
+  }
+
+  if (!payload.new) return;
+
+  const normalized = normalizeInventoryStationStatusRecord(payload.new);
+
+  if (normalized.department !== departmentKey) return;
+
+  setInventoryStationStatuses((prev) => {
+    const withoutCurrent = prev.filter(
+      (item) =>
+        !(
+          item.id === normalized.id ||
+          (
+            item.ship === normalized.ship &&
+            item.department === normalized.department &&
+            cleanText(item.station) === cleanText(normalized.station)
+          )
+        )
+    );
+
+    return [...withoutCurrent, normalized].sort((a, b) =>
+      a.station.localeCompare(b.station)
+    );
+  });
+}
         )
         .subscribe();
 
