@@ -272,8 +272,8 @@ if (!response.ok) {
     }
 
     const confirmed = window.confirm(
-      `Save temperature check?\n\nProduct: ${productName}\nTemperature: ${tempNumber} ${temperatureUnit}\n\nPlease confirm the AI reading is correct.`
-    );
+  `Save picture?\n\nProduct: ${productName}\nTemperature: ${tempNumber} ${temperatureUnit}`
+);
 
     if (!confirmed) return;
 
