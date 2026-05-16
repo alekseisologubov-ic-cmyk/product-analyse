@@ -157,11 +157,23 @@ export default function TemperatureCheckModule({
         }),
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
 
-      if (!response.ok) {
-        throw new Error(data?.error || "Could not analyze photo.");
-      }
+let data = {};
+
+try {
+  data = responseText ? JSON.parse(responseText) : {};
+} catch {
+  throw new Error(
+    responseText
+      ? responseText.slice(0, 180)
+      : "Server returned a non-JSON response."
+  );
+}
+
+if (!response.ok) {
+  throw new Error(data?.error || responseText || "Could not analyze photo.");
+}
 
       const result = data.result || {};
 
