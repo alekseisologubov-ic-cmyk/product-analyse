@@ -1,0 +1,376 @@
+"use client";
+
+import React, { useMemo, useState } from "react";
+
+const normalizeText = (value) =>
+  String(value || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const getTokens = (value) =>
+  normalizeText(value)
+    .split(" ")
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 3)
+    .filter(
+      (item) =>
+        ![
+          "THE",
+          "AND",
+          "FOR",
+          "WITH",
+          "HIGH",
+          "LOW",
+          "SMALL",
+          "LARGE",
+          "SILVER",
+          "STEEL",
+          "S/S",
+          "EQUIPMENT",
+        ].includes(item)
+    );
+
+const resizeImageFileToDataUrl = (
+  file,
+  { maxWidth = 1280, maxHeight = 1280, quality = 0.72 } = {}
+) =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    image.onload = () => {
+      try {
+        const originalWidth = image.naturalWidth || image.width;
+        const originalHeight = image.naturalHeight || image.height;
+
+        const scale = Math.min(
+          maxWidth / originalWidth,
+          maxHeight / originalHeight,
+          1
+        );
+
+        const targetWidth = Math.max(1, Math.round(originalWidth * scale));
+        const targetHeight = Math.max(1, Math.round(originalHeight * scale));
+
+        const canvas = document.createElement("canvas");
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+
+        const context = canvas.getContext("2d");
+        context.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+
+        URL.revokeObjectURL(objectUrl);
+        resolve(dataUrl);
+      } catch (error) {
+        URL.revokeObjectURL(objectUrl);
+        reject(error);
+      }
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Could not resize image."));
+    };
+
+    image.src = objectUrl;
+  });
+
+const getLocalPossibleMatches = (items, searchText) => {
+  const searchTokens = getTokens(searchText);
+  if (!searchTokens.length) return [];
+
+  return items
+    .map((item) => {
+      const itemText = `${item.code || ""} ${item.name || ""} ${item.category || ""} ${item.sheetName || ""}`;
+      const itemTokens = new Set(getTokens(itemText));
+
+      let score = 0;
+
+      searchTokens.forEach((token) => {
+        if (itemTokens.has(token)) score += 10;
+        if (normalizeText(itemText).includes(token)) score += 4;
+      });
+
+      const nameText = normalizeText(item.name);
+      const searchClean = normalizeText(searchText);
+
+      if (nameText && searchClean && nameText.includes(searchClean)) score += 30;
+      if (nameText && searchClean && searchClean.includes(nameText)) score += 25;
+
+      return { item, score };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 6)
+    .map((entry) => entry.item);
+};
+
+export default function InventoryAiHelper({
+  styles,
+  items = [],
+  inventoryReady,
+  currentStationSubmitted,
+  inventoryStation,
+  onUseItem,
+}) {
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [result, setResult] = useState(null);
+
+  const candidates = useMemo(
+    () =>
+      items.map((item, index) => ({
+        index,
+        code: item.code || "",
+        name: item.name || "",
+        category: item.category || "",
+        sheetName: item.sheetName || "",
+      })),
+    [items]
+  );
+
+  const matchedItem = useMemo(() => {
+    if (!result) return null;
+
+    const index = Number(result.matchedCandidateIndex);
+
+    if (Number.isFinite(index) && items[index]) {
+      return items[index];
+    }
+
+    const codeKey = normalizeText(result.matchedCode).replace(/\s+/g, "");
+    const nameKey = normalizeText(result.matchedName || result.visualName);
+
+    if (codeKey) {
+      const byCode = items.find(
+        (item) => normalizeText(item.code).replace(/\s+/g, "") === codeKey
+      );
+
+      if (byCode) return byCode;
+    }
+
+    if (nameKey) {
+      const byName = items.find((item) => normalizeText(item.name) === nameKey);
+      if (byName) return byName;
+    }
+
+    return null;
+  }, [items, result]);
+
+  const possibleMatches = useMemo(() => {
+    if (!result) return [];
+
+    const byIndexes = Array.isArray(result.possibleCandidateIndexes)
+      ? result.possibleCandidateIndexes
+          .map((index) => items[Number(index)])
+          .filter(Boolean)
+      : [];
+
+    const localMatches = getLocalPossibleMatches(
+      items,
+      `${result.visualName || ""} ${result.visualDescription || ""} ${result.matchedName || ""}`
+    );
+
+    const seen = new Set();
+    return [...(matchedItem ? [matchedItem] : []), ...byIndexes, ...localMatches]
+      .filter((item) => {
+        const key = `${item.code || ""}|${item.name || ""}|${item.sheetName || ""}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 6);
+  }, [items, matchedItem, result]);
+
+  const handlePhotoSelected = async (event) => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    if (!items.length) {
+      setMessage("Upload or refresh the master inventory list first.");
+      event.target.value = "";
+      return;
+    }
+
+    setBusy(true);
+    setResult(null);
+    setMessage("Reading equipment picture...");
+    setPreviewUrl(URL.createObjectURL(file));
+
+    try {
+      const imageDataUrl = await resizeImageFileToDataUrl(file, {
+        maxWidth: 1280,
+        maxHeight: 1280,
+        quality: 0.72,
+      });
+
+      const response = await fetch("/api/identify-equipment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          imageDataUrl,
+          candidates,
+        }),
+      });
+
+      const responseText = await response.text();
+
+      let data = {};
+
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch {
+        throw new Error(
+          responseText
+            ? responseText.slice(0, 180)
+            : "Server returned a non-JSON response."
+        );
+      }
+
+      if (!response.ok) {
+        throw new Error(data?.error || responseText || "Could not identify equipment.");
+      }
+
+      setResult(data.result || null);
+      setMessage("AI helper finished. Confirm the match before counting.");
+    } catch (error) {
+      setMessage(error?.message || "Could not identify equipment.");
+    } finally {
+      setBusy(false);
+      event.target.value = "";
+    }
+  };
+
+  const handleUseItem = (item) => {
+    if (!inventoryReady) {
+      setMessage("Choose ship, station and user before counting.");
+      return;
+    }
+
+    if (currentStationSubmitted) {
+      setMessage(
+        `${inventoryStation || "This station"} has already submitted count. Reset inventory before editing.`
+      );
+      return;
+    }
+
+    onUseItem(item);
+  };
+
+  return (
+    <section style={styles.card}>
+      <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 14 }}>
+        <div>
+          <h2 style={styles.productTitle}>🤖 AI Equipment Helper</h2>
+          <p style={{ ...styles.emptyText, margin: 0 }}>
+            Take a picture. AI will identify the equipment and search the uploaded master list.
+          </p>
+        </div>
+      </div>
+
+      <label style={styles.label}>Take / upload equipment picture</label>
+      <input
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={handlePhotoSelected}
+        style={styles.fileInput}
+      />
+
+      {previewUrl && (
+        <div style={styles.infoBox}>
+          <img
+            src={previewUrl}
+            alt="Equipment preview"
+            style={{
+              width: "100%",
+              maxHeight: 280,
+              objectFit: "contain",
+              borderRadius: 12,
+              background: "#f2f2f2",
+            }}
+          />
+        </div>
+      )}
+
+      {message && <div style={busy ? styles.warningText : styles.infoBox}>{message}</div>}
+
+      {result && (
+        <div style={styles.infoBox}>
+          <div>
+            AI identified: <strong>{result.visualName || "Unknown equipment"}</strong>
+          </div>
+
+          {result.visualDescription && (
+            <div>Description: {result.visualDescription}</div>
+          )}
+
+          <div>
+            Match status: <strong>{result.matchStatus || "not_found"}</strong>
+          </div>
+
+          <div>
+            Confidence: <strong>{Math.round(Number(result.confidence || 0) * 100)}%</strong>
+          </div>
+
+          {result.notes && <div>Notes: {result.notes}</div>}
+        </div>
+      )}
+
+      {matchedItem && (
+        <div style={{ ...styles.equipmentCard, ...styles.countedCard }}>
+          <div style={styles.recipeName}>Best Match</div>
+          <div style={styles.recipeName}>{matchedItem.name}</div>
+          <div style={styles.recipeMeta}>Code: {matchedItem.code || "N/A"}</div>
+          <div style={styles.recipeMeta}>Sheet: {matchedItem.sheetName || "N/A"}</div>
+          <div style={styles.recipeMeta}>Category: {matchedItem.category || "N/A"}</div>
+
+          <button
+            style={styles.primaryButton}
+            onClick={() => handleUseItem(matchedItem)}
+          >
+            ✅ Use This Equipment
+          </button>
+        </div>
+      )}
+
+      {result && !matchedItem && (
+        <div style={styles.warningText}>
+          Exact equipment was not found in the master list. Review possible matches below.
+        </div>
+      )}
+
+      {possibleMatches.length > 0 && (
+        <>
+          <h3 style={styles.sectionTitle}>Possible Matches</h3>
+
+          <div style={styles.equipmentGrid}>
+            {possibleMatches.map((item, index) => (
+              <div key={`${item.code}-${item.name}-${index}`} style={styles.equipmentCard}>
+                <div style={styles.recipeName}>{item.name}</div>
+                <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
+                <div style={styles.recipeMeta}>Sheet: {item.sheetName || "N/A"}</div>
+                <div style={styles.recipeMeta}>Category: {item.category || "N/A"}</div>
+
+                <button
+                  style={styles.backButton}
+                  onClick={() => handleUseItem(item)}
+                >
+                  Use This Match
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
