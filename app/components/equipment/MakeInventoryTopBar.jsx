@@ -4,6 +4,7 @@ import React from "react";
 
 export default function MakeInventoryTopBar({
   styles,
+  isAdmin,
 
   inventoryReportMode,
   setInventoryReportMode,
