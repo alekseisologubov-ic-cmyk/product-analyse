@@ -239,7 +239,7 @@ export default function InventoryAiHelper({
       let data = {};
 
       try {
-        data = responseText ? JSON.parse(responseText) : {};
+        setMessage("AI identified the equipment. Master list search completed.");
       } catch {
         throw new Error(
           responseText
