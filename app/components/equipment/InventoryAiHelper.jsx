@@ -402,8 +402,11 @@ try {
         throw new Error(data?.error || responseText || "Could not identify equipment.");
       }
 
-      setResult(data.result || null);
-      setMessage("AI identified the equipment. Master list search completed.");
+      const aiResult = data.result || null;
+
+setResult(aiResult);
+setManualSearch(aiResult?.visualName || "");
+setMessage("AI identified the equipment. Master list search completed.");
     } catch (error) {
   const errorText = error?.message || "Could not identify equipment.";
 
