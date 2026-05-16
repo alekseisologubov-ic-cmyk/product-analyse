@@ -191,7 +191,7 @@ if (!response.ok) {
       setConfidence(Number(result.confidence || 0));
       setNotes(result.notes || "");
 
-      setMessage("Picture read. Confirm product and temperature before saving.");
+      setMessage("Picture read. Product and temperature were added.");
     } catch (error) {
       setMessage(error?.message || "Could not read picture. Enter product and temperature manually.");
     } finally {
