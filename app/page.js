@@ -9,6 +9,7 @@ import {
   downloadInventoryExcelReportUsingTemplate,
 } from "./lib/inventoryReportDownloads";
 import MakeInventoryTopBar from "./components/equipment/MakeInventoryTopBar";
+import AdminDashboard from "./components/admin/AdminDashboard";
 
 const loadPeopleScheduleModule = () => import("./components/PeopleScheduleModule");
 const PeopleScheduleModule = lazy(loadPeopleScheduleModule);
