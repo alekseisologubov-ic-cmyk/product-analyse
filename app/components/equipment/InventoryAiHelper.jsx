@@ -211,17 +211,17 @@ export default function InventoryAiHelper({
     [items]
   );
 
-    const localMatchEntries = useMemo(() => {
-    if (!result) return [];
-
-    const searchText = [
-      result.visualName,
-      result.visualDescription,
-      result.equipmentCategory,
-      ...(result.likelySearchTerms || []),
-    ]
-      .filter(Boolean)
-      .join(" ");
+      const localMatchEntries = useMemo(() => {
+    const searchText = result
+      ? [
+          result.visualName,
+          result.visualDescription,
+          result.equipmentCategory,
+          ...(result.likelySearchTerms || []),
+        ]
+          .filter(Boolean)
+          .join(" ")
+      : manualSearch;
 
     const searchTokens = getTokens(searchText);
 
@@ -232,6 +232,7 @@ export default function InventoryAiHelper({
         const itemText = `${item.code || ""} ${item.name || ""} ${item.category || ""} ${item.sheetName || ""}`;
         const itemClean = normalizeText(itemText);
         const itemNameClean = normalizeText(item.name);
+        const searchClean = normalizeText(searchText);
         const itemTokens = new Set(getTokens(itemText));
 
         let score = 0;
@@ -241,11 +242,15 @@ export default function InventoryAiHelper({
           if (itemClean.includes(token)) score += 5;
         });
 
-        const visualNameClean = normalizeText(result.visualName);
-
-        if (visualNameClean && itemNameClean === visualNameClean) score += 80;
-        if (visualNameClean && itemNameClean.includes(visualNameClean)) score += 45;
-        if (visualNameClean && visualNameClean.includes(itemNameClean) && itemNameClean.length > 8) score += 35;
+        if (searchClean && itemNameClean === searchClean) score += 80;
+        if (searchClean && itemNameClean.includes(searchClean)) score += 45;
+        if (
+          searchClean &&
+          searchClean.includes(itemNameClean) &&
+          itemNameClean.length > 8
+        ) {
+          score += 35;
+        }
 
         return {
           item,
@@ -255,7 +260,7 @@ export default function InventoryAiHelper({
       .filter((entry) => entry.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, 8);
-  }, [items, result]);
+  }, [items, result, manualSearch]);
 
   const matchedItem = useMemo(() => {
   const visualBest = visualMatches[0];
