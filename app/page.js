@@ -50,6 +50,12 @@ const isVirginVoyagesEmail = (value) => {
 };
 
 const USER_EMAIL_STORAGE_KEY = "vv_app_user_email";
+const ADMIN_EMAILS = new Set([
+  "yourname@virginvoyages.com",
+  // add more admin emails here
+]);
+
+const isAdminEmail = (value) => ADMIN_EMAILS.has(normalizeAppEmail(value));
 
 const SHIPS = ["BRL", "RL", "SC", "VL"];
 
