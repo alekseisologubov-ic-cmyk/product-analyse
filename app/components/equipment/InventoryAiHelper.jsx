@@ -196,6 +196,7 @@ export default function InventoryAiHelper({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [result, setResult] = useState(null);
+  const [visualMatches, setVisualMatches] = useState([]);
 
   const candidates = useMemo(
     () =>
