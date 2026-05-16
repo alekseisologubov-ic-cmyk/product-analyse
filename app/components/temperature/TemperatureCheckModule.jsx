@@ -638,6 +638,114 @@ if (!response.ok) {
             )}
           </>
         )}
+            </section>
+
+      <section style={{ ...styles.card, maxWidth: 920, margin: "20px auto 0" }}>
+        <div
+          style={{
+            ...styles.header,
+            boxShadow: "none",
+            padding: 0,
+            marginBottom: showSavedPictures ? 16 : 0,
+          }}
+        >
+          <div>
+            <h2 style={styles.productTitle}>📸 Saved Temperature Pictures</h2>
+            <p style={{ ...styles.emptyText, margin: 0 }}>
+              {isAdmin
+                ? "Admin view: last 7 days from all ships."
+                : `Ship view: last 7 days for ${userShip || "selected ship"}.`}
+            </p>
+          </div>
+
+          <div style={styles.headerActions}>
+            <button
+              style={styles.backButton}
+              onClick={() => {
+                setShowSavedPictures((value) => !value);
+                loadSavedChecks();
+              }}
+              disabled={loadingSaved}
+            >
+              {loadingSaved
+                ? "Loading..."
+                : showSavedPictures
+                  ? "Hide Pictures"
+                  : `Open Pictures (${savedChecks.length})`}
+            </button>
+
+            {showSavedPictures && (
+              <button
+                style={styles.backButton}
+                onClick={loadSavedChecks}
+                disabled={loadingSaved}
+              >
+                🔄 Refresh
+              </button>
+            )}
+
+            {isAdmin && showSavedPictures && (
+              <button
+                style={styles.deleteButton}
+                onClick={resetSavedTemperaturePictures}
+                disabled={loadingSaved || !savedChecks.length}
+              >
+                🧹 Reset Saved Pictures
+              </button>
+            )}
+          </div>
+        </div>
+
+        {showSavedPictures && (
+          <>
+            {!savedChecks.length && (
+              <p style={styles.emptyText}>
+                No saved temperature pictures found for the last 7 days.
+              </p>
+            )}
+
+            {savedChecksByDate.map(([dateKey, items]) => (
+              <div key={dateKey} style={{ marginTop: 18 }}>
+                <h3 style={styles.sectionTitle}>📅 {dateKey}</h3>
+
+                <div style={styles.equipmentGrid}>
+                  {items.map((item) => (
+                    <div key={item.id} style={styles.equipmentCard}>
+                      {item.image_url ? (
+                        <img
+                          src={item.image_url}
+                          alt={item.product_name || "Temperature check"}
+                          loading="lazy"
+                          style={styles.equipmentImage}
+                        />
+                      ) : (
+                        <div style={styles.equipmentNoImage}>No image</div>
+                      )}
+
+                      <div style={styles.recipeName}>
+                        {item.product_name || "Unknown Product"}
+                      </div>
+
+                      <div style={styles.statusGood}>
+                        {item.temperature_value} {item.temperature_unit}
+                      </div>
+
+                      {isAdmin && (
+                        <div style={styles.recipeMeta}>
+                          Ship: {item.ship || "N/A"}
+                        </div>
+                      )}
+
+                      <div style={styles.recipeMeta}>
+                        Taken: {item.taken_at ? new Date(item.taken_at).toLocaleString() : "N/A"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
       </section>
     </main>
   );
