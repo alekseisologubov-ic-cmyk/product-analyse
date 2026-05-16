@@ -140,7 +140,11 @@ export default function TemperatureCheckModule({
     setAnalyzing(true);
 
     try {
-      const dataUrl = await fileToDataUrl(file);
+      const dataUrl = await resizeImageFileToDataUrl(file, {
+  maxWidth: 1280,
+  maxHeight: 1280,
+  quality: 0.72,
+});
       setPhotoDataUrl(dataUrl);
 
       const response = await fetch("/api/analyze-temperature", {
