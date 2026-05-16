@@ -6302,8 +6302,17 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
               style={styles.searchInput}
             />
 
-            <label style={styles.label}>Upload / Replace Shared Master Inventory List</label>
-            <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadMakeInventoryFile} style={styles.fileInput} />
+            {isAdmin && (
+  <>
+    <label style={styles.label}>Upload / Replace Shared Master Inventory List</label>
+    <input
+      type="file"
+      accept=".xlsx,.xls,.xlsm"
+      onChange={uploadMakeInventoryFile}
+      style={styles.fileInput}
+    />
+  </>
+)}
 
             {makeInventoryMessage && <p style={styles.message}>{makeInventoryMessage}</p>}
 
