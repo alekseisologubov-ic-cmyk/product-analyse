@@ -555,6 +555,17 @@ try {
                 <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
                 <div style={styles.recipeMeta}>Sheet: {item.sheetName || "N/A"}</div>
                 <div style={styles.recipeMeta}>Category: {item.category || "N/A"}</div>
+                {visualMatches.find((entry) => entry.item === item) && (
+  <div style={styles.statusGood}>
+    Picture similarity:{" "}
+    {Math.round(
+      Number(
+        visualMatches.find((entry) => entry.item === item)?.similarity || 0
+      ) * 100
+    )}
+    %
+  </div>
+)}
 
                 <button
                   style={styles.backButton}
