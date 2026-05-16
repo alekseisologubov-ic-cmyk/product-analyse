@@ -357,7 +357,7 @@ export default function InventoryAiHelper({
 
       {result && !matchedItem && (
         <div style={styles.warningText}>
-          Exact equipment was not found in the master list. Review possible matches below.
+          Equipment was not found as an exact match in the master list. Review possible uploaded-list matches below, or use the AI name to search manually.
         </div>
       )}
 
