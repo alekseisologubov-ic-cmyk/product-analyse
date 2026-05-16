@@ -414,37 +414,16 @@ try {
     errorText.toLowerCase().includes("rate limit") ||
     errorText.toLowerCase().includes("temporarily unavailable");
 
-  if (imageDataUrl) {
-    setMessage(
-      isAiUnavailable
-        ? "AI is unavailable. Searching master list by similar picture..."
-        : "AI could not identify this item. Searching master list by similar picture..."
-    );
-
-    const matches = await runVisualMasterListSearch(imageDataUrl);
-
-    if (matches.length) {
-      setMessage(
-        isAiUnavailable
-          ? "AI is unavailable. Similar master-list pictures found below."
-          : "Similar master-list pictures found below."
-      );
-    } else {
-      setMessage(
-        isAiUnavailable
-          ? "AI is unavailable and no similar picture was found. Type the equipment name manually to search the master list."
-          : `${errorText} No similar picture was found. Type the equipment name manually to search the master list.`
-      );
-    }
-
-    return;
-  }
+  setResult(null);
+  setVisualMatches([]);
+  setManualSearch("");
 
   setMessage(
     isAiUnavailable
-      ? "AI is unavailable. Type the equipment name manually to search the master list."
-      : `${errorText} Type the equipment name manually to search the master list.`
+      ? "AI is unavailable. Type equipment name below to search the uploaded master list."
+      : `${errorText} Type equipment name below to search the uploaded master list.`
   );
+}
 } finally {
       setBusy(false);
       event.target.value = "";
