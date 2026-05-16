@@ -5785,6 +5785,19 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
           <h2 style={styles.cardTitle}>🧭 Select Module</h2>
 
           <div style={styles.moduleGrid}>
+      {isAdmin && (
+  <button
+    style={styles.moduleCard}
+    onClick={() => {
+      setModule("admin");
+      logUsageEvent("module_opened", { module: "admin_dashboard", ship: userShip });
+    }}
+  >
+    <div style={styles.moduleIcon}>🛡️</div>
+    <strong>Admin Dashboard</strong>
+    <span>Usage, inventory status, logs, and admin tools</span>
+  </button>
+)}
             <button
               style={styles.moduleCard}
               onClick={() => {
