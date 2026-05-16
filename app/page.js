@@ -3889,6 +3889,101 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     });
   };
 
+    const normalizeEquipmentPictureCode = (value) =>
+    String(value || "")
+      .replace(/[^0-9]/g, "")
+      .replace(/^0+/, "");
+
+  const syncMasterInventoryPicturesFromDrive = async () => {
+    if (!isAdmin) {
+      setPictureLibraryMessage("Only admin can sync the picture library.");
+      return;
+    }
+
+    if (pictureLibraryBusy) return;
+
+    const sourceItems = makeInventoryItems.length ? makeInventoryItems : musterItems;
+
+    if (!sourceItems.length) {
+      const text = "No master inventory items found. Upload or refresh the master list first.";
+      setPictureLibraryMessage(text);
+      window.alert(text);
+      return;
+    }
+
+    setPictureLibraryBusy(true);
+    setPictureLibraryMessage("Loading Google Drive picture library...");
+
+    try {
+      const response = await fetch("/api/drive-picture-library");
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Could not load picture library.");
+      }
+
+      const pictureByNumber = new Map();
+
+      (data.files || []).forEach((file) => {
+        (file.numbers || []).forEach((number) => {
+          if (!pictureByNumber.has(number)) {
+            pictureByNumber.set(number, file);
+          }
+        });
+      });
+
+      let matchedCount = 0;
+      const unmatchedCodes = [];
+
+      const updatedItems = sourceItems.map((item) => {
+        const codeKey = normalizeEquipmentPictureCode(item.code);
+        const match = codeKey ? pictureByNumber.get(codeKey) : null;
+
+        if (!match) {
+          if (codeKey) unmatchedCodes.push(codeKey);
+          return item;
+        }
+
+        matchedCount += 1;
+
+        return {
+          ...item,
+          image: match.imageUrl,
+          pictureFileName: match.name,
+        };
+      });
+
+      setMakeInventoryItems(updatedItems);
+      setMusterItems(updatedItems);
+
+      if (matchedCount > 0) {
+        setPictureLibraryMessage(
+          `Matched ${matchedCount} picture(s). Saving updated master list...`
+        );
+
+        await saveMasterInventoryItems(null, updatedItems);
+      }
+
+      setPictureLibraryMessage(
+        `Picture library sync completed. ${data.count || 0} Drive image(s) found. ${matchedCount} item(s) matched by code. ${unmatchedCodes.length} item code(s) had no picture match.`
+      );
+
+      logUsageEvent("equipment_picture_library_synced", {
+        module: "make_inventory",
+        ship: makeInventoryShip || userShip,
+        equipmentDepartment,
+        driveFiles: data.count || 0,
+        matchedCount,
+        unmatchedCount: unmatchedCodes.length,
+      });
+    } catch (error) {
+      const text = error?.message || "Could not sync picture library.";
+      setPictureLibraryMessage(text);
+      window.alert(text);
+    } finally {
+      setPictureLibraryBusy(false);
+    }
+  };
   const uploadMakeInventoryFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
