@@ -2519,8 +2519,6 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
       );
     });
 
-    scheduleRealtimeRefresh("stationStatus", ship);
-
     return normalized;
   };
 
