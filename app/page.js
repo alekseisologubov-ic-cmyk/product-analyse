@@ -6589,6 +6589,18 @@ isAdmin={isAdmin}
       onChange={uploadMakeInventoryFile}
       style={styles.fileInput}
     />
+
+    <button
+      style={styles.backButton}
+      onClick={syncMasterInventoryPicturesFromDrive}
+      disabled={pictureLibraryBusy || masterInventoryLoading}
+    >
+      {pictureLibraryBusy ? "Syncing pictures..." : "🖼️ Sync Picture Library"}
+    </button>
+
+    {pictureLibraryMessage && (
+      <p style={styles.message}>{pictureLibraryMessage}</p>
+    )}
   </>
 )}
 
