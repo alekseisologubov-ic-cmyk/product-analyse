@@ -343,9 +343,10 @@ export default function InventoryAiHelper({
     }
 
     setBusy(true);
-    setResult(null);
-    setMessage("Reading equipment picture...");
-    setPreviewUrl(URL.createObjectURL(file));
+setResult(null);
+setVisualMatches([]);
+setMessage("Reading equipment picture...");
+setPreviewUrl(URL.createObjectURL(file));
 
     try {
       const imageDataUrl = await resizeImageFileToDataUrl(file, {
