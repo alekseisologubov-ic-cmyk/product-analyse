@@ -388,8 +388,47 @@ try {
       setResult(data.result || null);
       setMessage("AI helper finished. Confirm the match before counting.");
     } catch (error) {
-      setMessage(error?.message || "Could not identify equipment.");
-    } finally {
+  const errorText = error?.message || "Could not identify equipment.";
+
+  const isAiUnavailable =
+    errorText.toLowerCase().includes("quota") ||
+    errorText.toLowerCase().includes("billing") ||
+    errorText.toLowerCase().includes("exceeded") ||
+    errorText.toLowerCase().includes("rate limit") ||
+    errorText.toLowerCase().includes("temporarily unavailable");
+
+  if (imageDataUrl) {
+    setMessage(
+      isAiUnavailable
+        ? "AI is unavailable. Searching master list by similar picture..."
+        : "AI could not identify this item. Searching master list by similar picture..."
+    );
+
+    const matches = await runVisualMasterListSearch(imageDataUrl);
+
+    if (matches.length) {
+      setMessage(
+        isAiUnavailable
+          ? "AI is unavailable. Similar master-list pictures found below."
+          : "Similar master-list pictures found below."
+      );
+    } else {
+      setMessage(
+        isAiUnavailable
+          ? "AI is unavailable and no similar picture was found. Type the equipment name manually to search the master list."
+          : `${errorText} No similar picture was found. Type the equipment name manually to search the master list.`
+      );
+    }
+
+    return;
+  }
+
+  setMessage(
+    isAiUnavailable
+      ? "AI is unavailable. Type the equipment name manually to search the master list."
+      : `${errorText} Type the equipment name manually to search the master list.`
+  );
+} finally {
       setBusy(false);
       event.target.value = "";
     }
