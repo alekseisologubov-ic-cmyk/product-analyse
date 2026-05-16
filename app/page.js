@@ -6534,6 +6534,14 @@ isAdmin={isAdmin}
           </div>
         </section>
 
+              <InventoryAiHelper
+  styles={styles}
+  items={makeInventoryItems}
+  inventoryReady={inventoryReady}
+  currentStationSubmitted={currentStationSubmitted}
+  inventoryStation={inventoryStation}
+  onUseItem={selectInventoryItemForCounting}
+/>
                 <section style={styles.card}>
           <h2 style={styles.productTitle}>📦 Select Product for Inventory</h2>
 
