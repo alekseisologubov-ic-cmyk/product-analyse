@@ -193,7 +193,7 @@ if (!response.ok) {
 
       setMessage("Picture read. Confirm product and temperature before saving.");
     } catch (error) {
-      setMessage(error?.message || "Could not analyze photo. Enter product and temperature manually.");
+      setMessage(error?.message || "Could not read picture. Enter product and temperature manually.");
     } finally {
       setAnalyzing(false);
       event.target.value = "";
