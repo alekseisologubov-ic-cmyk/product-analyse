@@ -216,9 +216,8 @@ export default function InventoryAiHelper({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          imageDataUrl,
-          candidates,
-        }),
+  imageDataUrl,
+}),
       });
 
       const responseText = await response.text();
