@@ -75,13 +75,15 @@ export default function MakeInventoryTopBar({
             🔄 Refresh
           </button>
 
-          <button
-            style={styles.deleteButton}
-            onClick={resetInventoryRun}
-            disabled={inventoryLoading || reportBusy}
-          >
-            ♻️ Reset Inventory
-          </button>
+          {isAdmin && (
+  <button
+    style={styles.deleteButton}
+    onClick={resetInventoryRun}
+    disabled={inventoryLoading || reportBusy}
+  >
+    ♻️ Reset Inventory
+  </button>
+)}
 
           <button
             style={styles.backButton}
