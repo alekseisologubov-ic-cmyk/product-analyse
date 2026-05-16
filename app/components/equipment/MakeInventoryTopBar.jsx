@@ -114,22 +114,24 @@ export default function MakeInventoryTopBar({
 )}
 
           {inventoryReportMode === "summary" ? (
-            <button
-              style={styles.primaryButton}
-              onClick={generateFinalInventoryReport}
-              disabled={reportBusy || !allStationsSubmitted}
-            >
-              📥 Generate Final Report
-            </button>
-          ) : (
-            <button
-              style={styles.primaryButton}
-              onClick={exportInventorySummaryToExcel}
-              disabled={reportBusy}
-            >
-              📥 Export Excel
-            </button>
-          )}
+  isAdmin ? (
+    <button
+      style={styles.primaryButton}
+      onClick={generateFinalInventoryReport}
+      disabled={reportBusy || !allStationsSubmitted}
+    >
+      📥 Generate Final Report
+    </button>
+  ) : null
+) : (
+  <button
+    style={styles.primaryButton}
+    onClick={exportInventorySummaryToExcel}
+    disabled={reportBusy}
+  >
+    📥 Export Excel
+  </button>
+)}
         </div>
       </div>
 
