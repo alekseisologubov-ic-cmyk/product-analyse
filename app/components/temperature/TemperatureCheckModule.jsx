@@ -357,7 +357,7 @@ if (!response.ok) {
     }
   };
 
-  return (
+    return (
     <main style={styles.page}>
       <header style={styles.header}>
         <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
@@ -370,225 +370,96 @@ if (!response.ok) {
         </div>
       </header>
 
-      <section style={styles.grid}>
-        <div style={styles.card}>
-          <h2 style={styles.cardTitle}>🌡️ Take Temperature</h2>
-
-          <label style={styles.label}>Station / Location</label>
-          <input
-            placeholder="Example: Galley Freezer, Pink Agave, The Galley..."
-            value={station}
-            onChange={(event) => setStation(event.target.value)}
-            style={styles.searchInput}
-          />
-
-          <label style={styles.label}>Crew member name</label>
-          <input
-            placeholder="Type your name..."
-            value={userName}
-            onChange={(event) => setUserName(event.target.value)}
-            style={styles.searchInput}
-          />
-
-          <label style={styles.label}>Take photo / upload photo</label>
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handlePhotoSelected}
-            style={styles.fileInput}
-          />
-
-          {previewUrl && (
-            <div style={styles.infoBox}>
-              <img
-                src={previewUrl}
-                alt="Temperature check preview"
-                style={{
-                  width: "100%",
-                  maxHeight: 360,
-                  objectFit: "contain",
-                  borderRadius: 12,
-                  background: "#f2f2f2",
-                }}
-              />
-            </div>
-          )}
-
-          {message && (
-            <div style={styles.infoBox}>
-              {message}
-            </div>
-          )}
-
-          {analyzing && (
-            <div style={styles.warningText}>
-              AI is reading the product and thermometer display...
-            </div>
-          )}
-        </div>
-
-        <div style={styles.card}>
-          <h2 style={styles.cardTitle}>✅ Confirm Reading</h2>
-
-          <label style={styles.label}>Product identified</label>
-          <input
-            value={productName}
-            onChange={(event) => setProductName(event.target.value)}
-            placeholder="Example: Chicken Breast"
-            style={styles.searchInput}
-          />
-
-          <label style={styles.label}>Food category</label>
-          <input
-            value={foodCategory}
-            onChange={(event) => setFoodCategory(event.target.value)}
-            placeholder="Example: poultry"
-            style={styles.searchInput}
-          />
-
-          <div style={styles.formRow}>
-            <div>
-              <label style={styles.label}>Temperature</label>
-              <input
-                type="number"
-                value={temperatureValue}
-                onChange={(event) => setTemperatureValue(event.target.value)}
-                placeholder="Example: 38.5"
-                style={styles.searchInput}
-              />
-            </div>
-
-            <div>
-              <label style={styles.label}>Unit</label>
-              <select
-                value={temperatureUnit}
-                onChange={(event) => setTemperatureUnit(event.target.value)}
-                style={styles.select}
-              >
-                <option value="F">F</option>
-                <option value="C">C</option>
-                <option value="unknown">Unknown</option>
-              </select>
-            </div>
-          </div>
-
-          <label style={styles.label}>AI read text</label>
-          <input
-            value={temperatureText}
-            onChange={(event) => setTemperatureText(event.target.value)}
-            placeholder="Example: 38.5 F"
-            style={styles.searchInput}
-          />
-
-          <label style={styles.checkboxRow}>
-            <input
-              type="checkbox"
-              checked={readerVisible}
-              onChange={(event) => setReaderVisible(event.target.checked)}
-            />
-            <span>Thermometer reader is visible</span>
-          </label>
-
-          <label style={styles.checkboxRow}>
-            <input
-              type="checkbox"
-              checked={isChickenOrPoultry}
-              onChange={(event) => setIsChickenOrPoultry(event.target.checked)}
-            />
-            <span>Chicken / poultry item</span>
-          </label>
-
-          <label style={styles.label}>AI confidence</label>
-          <input
-            value={`${Math.round(Number(confidence || 0) * 100)}%`}
-            readOnly
-            style={styles.searchInput}
-          />
-
-          <label style={styles.label}>Notes</label>
-          <textarea
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            placeholder="Add notes or corrections..."
-            style={{
-              ...styles.searchInput,
-              minHeight: 90,
-              resize: "vertical",
-            }}
-          />
-
-          <div style={styles.warningText}>
-            Crew must verify the product and temperature before saving. Do not rely only on AI for food safety decisions.
-          </div>
-
-          <button
-            style={styles.primaryButton}
-            onClick={saveTemperatureCheck}
-            disabled={!canSave || analyzing || saving}
-          >
-            {saving ? "Saving..." : "💾 Save Temperature Check"}
-          </button>
-        </div>
-      </section>
-
       <section style={styles.card}>
-        <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 16 }}>
-          <h2 style={styles.productTitle}>📸 Pictures Taken</h2>
+        <h2 style={styles.productTitle}>🌡️ Take Temperature Picture</h2>
+        <p style={styles.emptyText}>
+          Take a picture, confirm product name and temperature, then save.
+        </p>
 
-          <div style={styles.headerActions}>
-            <input
-              type="date"
-              value={dateFilter}
-              onChange={(event) => setDateFilter(event.target.value)}
-              style={styles.searchInput}
+        <label style={styles.label}>Take picture / upload picture</label>
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handlePhotoSelected}
+          style={styles.fileInput}
+        />
+
+        {previewUrl && (
+          <div style={styles.infoBox}>
+            <img
+              src={previewUrl}
+              alt="Temperature check preview"
+              style={{
+                width: "100%",
+                maxHeight: 420,
+                objectFit: "contain",
+                borderRadius: 14,
+                background: "#f2f2f2",
+              }}
             />
-
-            <button style={styles.backButton} onClick={loadSavedChecks} disabled={loadingSaved}>
-              {loadingSaved ? "Loading..." : "🔄 Refresh"}
-            </button>
           </div>
-        </div>
-
-        {!savedChecks.length && (
-          <p style={styles.emptyText}>
-            No temperature photos saved for this date.
-          </p>
         )}
 
-        <div style={styles.equipmentGrid}>
-          {savedChecks.map((item) => (
-            <div key={item.id} style={styles.equipmentCard}>
-              {item.image_url ? (
-                <img
-                  src={item.image_url}
-                  alt={item.product_name || "Temperature check"}
-                  style={styles.equipmentImage}
-                />
-              ) : (
-                <div style={styles.equipmentNoImage}>No image</div>
-              )}
+        {analyzing && (
+          <div style={styles.warningText}>
+            Reading picture...
+          </div>
+        )}
 
-              <div style={styles.recipeName}>{item.product_name || "Unknown Product"}</div>
-              <div style={styles.recipeMeta}>
-                Temperature: {item.temperature_value} {item.temperature_unit}
-              </div>
-              <div style={styles.recipeMeta}>Station: {item.station || "N/A"}</div>
-              <div style={styles.recipeMeta}>User: {item.user_name || item.user_email || "N/A"}</div>
-              <div style={styles.recipeMeta}>
-                Taken: {item.taken_at ? new Date(item.taken_at).toLocaleString() : "N/A"}
-              </div>
+        {message && (
+          <div style={styles.infoBox}>
+            {message}
+          </div>
+        )}
 
-              {item.is_chicken_or_poultry && (
-                <div style={styles.statusWarning}>Chicken / Poultry</div>
-              )}
+        <div style={styles.formRow}>
+          <div>
+            <label style={styles.label}>Product name</label>
+            <input
+              value={productName}
+              onChange={(event) => setProductName(event.target.value)}
+              placeholder="Example: Chicken Breast"
+              style={styles.searchInput}
+            />
+          </div>
 
-              {item.notes && (
-                <div style={styles.infoBox}>{item.notes}</div>
-              )}
-            </div>
-          ))}
+          <div>
+            <label style={styles.label}>Temperature</label>
+            <input
+              type="number"
+              value={temperatureValue}
+              onChange={(event) => setTemperatureValue(event.target.value)}
+              placeholder="Example: 38.5"
+              style={styles.searchInput}
+            />
+          </div>
         </div>
+
+        <label style={styles.label}>Unit</label>
+        <select
+          value={temperatureUnit}
+          onChange={(event) => setTemperatureUnit(event.target.value)}
+          style={styles.select}
+        >
+          <option value="F">F</option>
+          <option value="C">C</option>
+          <option value="unknown">Unknown</option>
+        </select>
+
+        <button
+          style={styles.primaryButton}
+          onClick={saveTemperatureCheck}
+          disabled={!canSave || analyzing || saving}
+        >
+          {saving ? "Saving..." : "💾 Save Picture"}
+        </button>
+
+        {!canSave && (
+          <p style={styles.emptyText}>
+            Picture, product name, and temperature are required before saving.
+          </p>
+        )}
       </section>
     </main>
   );
