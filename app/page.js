@@ -5574,6 +5574,8 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
 
     return { totals, allShips };
   })();
+    const normalizedUserEmail = normalizeAppEmail(userEmail);
+  const isAdmin = isAdminEmail(normalizedUserEmail);
 
   if (!loggedIn && !welcomeStarted) {
     return (
