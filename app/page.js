@@ -5917,6 +5917,17 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     <span>Usage, inventory status, logs, and admin tools</span>
   </button>
 )}
+  <button
+  style={styles.moduleCard}
+  onClick={() => {
+    setModule("temperature");
+    logUsageEvent("module_opened", { module: "temperature_check", ship: userShip });
+  }}
+>
+  <div style={styles.moduleIcon}>🌡️</div>
+  <strong>Take Temperature</strong>
+  <span>Take food temperature photos, identify product and thermometer reading, and save by date.</span>
+</button>
             <button
               style={styles.moduleCard}
               onClick={() => {
