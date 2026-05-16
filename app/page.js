@@ -6556,25 +6556,7 @@ isAdmin={isAdmin}
   ...styles.inventoryItemCard,
   ...(alreadyCounted ? styles.countedCard : {}),
 }}
-                  onClick={() => {
-  setCurrentInventoryItem({
-    ...item,
-    itemKey,
-  });
-
-  setInventoryQty(countedRecord ? String(countedRecord.qty ?? "") : "");
-  setEditingInventoryId(countedRecord?.id || null);
-
-  if (!inventoryReady) {
-    setMakeInventoryMessage("Choose ship, station and user before confirming quantity.");
-  }
-
-  if (currentStationSubmitted) {
-    setMakeInventoryMessage(
-      `${inventoryStation} has already submitted count. You can view the item, but cannot update the count.`
-    );
-  }
-}}
+                  onClick={() => selectInventoryItemForCounting(item)}
                 >
                   {item.image ? (
   <div style={styles.inventoryImageFrame}>
