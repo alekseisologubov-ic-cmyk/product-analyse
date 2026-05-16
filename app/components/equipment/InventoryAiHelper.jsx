@@ -257,12 +257,18 @@ export default function InventoryAiHelper({
   }, [items, result]);
 
   const matchedItem = useMemo(() => {
-    const best = localMatchEntries[0];
+  const visualBest = visualMatches[0];
 
-    if (!best) return null;
+  if (visualBest?.item && Number(visualBest.similarity || 0) >= 0.82) {
+    return visualBest.item;
+  }
 
-    return best.score >= 25 ? best.item : null;
-  }, [localMatchEntries]);
+  const best = localMatchEntries[0];
+
+  if (!best) return null;
+
+  return best.score >= 25 ? best.item : null;
+}, [localMatchEntries, visualMatches]);
 
   const possibleMatches = useMemo(() => {
     const seen = new Set();
