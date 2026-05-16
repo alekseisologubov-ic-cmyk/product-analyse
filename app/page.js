@@ -2956,7 +2956,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
       );
   };
 
-  const confirmInventoryQty = async () => {
+   const confirmInventoryQty = async () => {
     if (saveBusyRef.current) return;
 
     if (!currentInventoryItem) {
@@ -2990,6 +2990,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     }
 
     const qty = Number(inventoryQty || 0);
+
     if (Number.isNaN(qty) || qty < 0) {
       const text = "Quantity must be a valid number.";
       setMakeInventoryMessage(text);
@@ -2997,122 +2998,166 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
       return;
     }
 
-    saveBusyRef.current = true;
-
-        const currentStationProgress = getCurrentStationProgress();
+    const currentStationProgress = getCurrentStationProgress();
 
     if (currentStationProgress?.status === "submitted") {
-  const text =
-    "This station has already submitted its inventory count. Reset inventory before starting a new count.";
-  setMakeInventoryMessage(text);
-  window.alert(text);
-  saveBusyRef.current = false;
-  return;
-}
-    
-    const itemKey = getInventoryItemKey(currentInventoryItem);
+      const text =
+        "This station has already submitted its inventory count. Reset inventory before starting a new count.";
+      setMakeInventoryMessage(text);
+      window.alert(text);
+      return;
+    }
 
-    const payload = {
+    saveBusyRef.current = true;
+
+    const itemSnapshot = { ...currentInventoryItem };
+    const qtySnapshot = String(qty);
+    const editingIdSnapshot = editingInventoryId;
+    const previousInventorySummary = inventorySummary;
+
+    const itemKey = getInventoryItemKey(itemSnapshot);
+    const now = new Date().toISOString();
+
+    const optimisticRecord = {
+      id: editingIdSnapshot || `optimistic-${ship}-${station}-${userName}-${itemKey}`,
       ship,
       station,
-      user_name: userName,
-      item_key: itemKey,
-      code: currentInventoryItem.code || "",
-      item_name: currentInventoryItem.name || "",
-      category: currentInventoryItem.category || "",
-      sheet_name: currentInventoryItem.sheetName || "",
-      image: currentInventoryItem.image || "",
+      userName,
+      itemKey,
+      code: itemSnapshot.code || "",
+      name: itemSnapshot.name || "",
+      category: itemSnapshot.category || "",
+      sheetName: itemSnapshot.sheetName || "",
+      image: itemSnapshot.image || "",
       qty,
-      updated_at: new Date().toISOString(),
+      confirmedAt: new Date(now).toLocaleString(),
+      updatedAt: now,
+      optimistic: true,
     };
 
-    setInventoryLoading(true);
-    setInventoryError("");
-    setMakeInventoryMessage("Saving inventory quantity...");
-
-    const { data: existingRows, error: findError } = await supabase
-      .from("inventory_counts")
-      .select("id")
-      .eq("ship", ship)
-      .eq("station", station)
-      .eq("user_name", userName)
-      .eq("item_key", itemKey)
-      .limit(1);
-
-    if (findError) {
-      const text = `Could not check existing inventory record: ${findError.message}`;
-      setInventoryError(text);
-      setMakeInventoryMessage(text);
-      setInventoryLoading(false);
-      saveBusyRef.current = false;
-      window.alert(text);
-      return;
-    }
-
-    const existingId = existingRows?.[0]?.id;
-    let saveResult;
-
-    if (existingId) {
-      saveResult = await supabase
-        .from("inventory_counts")
-        .update(payload)
-        .eq("id", existingId)
-        .select("*")
-        .single();
-    } else {
-      saveResult = await supabase
-        .from("inventory_counts")
-        .insert(payload)
-        .select("*")
-        .single();
-    }
-
-    if (saveResult.error) {
-      const text = `Could not save inventory: ${saveResult.error.message}`;
-      setInventoryError(text);
-      setMakeInventoryMessage(text);
-      setInventoryLoading(false);
-      saveBusyRef.current = false;
-      window.alert(text);
-      return;
-    }
-
-    const savedRecord = normalizeInventoryRecord(saveResult.data);
-
-        await upsertInventoryStationStatus("started");
-
     setInventorySummary((prev) => {
-      const withoutSavedRecord = prev.filter(
+      const withoutCurrent = prev.filter(
         (item) =>
-          item.id !== savedRecord.id &&
+          item.id !== optimisticRecord.id &&
           !(
-            item.ship === savedRecord.ship &&
-            item.station === savedRecord.station &&
-            item.userName === savedRecord.userName &&
-            item.itemKey === savedRecord.itemKey
+            item.ship === ship &&
+            item.station === station &&
+            item.userName === userName &&
+            item.itemKey === itemKey
           )
       );
 
-      return [savedRecord, ...withoutSavedRecord];
+      return [optimisticRecord, ...withoutCurrent];
     });
 
     setCurrentInventoryItem(null);
     setInventoryQty("");
     setEditingInventoryId(null);
-    setInventoryLoading(false);
-    saveBusyRef.current = false;
-    setMakeInventoryMessage(`Saved ${currentInventoryItem.name} / Qty ${formatQty(qty)}.`);
-    logUsageEvent("inventory_count_saved", {
-      module: "make_inventory",
-      ship,
-      station,
-      userName,
-      userPosition: inventoryUserPosition,
-      itemName: currentInventoryItem.name,
-      code: currentInventoryItem.code,
-      category: currentInventoryItem.category,
-      qty,
-    });
+    setMakeInventoryMessage(`Saved locally: ${itemSnapshot.name} / Qty ${formatQty(qty)}. Syncing...`);
+
+    try {
+      const payload = {
+        ship,
+        station,
+        user_name: userName,
+        item_key: itemKey,
+        code: itemSnapshot.code || "",
+        item_name: itemSnapshot.name || "",
+        category: itemSnapshot.category || "",
+        sheet_name: itemSnapshot.sheetName || "",
+        image: itemSnapshot.image || "",
+        qty,
+        updated_at: now,
+      };
+
+      const { data: existingRows, error: findError } = await supabase
+        .from("inventory_counts")
+        .select("id")
+        .eq("ship", ship)
+        .eq("station", station)
+        .eq("user_name", userName)
+        .eq("item_key", itemKey)
+        .limit(1);
+
+      if (findError) {
+        throw findError;
+      }
+
+      const existingId = existingRows?.[0]?.id;
+      let saveResult;
+
+      if (existingId) {
+        saveResult = await supabase
+          .from("inventory_counts")
+          .update(payload)
+          .eq("id", existingId)
+          .select("*")
+          .single();
+      } else {
+        saveResult = await supabase
+          .from("inventory_counts")
+          .insert(payload)
+          .select("*")
+          .single();
+      }
+
+      if (saveResult.error) {
+        throw saveResult.error;
+      }
+
+      const savedRecord = normalizeInventoryRecord(saveResult.data);
+
+      setInventorySummary((prev) => {
+        const withoutSavedRecord = prev.filter(
+          (item) =>
+            item.id !== optimisticRecord.id &&
+            item.id !== savedRecord.id &&
+            !(
+              item.ship === savedRecord.ship &&
+              item.station === savedRecord.station &&
+              item.userName === savedRecord.userName &&
+              item.itemKey === savedRecord.itemKey
+            )
+        );
+
+        return [savedRecord, ...withoutSavedRecord];
+      });
+
+      try {
+        await upsertInventoryStationStatus("started");
+      } catch (statusError) {
+        setMakeInventoryMessage(
+          `Saved ${itemSnapshot.name} / Qty ${formatQty(qty)}, but station status could not sync: ${statusError.message}`
+        );
+        return;
+      }
+
+      setMakeInventoryMessage(`Saved ${itemSnapshot.name} / Qty ${formatQty(qty)}.`);
+
+      logUsageEvent("inventory_count_saved", {
+        module: "make_inventory",
+        ship,
+        station,
+        userName,
+        userPosition: inventoryUserPosition,
+        itemName: itemSnapshot.name,
+        code: itemSnapshot.code,
+        category: itemSnapshot.category,
+        qty,
+      });
+    } catch (error) {
+      setInventorySummary(previousInventorySummary);
+      setCurrentInventoryItem(itemSnapshot);
+      setInventoryQty(qtySnapshot);
+      setEditingInventoryId(editingIdSnapshot);
+
+      const text = `Sync failed. Quantity was not saved: ${error.message}`;
+      setMakeInventoryMessage(text);
+      window.alert(text);
+    } finally {
+      setInventoryLoading(false);
+      saveBusyRef.current = false;
+    }
   };
 
   const editInventoryItem = (item) => {
