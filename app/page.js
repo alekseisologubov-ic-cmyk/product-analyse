@@ -6102,6 +6102,7 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
           supabase={supabase}
           userShip={userShip}
           userEmail={normalizeAppEmail(userEmail)}
+isAdmin={isAdmin}
           onBack={() => setModule("")}
           logUsageEvent={logUsageEvent}
         />
