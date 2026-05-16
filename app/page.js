@@ -6361,6 +6361,31 @@ isAdmin={isAdmin}
       ])
     );
 
+        const selectInventoryItemForCounting = (item) => {
+      const itemKey = getInventoryItemKey(item);
+      const countedRecord = countedRecordByKey.get(itemKey);
+
+      if (!inventoryReady) {
+        setMakeInventoryMessage("Choose ship, station and user before counting.");
+        return;
+      }
+
+      if (currentStationSubmitted) {
+        setMakeInventoryMessage(
+          `${inventoryStation} has already submitted count. Waiting for all stations before final report.`
+        );
+        return;
+      }
+
+      setCurrentInventoryItem({
+        ...item,
+        itemKey,
+      });
+
+      setInventoryQty(countedRecord ? String(countedRecord.qty ?? "") : "");
+      setEditingInventoryId(countedRecord?.id || null);
+      setMakeInventoryMessage(`AI helper selected: ${item.name}`);
+    };
     const sortedMakeInventoryItems = filteredMakeInventoryItems
       .map((item, index) => ({
         item,
