@@ -486,6 +486,19 @@ setMessage("AI identified the equipment. Master list search completed.");
       )}
 
       {message && <div style={busy ? styles.warningText : styles.infoBox}>{message}</div>}
+      <div style={styles.infoBox}>
+  <label style={styles.label}>Search uploaded equipment list</label>
+  <input
+    value={manualSearch}
+    onChange={(event) => {
+      setManualSearch(event.target.value);
+      setResult(null);
+      setVisualMatches([]);
+    }}
+    placeholder="Type equipment name or code..."
+    style={styles.searchInput}
+  />
+</div>
 
       {result && (
         <div style={styles.infoBox}>
