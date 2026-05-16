@@ -6536,7 +6536,7 @@ isAdmin={isAdmin}
 
               <InventoryAiHelper
   styles={styles}
-  items={makeInventoryItems}
+  items={makeInventoryItems.length ? makeInventoryItems : musterItems}
   inventoryReady={inventoryReady}
   currentStationSubmitted={currentStationSubmitted}
   inventoryStation={inventoryStation}
