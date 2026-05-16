@@ -17,6 +17,9 @@ const PeopleScheduleModule = lazy(loadPeopleScheduleModule);
 const GenerateNextOrder = lazy(() =>
   import("./components/product/GenerateNextOrder")
 );
+const TemperatureCheckModule = lazy(() =>
+  import("./components/temperature/TemperatureCheckModule")
+);
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
