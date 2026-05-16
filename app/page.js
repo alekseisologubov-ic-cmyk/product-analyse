@@ -3098,8 +3098,6 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
       return [savedRecord, ...withoutSavedRecord];
     });
 
-    scheduleRealtimeRefresh("counts", ship);
-
     setCurrentInventoryItem(null);
     setInventoryQty("");
     setEditingInventoryId(null);
