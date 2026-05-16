@@ -277,6 +277,60 @@ export default function InventoryAiHelper({
       })
       .slice(0, 6);
   }, [localMatchEntries]);
+  const runVisualMasterListSearch = async (imageDataUrl) => {
+  if (!imageDataUrl) return [];
+
+  const itemsWithImages = items
+    .map((item, index) => ({
+      item,
+      index,
+      imageUrl: getComparableImageUrl(item.image),
+    }))
+    .filter((entry) => entry.imageUrl);
+
+  if (!itemsWithImages.length) {
+    setVisualMatches([]);
+    return [];
+  }
+
+  try {
+    const sourceHash = await getImageHash(imageDataUrl);
+    const matches = [];
+
+    for (let index = 0; index < itemsWithImages.length; index += 1) {
+      if (index > 0 && index % 20 === 0) {
+        await waitForBrowser();
+      }
+
+      const entry = itemsWithImages[index];
+
+      try {
+        const candidateHash = await getImageHash(entry.imageUrl);
+        const similarity = getHashSimilarity(sourceHash, candidateHash);
+
+        if (similarity >= 0.62) {
+          matches.push({
+            item: entry.item,
+            similarity,
+          });
+        }
+      } catch {
+        // Some external image links cannot be compared because the browser blocks pixel access.
+      }
+    }
+
+    const sortedMatches = matches
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, 6);
+
+    setVisualMatches(sortedMatches);
+
+    return sortedMatches;
+  } catch {
+    setVisualMatches([]);
+    return [];
+  }
+};
   const handlePhotoSelected = async (event) => {
     const file = event.target.files?.[0];
 
