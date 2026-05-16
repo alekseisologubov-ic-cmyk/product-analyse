@@ -247,6 +247,93 @@ if (!response.ok) {
   loadSavedChecks();
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [userShip, isAdmin]);
+    const savedChecksByDate = useMemo(() => {
+    const grouped = {};
+
+    savedChecks.forEach((item) => {
+      const dateKey = item.taken_at
+        ? new Date(item.taken_at).toISOString().slice(0, 10)
+        : "Unknown Date";
+
+      if (!grouped[dateKey]) grouped[dateKey] = [];
+      grouped[dateKey].push(item);
+    });
+
+    return Object.entries(grouped).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [savedChecks]);
+
+  const resetSavedTemperaturePictures = async () => {
+    if (!isAdmin) return;
+
+    if (!supabase) {
+      window.alert("Supabase is not connected.");
+      return;
+    }
+
+    if (!savedChecks.length) {
+      window.alert("No saved temperature pictures to reset.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Reset ${savedChecks.length} saved temperature picture(s)?\n\nThis will delete the visible saved temperature records and photos.`
+    );
+
+    if (!confirmed) return;
+
+    const secondConfirm = window.confirm(
+      "Confirm again. This cannot be undone."
+    );
+
+    if (!secondConfirm) return;
+
+    setLoadingSaved(true);
+    setMessage("Resetting saved temperature pictures...");
+
+    try {
+      const imagePaths = savedChecks
+        .map((item) => item.image_path)
+        .filter(Boolean);
+
+      if (imagePaths.length) {
+        const { error: storageError } = await supabase.storage
+          .from(BUCKET_NAME)
+          .remove(imagePaths);
+
+        if (storageError) {
+          throw storageError;
+        }
+      }
+
+      const ids = savedChecks.map((item) => item.id).filter(Boolean);
+
+      if (ids.length) {
+        const { error: deleteError } = await supabase
+          .from("temperature_checks")
+          .delete()
+          .in("id", ids);
+
+        if (deleteError) {
+          throw deleteError;
+        }
+      }
+
+      setSavedChecks([]);
+      setMessage("Saved temperature pictures were reset.");
+
+      logUsageEvent("temperature_pictures_reset", {
+        module: "temperature_check",
+        ship: isAdmin ? "ALL" : userShip,
+        recordsDeleted: ids.length,
+      });
+    } catch (error) {
+      const text = error?.message || "Could not reset saved temperature pictures.";
+      setMessage(text);
+      window.alert(text);
+    } finally {
+      setLoadingSaved(false);
+    }
+  };
 
   const saveTemperatureCheck = async () => {
     if (!supabase) {
