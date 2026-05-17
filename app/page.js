@@ -6340,38 +6340,103 @@ isAdmin={isAdmin}
           <h2 style={styles.cardTitle}>{activeEquipmentDepartmentIcon} {activeEquipmentDepartmentLabel} Equipment Options</h2>
 
           <div style={styles.moduleGrid}>
-            <button
-              style={styles.moduleCard}
-              onClick={() => {
-                setEquipmentMode("muster");
-                logUsageEvent("equipment_option_opened", {
-                  module: `equipment_${equipmentDepartment}_muster`,
-                  equipmentDepartment,
-                  ship: userShip,
-                });
-              }}
-            >
-              <div style={styles.moduleIcon}>📋</div>
-              <strong>Equipment Muster List</strong>
-              <span>Grouped by all sheets and sub categories</span>
-            </button>
+  {equipmentDepartment === "culinary" && (
+    <button
+      style={styles.moduleCard}
+      onClick={() => {
+        setModule("product");
+        setProductMode("dashboard");
+        logUsageEvent("culinary_option_opened", {
+          module: "product_dashboard",
+          equipmentDepartment,
+          ship: userShip,
+        });
+      }}
+    >
+      <div style={styles.moduleIcon}>📊</div>
+      <strong>Product Dashboard</strong>
+      <span>Consumption, recipes, templates and product reports</span>
+    </button>
+  )}
 
-            <button
-              style={styles.moduleCard}
-              onClick={() => {
-                setEquipmentMode("inventory");
-                logUsageEvent("equipment_option_opened", {
-                  module: `equipment_${equipmentDepartment}_inventory`,
-                  equipmentDepartment,
-                  ship: userShip,
-                });
-              }}
-            >
-              <div style={styles.moduleIcon}>📊</div>
-              <strong>Equipment Inventory</strong>
-              <span>Inventory in use, warehouse stock and make inventory</span>
-            </button>
-          </div>
+  {(equipmentDepartment === "culinary" || equipmentDepartment === "bar") && (
+    <button
+      style={styles.moduleCard}
+      onClick={() => {
+        setModule("product");
+        setProductMode("nextorder");
+        setNextOrderRows([]);
+        setFmlMissingRows([]);
+        setFmlLowRows([]);
+        setNextOrderSearch("");
+        setFmlMissingSearch("");
+        setFmlLowSearch("");
+        setNextOrderFilter("all");
+        setNextOrderView("order");
+        setNextOrderMessage("");
+        logUsageEvent("department_option_opened", {
+          module: "generate_next_order",
+          equipmentDepartment,
+          ship: userShip,
+        });
+      }}
+    >
+      <div style={styles.moduleIcon}>🛒</div>
+      <strong>Generate Next Order</strong>
+      <span>Upload latest order file and calculate suggested next-order quantities</span>
+    </button>
+  )}
+
+  <button
+    style={styles.moduleCard}
+    onClick={() => {
+      setEquipmentMode("muster");
+      logUsageEvent("equipment_option_opened", {
+        module: `equipment_${equipmentDepartment}_muster`,
+        equipmentDepartment,
+        ship: userShip,
+      });
+    }}
+  >
+    <div style={styles.moduleIcon}>📋</div>
+    <strong>Equipment Muster List</strong>
+    <span>Grouped by sheets and sub categories</span>
+  </button>
+
+  <button
+    style={styles.moduleCard}
+    onClick={() => {
+      setEquipmentMode("inventory");
+      logUsageEvent("equipment_option_opened", {
+        module: `equipment_${equipmentDepartment}_inventory`,
+        equipmentDepartment,
+        ship: userShip,
+      });
+    }}
+  >
+    <div style={styles.moduleIcon}>📦</div>
+    <strong>Equipment Inventory</strong>
+    <span>Inventory in use, warehouse stock and make inventory</span>
+  </button>
+
+  {equipmentDepartment === "culinary" && (
+    <button
+      style={styles.moduleCard}
+      onClick={() => {
+        setModule("temperature");
+        logUsageEvent("module_opened", {
+          module: "temperature_check",
+          equipmentDepartment,
+          ship: userShip,
+        });
+      }}
+    >
+      <div style={styles.moduleIcon}>🌡️</div>
+      <strong>Take Temperature</strong>
+      <span>Take food temperature pictures and save by date</span>
+    </button>
+  )}
+</div>
         </section>
       </main>
     );
