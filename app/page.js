@@ -7618,7 +7618,21 @@ isAdmin={isAdmin}
       <header style={styles.header}>
         <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
         <div style={styles.headerActions}>
-          <button style={styles.backButton} onClick={() => setProductMode("")}>← Product Options</button>
+          <button
+  style={styles.backButton}
+  onClick={() => {
+    if (equipmentDepartment) {
+      setModule("equipment");
+      setEquipmentMode("");
+      setProductMode("");
+      return;
+    }
+
+    setProductMode("");
+  }}
+>
+  {equipmentDepartment ? `← ${activeEquipmentDepartmentLabel} Options` : "← Product Options"}
+</button>
           <div style={styles.shipBadge}>🚢 {userShip}</div>
         </div>
       </header>
