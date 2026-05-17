@@ -7514,13 +7514,37 @@ isAdmin={isAdmin}
           <div style={styles.card}>
             <h2 style={styles.cardTitle}>📤 Upload Equipment File</h2>
             <label style={styles.label}>Equipment Muster List file</label>
-            <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadMusterFile} style={styles.fileInput} />
+<input
+  type="file"
+  accept=".xlsx,.xls,.xlsm"
+  onChange={uploadMusterFile}
+  style={styles.fileInput}
+/>
 
-            <button style={styles.backButton} onClick={() => loadMasterInventoryItems(makeInventoryShip || userShip)}>
-              🔄 Refresh Shared Master List
-            </button>
+<button
+  style={styles.backButton}
+  onClick={() => loadMasterInventoryItems(makeInventoryShip || userShip)}
+>
+  🔄 Refresh Shared Master List
+</button>
 
-            {musterMessage && <p style={styles.message}>{musterMessage}</p>}
+{isAdmin && equipmentDepartment === "culinary" && (
+  <>
+    <button
+      style={styles.backButton}
+      onClick={syncMasterInventoryPicturesFromDrive}
+      disabled={pictureLibraryBusy || masterInventoryLoading}
+    >
+      {pictureLibraryBusy ? "Syncing pictures..." : "🖼️ Sync Picture Library"}
+    </button>
+
+    {pictureLibraryMessage && (
+      <p style={styles.message}>{pictureLibraryMessage}</p>
+    )}
+  </>
+)}
+
+{musterMessage && <p style={styles.message}>{musterMessage}</p>}
 
             <div style={styles.infoBox}>
               <div>📋 Items loaded: <strong>{totalItems}</strong></div>
