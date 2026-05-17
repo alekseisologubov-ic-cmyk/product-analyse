@@ -6185,7 +6185,16 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
         <GenerateNextOrder
           styles={styles}
           userShip={userShip}
-          onBack={() => setProductMode("")}
+          onBack={() => {
+  if (equipmentDepartment) {
+    setModule("equipment");
+    setEquipmentMode("");
+    setProductMode("");
+    return;
+  }
+
+  setProductMode("");
+}}
         />
       </Suspense>
     );
