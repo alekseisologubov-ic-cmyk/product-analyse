@@ -6002,72 +6002,80 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
           <h2 style={styles.cardTitle}>🧭 Select Module</h2>
 
           <div style={styles.moduleGrid}>
-      {isAdmin && (
+  {isAdmin && (
+    <button
+      style={styles.moduleCard}
+      onClick={() => {
+        setModule("admin");
+        logUsageEvent("module_opened", {
+          module: "admin_dashboard",
+          ship: userShip,
+        });
+      }}
+    >
+      <div style={styles.moduleIcon}>🛡️</div>
+      <strong>Admin Dashboard</strong>
+      <span>Usage, inventory status, logs, and admin tools</span>
+    </button>
+  )}
+
   <button
     style={styles.moduleCard}
     onClick={() => {
-      setModule("admin");
-      logUsageEvent("module_opened", { module: "admin_dashboard", ship: userShip });
+      setModule("equipment");
+      setEquipmentDepartment("culinary");
+      setEquipmentMode("");
+      setProductMode("");
+      logUsageEvent("department_opened", {
+        module: "department_culinary",
+        equipmentDepartment: "culinary",
+        ship: userShip,
+      });
     }}
   >
-    <div style={styles.moduleIcon}>🛡️</div>
-    <strong>Admin Dashboard</strong>
-    <span>Usage, inventory status, logs, and admin tools</span>
+    <div style={styles.moduleIcon}>👨‍🍳</div>
+    <strong>Culinary</strong>
+    <span>Product dashboard, next order, inventory, muster list and temperature checks</span>
   </button>
-)}
+
   <button
-  style={styles.moduleCard}
-  onClick={() => {
-    setModule("temperature");
-    logUsageEvent("module_opened", { module: "temperature_check", ship: userShip });
-  }}
->
-  <div style={styles.moduleIcon}>🌡️</div>
-  <strong>Take Temperature</strong>
-  <span>Take food temperature photos, identify product and thermometer reading, and save by date.</span>
-</button>
-            <button
-              style={styles.moduleCard}
-              onClick={() => {
-                setModule("product");
-                setProductMode("");
-                logUsageEvent("module_opened", { module: "product", ship: userShip });
-              }}
-            >
-              <div style={styles.moduleIcon}>📦</div>
-              <strong>Product Dashboard</strong>
-              <span>Consumption, recipes, templates, reports and next order</span>
-            </button>
+    style={styles.moduleCard}
+    onClick={() => {
+      setModule("equipment");
+      setEquipmentDepartment("bar");
+      setEquipmentMode("");
+      setProductMode("");
+      logUsageEvent("department_opened", {
+        module: "department_bar",
+        equipmentDepartment: "bar",
+        ship: userShip,
+      });
+    }}
+  >
+    <div style={styles.moduleIcon}>🍸</div>
+    <strong>Bar</strong>
+    <span>Generate next order, inventory and muster list for Bar equipment</span>
+  </button>
 
-            <button
-              style={styles.moduleCard}
-              onClick={() => {
-                setModule("equipment");
-                setEquipmentDepartment("");
-                setEquipmentMode("");
-                logUsageEvent("module_opened", { module: "equipment", ship: userShip });
-              }}
-            >
-              <div style={styles.moduleIcon}>🍽️</div>
-              <strong>Equipment</strong>
-              <span>Muster list and inventory tools</span>
-            </button>
-
-            <button
-              style={styles.moduleCard}
-              onMouseEnter={loadPeopleScheduleModule}
-              onFocus={loadPeopleScheduleModule}
-              onClick={() => {
-                loadPeopleScheduleModule();
-                setModule("people");
-                logUsageEvent("module_opened", { module: "people_schedule", ship: userShip });
-              }}
-            >
-              <div style={styles.moduleIcon}>👥</div>
-              <strong>People & Schedule</strong>
-              <span>Upload crew workbook and generate yearly contract rotations</span>
-            </button>
-          </div>
+  <button
+    style={styles.moduleCard}
+    onClick={() => {
+      setModule("equipment");
+      setEquipmentDepartment("restaurant");
+      setEquipmentMode("");
+      setProductMode("");
+      logUsageEvent("department_opened", {
+        module: "department_restaurant",
+        equipmentDepartment: "restaurant",
+        ship: userShip,
+      });
+    }}
+  >
+    <div style={styles.moduleIcon}>🍽️</div>
+    <strong>Restaurant</strong>
+    <span>Inventory and muster list for Restaurant equipment</span>
+  </button>
+</div>
         </section>
       </main>
     );
