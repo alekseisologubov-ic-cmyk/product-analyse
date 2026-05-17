@@ -6331,7 +6331,17 @@ isAdmin={isAdmin}
         <header style={styles.header}>
           <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
           <div style={styles.headerActions}>
-            <button style={styles.backButton} onClick={() => setEquipmentDepartment("")}>← Equipment Department</button>
+            <button
+  style={styles.backButton}
+  onClick={() => {
+    setModule("");
+    setEquipmentDepartment("");
+    setEquipmentMode("");
+    setProductMode("");
+  }}
+>
+  ← Modules
+</button>
             <div style={styles.shipBadge}>🚢 {userShip}</div>
           </div>
         </header>
