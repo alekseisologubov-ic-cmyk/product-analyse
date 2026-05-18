@@ -3986,8 +3986,11 @@ const getEquipmentPictureFromLibrary = (item) => {
   return codeKey ? drivePictureLibraryByCode[codeKey] || "" : "";
 };
 
+const getEquipmentFallbackImage = (item) =>
+  item?.imageFallback || getEquipmentPictureFromLibrary(item);
+
 const getEquipmentDisplayImage = (item) =>
-  item?.image || item?.imageFallback || getEquipmentPictureFromLibrary(item);
+  item?.image || getEquipmentFallbackImage(item);
   useEffect(() => {
   if (module !== "equipment") return;
   if (equipmentDepartment !== "culinary") return;
