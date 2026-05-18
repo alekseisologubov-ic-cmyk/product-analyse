@@ -6642,9 +6642,10 @@ isAdmin={isAdmin}
       }
 
       setCurrentInventoryItem({
-        ...item,
-        itemKey,
-      });
+  ...item,
+  image: getEquipmentDisplayImage(item),
+  itemKey,
+});
 
       setInventoryQty(countedRecord ? String(countedRecord.qty ?? "") : "");
       setEditingInventoryId(countedRecord?.id || null);
