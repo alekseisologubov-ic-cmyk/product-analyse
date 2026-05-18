@@ -7462,8 +7462,9 @@ isAdmin={isAdmin}
 
           <div style={styles.equipmentGrid}>
             {warehouseItems.map((item, i) => {
-              const overstockAmount = Number(item.onHand || 0) - Number(item.par || 0);
-              const isOverstock = overstockAmount > 10;
+  const displayImage = getEquipmentDisplayImage(item);
+  const overstockAmount = Number(item.onHand || 0) - Number(item.par || 0);
+  const isOverstock = overstockAmount > 10;
 
               return (
               <div
