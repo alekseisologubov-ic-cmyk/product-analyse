@@ -7473,7 +7473,7 @@ isAdmin={isAdmin}
                   ...(isOverstock ? styles.overstockCard : {}),
                 }}
               >
-                {item.image ? (
+                {displayImage ? (
                   <div>
                     <img
                       src={getImageUrl(item.image)}
