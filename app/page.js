@@ -7676,7 +7676,8 @@ isAdmin={isAdmin}
                     <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
                     <div style={styles.recipeMeta}>Category: {item.category}</div>
                   </button>
-                ))}
+                  );
+})}
               </div>
             </div>
             );
