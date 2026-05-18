@@ -19,6 +19,8 @@ const getDriveFileViewUrl = (fileId) =>
 
 const getDriveThumbnailUrl = (fileId, size = "w800") =>
   `https://drive.google.com/thumbnail?id=${fileId}&sz=${size}`;
+const getDriveProxyImageUrl = (fileId) =>
+  `/api/drive-image?fileId=${encodeURIComponent(fileId)}`;
 
 export async function GET(request) {
   try {
