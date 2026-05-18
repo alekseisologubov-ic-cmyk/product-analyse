@@ -7590,55 +7590,55 @@ isAdmin={isAdmin}
           </div>
 
           {selectedEquipment && (
-            <div style={styles.modalBackdrop} onClick={() => setSelectedEquipment(null)}>
-              <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
-                <button style={styles.closeButton} onClick={() => setSelectedEquipment(null)}>✕</button>
+  <div style={styles.modalBackdrop} onClick={() => setSelectedEquipment(null)}>
+    <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+      <button style={styles.closeButton} onClick={() => setSelectedEquipment(null)}>
+        ✕
+      </button>
 
-                <h2>{selectedEquipment.name}</h2>
-                <p><strong>Code:</strong> {selectedEquipment.code || "N/A"}</p>
-                <p><strong>Sheet:</strong> {selectedEquipment.sheetName || "N/A"}</p>
-                <p><strong>Category:</strong> {selectedEquipment.category || "N/A"}</p>
+      <h2>{selectedEquipment.name}</h2>
+      <p><strong>Code:</strong> {selectedEquipment.code || "N/A"}</p>
+      <p><strong>Sheet:</strong> {selectedEquipment.sheetName || "N/A"}</p>
+      <p><strong>Category:</strong> {selectedEquipment.category || "N/A"}</p>
 
-                {selectedEquipment.image ? (
-                  <div>
-                    {selectedEquipment.image || selectedEquipment.imageFallback ? (
-  <div>
-    <img
-      src={getImageUrl(selectedEquipment.image || selectedEquipment.imageFallback)}
-      alt={selectedEquipment.name}
-      style={styles.modalImage}
-      onError={(e) => {
-        const fallbackSrc = selectedEquipment.imageFallback
-          ? getImageUrl(selectedEquipment.imageFallback)
-          : "";
+      {selectedEquipment.image || selectedEquipment.imageFallback ? (
+        <div>
+          <img
+            src={getImageUrl(selectedEquipment.image || selectedEquipment.imageFallback)}
+            alt={selectedEquipment.name}
+            style={styles.modalImage}
+            onError={(e) => {
+              const fallbackSrc = selectedEquipment.imageFallback
+                ? getImageUrl(selectedEquipment.imageFallback)
+                : "";
 
-        if (fallbackSrc && e.currentTarget.dataset.usedFallback !== "true") {
-          e.currentTarget.dataset.usedFallback = "true";
-          e.currentTarget.src = fallbackSrc;
-          return;
-        }
+              if (fallbackSrc && e.currentTarget.dataset.usedFallback !== "true") {
+                e.currentTarget.dataset.usedFallback = "true";
+                e.currentTarget.src = fallbackSrc;
+                return;
+              }
 
-        e.currentTarget.style.display = "none";
-        const link = e.currentTarget.nextElementSibling;
-        if (link) link.style.display = "block";
-      }}
-    />
+              e.currentTarget.style.display = "none";
+              const link = e.currentTarget.nextElementSibling;
+              if (link) link.style.display = "block";
+            }}
+          />
 
-    <a
-      href={selectedEquipment.imageFallback || selectedEquipment.image}
-      target="_blank"
-      rel="noreferrer"
-      style={{ ...styles.imageLink, display: "block" }}
-    >
-      Open Picture
-    </a>
+          <a
+            href={selectedEquipment.imageFallback || selectedEquipment.image}
+            target="_blank"
+            rel="noreferrer"
+            style={{ ...styles.imageLink, display: "block" }}
+          >
+            Open Picture
+          </a>
+        </div>
+      ) : (
+        <div style={styles.equipmentNoImage}>No image</div>
+      )}
+    </div>
   </div>
-) : (
-  <div style={styles.equipmentNoImage}>No image</div>
 )}
-              </div>
-            </div>
-          )}
         </section>
       </main>
     );
