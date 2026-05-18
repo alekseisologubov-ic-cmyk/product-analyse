@@ -6906,7 +6906,8 @@ isAdmin={isAdmin}
   const fallback = e.currentTarget.nextElementSibling;
   if (fallback) fallback.style.display = "flex";
 }}
-
+/>
+  
     <div style={{ ...styles.inventoryNoImage, display: "none" }}>
       No image
     </div>
