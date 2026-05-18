@@ -3953,6 +3953,14 @@ const getEquipmentPictureFromLibrary = (item) => {
 
 const getEquipmentDisplayImage = (item) =>
   item?.image || getEquipmentPictureFromLibrary(item);
+  useEffect(() => {
+  if (module !== "equipment") return;
+  if (equipmentDepartment !== "culinary") return;
+  if (equipmentMode !== "muster" && equipmentMode !== "makeinventory") return;
+
+  loadDrivePictureLibrary({ silent: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [module, equipmentDepartment, equipmentMode]);
   const syncMasterInventoryPicturesFromDrive = async () => {
     if (!isAdmin) {
       setPictureLibraryMessage("Only admin can sync the picture library.");
