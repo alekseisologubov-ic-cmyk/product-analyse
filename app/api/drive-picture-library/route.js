@@ -5,15 +5,20 @@ const DEFAULT_FOLDER_ID = "19RH3TcKSZbMpQCh1DkGWa5Zl8e0nILs_";
 const getNumbersFromText = (value) => {
   const matches = String(value || "").match(/\d{4,}/g) || [];
 
-  return [...new Set(
-    matches
-      .map((item) => item.replace(/^0+/, "") || "0")
-      .filter(Boolean)
-  )];
+  return [
+    ...new Set(
+      matches
+        .map((item) => item.replace(/^0+/, "") || "0")
+        .filter(Boolean)
+    ),
+  ];
 };
 
 const getDriveFileViewUrl = (fileId) =>
   `https://drive.google.com/file/d/${fileId}/view`;
+
+const getDriveThumbnailUrl = (fileId, size = "w800") =>
+  `https://drive.google.com/thumbnail?id=${fileId}&sz=${size}`;
 
 export async function GET(request) {
   try {
@@ -27,6 +32,7 @@ export async function GET(request) {
     }
 
     const requestUrl = new URL(request.url);
+
     const folderId =
       requestUrl.searchParams.get("folderId") ||
       process.env.GOOGLE_DRIVE_EQUIPMENT_FOLDER_ID ||
@@ -73,7 +79,8 @@ export async function GET(request) {
           mimeType: file.mimeType || "",
           modifiedTime: file.modifiedTime || "",
           numbers: getNumbersFromText(file.name),
-          imageUrl: getDriveFileViewUrl(file.id),
+          thumbnailUrl: getDriveThumbnailUrl(file.id, "w800"),
+          imageUrl: getDriveThumbnailUrl(file.id, "w800"),
           webViewLink: file.webViewLink || getDriveFileViewUrl(file.id),
         });
       });
