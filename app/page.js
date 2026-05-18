@@ -3911,6 +3911,21 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     if (!response.ok) {
       throw new Error(data?.error || "Could not load picture folder.");
     }
+    const liveByCode = {};
+
+(data.files || []).forEach((file) => {
+  (file.numbers || []).forEach((number) => {
+    if (!liveByCode[number]) {
+      liveByCode[number] =
+        file.thumbnailUrl ||
+        file.imageUrl ||
+        file.webViewLink ||
+        "";
+    }
+  });
+});
+
+setDrivePictureLibraryByCode(liveByCode);
 
     const byCode = {};
 
