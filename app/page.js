@@ -6887,12 +6887,25 @@ isAdmin={isAdmin}
   loading="lazy"
   decoding="async"
   style={styles.inventoryCardImage}
-      onError={(e) => {
-        e.currentTarget.style.display = "none";
-        const fallback = e.currentTarget.nextElementSibling;
-        if (fallback) fallback.style.display = "flex";
-      }}
-    />
+  data-fallback-src={
+    fallbackImage && fallbackImage !== displayImage
+      ? getImageUrl(fallbackImage, "w360")
+      : ""
+  }
+  onError={(e) => {
+    const fallbackSrc = e.currentTarget.dataset.fallbackSrc;
+
+    if (fallbackSrc && e.currentTarget.dataset.usedFallback !== "true") {
+      e.currentTarget.dataset.usedFallback = "true";
+      e.currentTarget.src = fallbackSrc;
+      return;
+    }
+
+    e.currentTarget.style.display = "none";
+    const fallback = e.currentTarget.nextElementSibling;
+    if (fallback) fallback.style.display = "flex";
+  }}
+/>
 
     <div style={{ ...styles.inventoryNoImage, display: "none" }}>
       No image
