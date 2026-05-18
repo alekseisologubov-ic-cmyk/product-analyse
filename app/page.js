@@ -6832,6 +6832,7 @@ isAdmin={isAdmin}
               const itemKey = getInventoryItemKey(item);
               const alreadyCounted = countedKeysForMe.has(itemKey);
               const countedRecord = countedRecordByKey.get(itemKey);
+              const displayImage = getEquipmentDisplayImage(item);
 
               return (
                 <button
