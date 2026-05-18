@@ -7680,7 +7680,6 @@ isAdmin={isAdmin}
 })}
               </div>
             </div>
-            );
 })}
 
           {selectedEquipment && (
