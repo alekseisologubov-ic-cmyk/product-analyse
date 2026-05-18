@@ -4015,7 +4015,7 @@ const getEquipmentDisplayImage = (item) =>
 
         return {
           ...item,
-          image: match.imageUrl,
+          image: match.thumbnailUrl || match.imageUrl || match.webViewLink || "",
           pictureFileName: match.name,
         };
       });
