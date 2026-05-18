@@ -1869,8 +1869,22 @@ items.push({
         const unit = String(row[2] || "").trim();
 
         const imageFromCell = String(row[3] || "").trim();
-        const imageFromEmbeddedPicture = imageMap["D" + sourceRow] || "";
-        const image = imageFromCell || imageFromEmbeddedPicture;
+const imageFromEmbeddedPicture = imageMap["D" + sourceRow] || "";
+
+const imageFromColumnI = String(row[8] || "").trim();
+const imageFromEmbeddedColumnI = imageMap["I" + sourceRow] || "";
+
+const imageCandidates = [
+  imageFromColumnI,
+  imageFromEmbeddedColumnI,
+  imageFromCell,
+  imageFromEmbeddedPicture,
+]
+  .map((value) => String(value || "").trim())
+  .filter((value) => isUsableImageValue(value));
+
+const image = imageCandidates[0] || "";
+const imageFallback = imageCandidates.find((value) => value !== image) || "";
 
         return {
           equipmentDepartment: "bar",
