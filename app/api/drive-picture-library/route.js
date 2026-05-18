@@ -76,15 +76,16 @@ export async function GET(request) {
 
       (data.files || []).forEach((file) => {
         files.push({
-          id: file.id,
-          name: file.name || "",
-          mimeType: file.mimeType || "",
-          modifiedTime: file.modifiedTime || "",
-          numbers: getNumbersFromText(file.name),
-          thumbnailUrl: getDriveThumbnailUrl(file.id, "w800"),
-          imageUrl: getDriveThumbnailUrl(file.id, "w800"),
-          webViewLink: file.webViewLink || getDriveFileViewUrl(file.id),
-        });
+  id: file.id,
+  name: file.name || "",
+  mimeType: file.mimeType || "",
+  modifiedTime: file.modifiedTime || "",
+  numbers: getNumbersFromText(file.name),
+  thumbnailUrl: getDriveProxyImageUrl(file.id),
+  imageUrl: getDriveProxyImageUrl(file.id),
+  driveThumbnailUrl: getDriveThumbnailUrl(file.id, "w800"),
+  webViewLink: file.webViewLink || getDriveFileViewUrl(file.id),
+});
       });
 
       pageToken = data.nextPageToken || "";
