@@ -7644,7 +7644,10 @@ isAdmin={isAdmin}
               <h3 style={styles.sectionTitle}>🗂️ {category}</h3>
 
               <div style={styles.equipmentGrid}>
-                {items.map((item, index) => (
+                {items.map((item, index) => {
+  const displayImage = getEquipmentDisplayImage(item);
+
+  return (
                   <button
                     key={`${item.sheetName}-${item.code}-${index}`}
                     style={styles.equipmentCard}
