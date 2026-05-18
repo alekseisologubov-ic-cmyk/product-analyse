@@ -6894,19 +6894,18 @@ isAdmin={isAdmin}
       : ""
   }
   onError={(e) => {
-    const fallbackSrc = e.currentTarget.dataset.fallbackSrc;
+  const fallbackSrc = e.currentTarget.dataset.fallbackSrc;
 
-    if (fallbackSrc && e.currentTarget.dataset.usedFallback !== "true") {
-      e.currentTarget.dataset.usedFallback = "true";
-      e.currentTarget.src = fallbackSrc;
-      return;
-    }
+  if (fallbackSrc && e.currentTarget.dataset.usedFallback !== "true") {
+    e.currentTarget.dataset.usedFallback = "true";
+    e.currentTarget.src = fallbackSrc;
+    return;
+  }
 
-    e.currentTarget.style.display = "none";
-    const fallback = e.currentTarget.nextElementSibling;
-    if (fallback) fallback.style.display = "flex";
-  }}
-/>
+  e.currentTarget.style.display = "none";
+  const fallback = e.currentTarget.nextElementSibling;
+  if (fallback) fallback.style.display = "flex";
+}}
 
     <div style={{ ...styles.inventoryNoImage, display: "none" }}>
       No image
