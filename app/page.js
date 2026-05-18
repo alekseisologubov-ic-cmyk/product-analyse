@@ -3899,6 +3899,60 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
   return match ? match[0].replace(/^0+/, "") : "";
 };
 
+  const loadDrivePictureLibrary = async ({ silent = false } = {}) => {
+  try {
+    if (!silent) {
+      setPictureLibraryMessage("Loading picture folder...");
+    }
+
+    const response = await fetch("/api/drive-picture-library");
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.error || "Could not load picture folder.");
+    }
+
+    const byCode = {};
+
+    (data.files || []).forEach((file) => {
+      (file.numbers || []).forEach((number) => {
+        if (!byCode[number]) {
+          byCode[number] =
+            file.thumbnailUrl ||
+            file.imageUrl ||
+            file.webViewLink ||
+            "";
+        }
+      });
+    });
+
+    setDrivePictureLibraryByCode(byCode);
+
+    if (!silent) {
+      setPictureLibraryMessage(
+        `Picture folder loaded. ${data.count || 0} Drive image(s) found.`
+      );
+    }
+
+    return byCode;
+  } catch (error) {
+    if (!silent) {
+      const text = error?.message || "Could not load picture folder.";
+      setPictureLibraryMessage(text);
+      window.alert(text);
+    }
+
+    return {};
+  }
+};
+
+const getEquipmentPictureFromLibrary = (item) => {
+  const codeKey = normalizeEquipmentPictureCode(item?.code);
+  return codeKey ? drivePictureLibraryByCode[codeKey] || "" : "";
+};
+
+const getEquipmentDisplayImage = (item) =>
+  item?.image || getEquipmentPictureFromLibrary(item);
   const syncMasterInventoryPicturesFromDrive = async () => {
     if (!isAdmin) {
       setPictureLibraryMessage("Only admin can sync the picture library.");
