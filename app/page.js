@@ -7504,7 +7504,7 @@ isAdmin={isAdmin}
                     >
                       View Picture
                     </button>
-                    <a href={item.image} target="_blank" rel="noreferrer" style={styles.imageLink}>Open Picture</a>
+                    <a href={displayImage} target="_blank" rel="noreferrer" style={styles.imageLink}>Open Picture</a>
                   </div>
                 ) : (
                   <div style={styles.equipmentNoImage}>No image matched</div>
