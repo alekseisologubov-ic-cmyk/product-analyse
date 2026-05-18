@@ -3987,7 +3987,7 @@ const getEquipmentPictureFromLibrary = (item) => {
 };
 
 const getEquipmentDisplayImage = (item) =>
-  item?.image || getEquipmentPictureFromLibrary(item);
+  item?.image || item?.imageFallback || getEquipmentPictureFromLibrary(item);
   useEffect(() => {
   if (module !== "equipment") return;
   if (equipmentDepartment !== "culinary") return;
