@@ -6881,7 +6881,13 @@ isAdmin={isAdmin}
   ...styles.inventoryItemCard,
   ...(alreadyCounted ? styles.countedCard : {}),
 }}
-                  onClick={() => selectInventoryItemForCounting({ ...item, image: displayImage })}
+                  onClick={() =>
+  selectInventoryItemForCounting({
+    ...item,
+    image: displayImage,
+    imageFallback: fallbackImage,
+  })
+}
                 >
                   {displayImage ? (
   <div style={styles.inventoryImageFrame}>
