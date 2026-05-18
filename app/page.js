@@ -574,6 +574,7 @@ export default function App() {
 const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = useState("");
     const [pictureLibraryBusy, setPictureLibraryBusy] = useState(false);
   const [pictureLibraryMessage, setPictureLibraryMessage] = useState("");
+  const [drivePictureLibraryByCode, setDrivePictureLibraryByCode] = useState({});
 
   const realtimeRefreshTimersRef = useRef({});
   const printBusyRef = useRef(false);
