@@ -7679,7 +7679,8 @@ isAdmin={isAdmin}
                 ))}
               </div>
             </div>
-          ))}
+            );
+})}
 
           {selectedEquipment && (
             <div style={styles.modalBackdrop} onClick={() => setSelectedEquipment(null)}>
