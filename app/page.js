@@ -6831,6 +6831,7 @@ isAdmin={isAdmin}
               <div>📍 {equipmentDepartment === "bar" ? "Bar" : "Station"}: <strong>{inventoryStation || "Not selected"}</strong></div>
               <div>👤 User: <strong>{userName || "Not selected"}</strong></div>
               <div>📋 Shared master items: <strong>{makeInventoryItems.length}</strong></div>
+              <div>🖼️ Drive pictures loaded: <strong>{Object.keys(drivePictureLibraryByCode).length}</strong></div>
               <div>📂 Master source: <strong>{masterInventorySource || "Not loaded"}</strong></div>
               {masterInventoryLoading && <div>Loading shared master inventory...</div>}
               <div>✅ My counted items: <strong>{myReportRows.length}</strong></div>
