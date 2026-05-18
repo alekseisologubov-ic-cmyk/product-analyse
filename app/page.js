@@ -3986,11 +3986,25 @@ const getEquipmentPictureFromLibrary = (item) => {
   return codeKey ? drivePictureLibraryByCode[codeKey] || "" : "";
 };
 
-const getEquipmentFallbackImage = (item) =>
-  item?.imageFallback || getEquipmentPictureFromLibrary(item);
-
 const getEquipmentDisplayImage = (item) =>
-  item?.image || getEquipmentFallbackImage(item);
+  getEquipmentPictureFromLibrary(item) ||
+  item?.imageFallback ||
+  item?.image ||
+  "";
+
+const getEquipmentFallbackImage = (item) => {
+  const driveImage = getEquipmentPictureFromLibrary(item);
+
+  if (item?.imageFallback && item.imageFallback !== driveImage) {
+    return item.imageFallback;
+  }
+
+  if (item?.image && item.image !== driveImage) {
+    return item.image;
+  }
+
+  return "";
+};
   useEffect(() => {
   if (module !== "equipment") return;
   if (equipmentDepartment !== "culinary") return;
