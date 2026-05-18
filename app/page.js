@@ -6872,7 +6872,7 @@ isAdmin={isAdmin}
               const alreadyCounted = countedKeysForMe.has(itemKey);
               const countedRecord = countedRecordByKey.get(itemKey);
               const displayImage = getEquipmentDisplayImage(item);
-              const fallbackImage = item.imageFallback || getEquipmentPictureFromLibrary(item);
+              const fallbackImage = getEquipmentFallbackImage(item);
 
               return (
                 <button
