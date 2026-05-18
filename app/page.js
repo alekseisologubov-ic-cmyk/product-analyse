@@ -7501,7 +7501,7 @@ isAdmin={isAdmin}
                         code: item.code,
                         category: item.masterCategory || "Warehouse Item",
                         sheetName: item.masterSheetName || "Warehouse",
-                        image: item.image,
+                        image: displayImage,
                       })}
                       onError={(e) => {
                         e.currentTarget.style.display = "none";
@@ -7516,7 +7516,7 @@ isAdmin={isAdmin}
                         code: item.code,
                         category: item.masterCategory || "Warehouse Item",
                         sheetName: item.masterSheetName || "Warehouse",
-                        image: item.image,
+                        image: displayImage,
                       })}
                     >
                       View Picture
