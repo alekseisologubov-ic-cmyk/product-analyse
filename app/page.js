@@ -7476,7 +7476,7 @@ isAdmin={isAdmin}
                 {displayImage ? (
                   <div>
                     <img
-                      src={getImageUrl(item.image)}
+                      src={getImageUrl(displayImage)}
                       alt={item.name}
                       style={styles.equipmentImage}
                       onClick={() => setSelectedEquipment({
