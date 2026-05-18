@@ -3890,10 +3890,14 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     });
   };
 
-    const normalizeEquipmentPictureCode = (value) =>
-    String(value || "")
-      .replace(/[^0-9]/g, "")
-      .replace(/^0+/, "");
+    const normalizeEquipmentPictureCode = (value) => {
+  const text = String(value || "")
+    .trim()
+    .replace(/\.0+$/g, "");
+
+  const match = text.match(/\d{4,}/);
+  return match ? match[0].replace(/^0+/, "") : "";
+};
 
   const syncMasterInventoryPicturesFromDrive = async () => {
     if (!isAdmin) {
