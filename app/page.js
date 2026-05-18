@@ -6846,7 +6846,7 @@ isAdmin={isAdmin}
                   {displayImage ? (
   <div style={styles.inventoryImageFrame}>
     <img
-  src={getImageUrl(item.image, "w360")}
+  src={getImageUrl(displayImage, "w360")}
   alt={item.name}
   loading="lazy"
   decoding="async"
