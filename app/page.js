@@ -7601,21 +7601,41 @@ isAdmin={isAdmin}
 
                 {selectedEquipment.image ? (
                   <div>
-                    <img
-                      src={getImageUrl(selectedEquipment.image)}
-                      alt={selectedEquipment.name}
-                      style={styles.modalImage}
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                        const link = e.currentTarget.nextElementSibling;
-                        if (link) link.style.display = "block";
-                      }}
-                    />
-                    <a href={selectedEquipment.image} target="_blank" rel="noreferrer" style={{ ...styles.imageLink, display: "block" }}>Open Picture</a>
-                  </div>
-                ) : (
-                  <div style={styles.equipmentNoImage}>No image</div>
-                )}
+                    {selectedEquipment.image || selectedEquipment.imageFallback ? (
+  <div>
+    <img
+      src={getImageUrl(selectedEquipment.image || selectedEquipment.imageFallback)}
+      alt={selectedEquipment.name}
+      style={styles.modalImage}
+      onError={(e) => {
+        const fallbackSrc = selectedEquipment.imageFallback
+          ? getImageUrl(selectedEquipment.imageFallback)
+          : "";
+
+        if (fallbackSrc && e.currentTarget.dataset.usedFallback !== "true") {
+          e.currentTarget.dataset.usedFallback = "true";
+          e.currentTarget.src = fallbackSrc;
+          return;
+        }
+
+        e.currentTarget.style.display = "none";
+        const link = e.currentTarget.nextElementSibling;
+        if (link) link.style.display = "block";
+      }}
+    />
+
+    <a
+      href={selectedEquipment.imageFallback || selectedEquipment.image}
+      target="_blank"
+      rel="noreferrer"
+      style={{ ...styles.imageLink, display: "block" }}
+    >
+      Open Picture
+    </a>
+  </div>
+) : (
+  <div style={styles.equipmentNoImage}>No image</div>
+)}
               </div>
             </div>
           )}
