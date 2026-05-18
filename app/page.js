@@ -1620,21 +1620,27 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
           ? imageMap[`${detectedImageColumnLetter}${sourceRow}`] || ""
           : "";
 
-      const image = getUsableImageValue(
+      const imageCandidates = [
   imageFromColumnI,
-  imageFromDetectedPhotoColumn,
   embeddedImageFromColumnI,
-  embeddedImageFromDetectedPhotoColumn
-);
+  imageFromDetectedPhotoColumn,
+  embeddedImageFromDetectedPhotoColumn,
+]
+  .map((value) => String(value || "").trim())
+  .filter((value) => isUsableImageValue(value));
 
-      items.push({
-        sheetName,
-        category,
-        code,
-        name,
-        image,
-        sourceRow,
-      });
+const image = imageCandidates[0] || "";
+const imageFallback = imageCandidates.find((value) => value !== image) || "";
+
+items.push({
+  sheetName,
+  category,
+  code,
+  name,
+  image,
+  imageFallback,
+  sourceRow,
+});
     });
   });
 
