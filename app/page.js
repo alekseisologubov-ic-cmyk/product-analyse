@@ -7654,7 +7654,7 @@ isAdmin={isAdmin}
                     style={styles.equipmentCard}
                     onClick={() => setSelectedEquipment({ ...item, image: displayImage })}
                   >
-                    {item.image ? (
+                    {displayImage ? (
                       <div>
                         <img
                           src={getImageUrl(item.image)}
