@@ -6843,7 +6843,7 @@ isAdmin={isAdmin}
 }}
                   onClick={() => selectInventoryItemForCounting(item)}
                 >
-                  {item.image ? (
+                  {displayImage ? (
   <div style={styles.inventoryImageFrame}>
     <img
   src={getImageUrl(item.image, "w360")}
