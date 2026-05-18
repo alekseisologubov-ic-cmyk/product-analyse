@@ -7705,7 +7705,13 @@ isAdmin={isAdmin}
                   <button
                     key={`${item.sheetName}-${item.code}-${index}`}
                     style={styles.equipmentCard}
-                    onClick={() => setSelectedEquipment({ ...item, image: displayImage })}
+                    onClick={() =>
+  setSelectedEquipment({
+    ...item,
+    image: displayImage,
+    imageFallback: fallbackImage,
+  })
+}
                   >
                     {displayImage ? (
                       <div>
