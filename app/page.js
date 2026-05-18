@@ -7651,7 +7651,7 @@ isAdmin={isAdmin}
                   <button
                     key={`${item.sheetName}-${item.code}-${index}`}
                     style={styles.equipmentCard}
-                    onClick={() => setSelectedEquipment(item)}
+                    onClick={() => setSelectedEquipment({ ...item, image: displayImage })}
                   >
                     {item.image ? (
                       <div>
