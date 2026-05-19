@@ -125,25 +125,66 @@ const parseTrainingLinksWorkbook = (workbook) => {
     workbook.SheetNames[0];
 
   const worksheet = workbook.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
 
-  return rows
-    .map((row, index) => {
-      const trainingName = getCell(row, 1); // B
-      const trainingUrl = getCell(row, 2); // C
-      const note = getCell(row, 3); // D
+  if (!worksheet || !worksheet["!ref"]) {
+    return [];
+  }
 
-      return {
-        trainingName,
-        trainingUrl,
-        note,
-        sourceRow: index + 1,
-        sortOrder: index,
-      };
-    })
-    .filter((item) => item.trainingName && item.trainingUrl)
-    .filter((item) => cleanText(item.trainingName) !== "NAME")
-    .filter((item) => /^https?:\/\//i.test(item.trainingUrl));
+  const range = XLSX.utils.decode_range(worksheet["!ref"]);
+
+  const readCell = (rowNumber, columnIndexZeroBased) => {
+    const address = XLSX.utils.encode_cell({
+      r: rowNumber - 1,
+      c: columnIndexZeroBased,
+    });
+
+    return safeText(worksheet[address]?.v);
+  };
+
+  const readCellLink = (rowNumber, columnIndexZeroBased) => {
+    const address = XLSX.utils.encode_cell({
+      r: rowNumber - 1,
+      c: columnIndexZeroBased,
+    });
+
+    const cell = worksheet[address];
+
+    return (
+      safeText(cell?.l?.Target) ||
+      safeText(cell?.l?.target) ||
+      safeText(cell?.v)
+    );
+  };
+
+  const links = [];
+
+  for (let rowNumber = 1; rowNumber <= range.e.r + 1; rowNumber += 1) {
+    const trainingName = readCell(rowNumber, 1); // B
+    const linkFromColumnB = readCellLink(rowNumber, 1); // B hyperlink
+    const linkFromColumnC = readCellLink(rowNumber, 2); // C link or hyperlink
+    const note = readCell(rowNumber, 3); // D
+
+    const trainingUrl =
+      /^https?:\/\//i.test(linkFromColumnC)
+        ? linkFromColumnC
+        : /^https?:\/\//i.test(linkFromColumnB)
+          ? linkFromColumnB
+          : "";
+
+    if (!trainingName || !trainingUrl) continue;
+    if (cleanText(trainingName) === "NAME") continue;
+    if (cleanText(trainingName).includes("TRAINING NAME")) continue;
+
+    links.push({
+      trainingName,
+      trainingUrl,
+      note,
+      sourceRow: rowNumber,
+      sortOrder: rowNumber,
+    });
+  }
+
+  return links;
 };
 
 const getCompletionKey = ({ ship, monthKey, station, crewName, trainingName }) =>
