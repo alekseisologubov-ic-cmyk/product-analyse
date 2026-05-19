@@ -1520,6 +1520,18 @@ export default function TrainingModule({
                   ? "Already Done"
                   : "Mark Done"}
               </button>
+
+              <button
+                type="button"
+                style={styles.backButton}
+                onClick={() => {
+                  setTrainingLaunchModal(null);
+                  setTrainingLaunchCrew(null);
+                  setTrainingLaunchCrewSearch("");
+                }}
+              >
+                Close / Return to CM Names
+              </button>
             </div>
           </div>
         </div>
