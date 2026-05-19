@@ -901,29 +901,40 @@ export default function TrainingModule({
               const progress = getTrainingProgressForStation(selectedStation, training.trainingName);
 
               return (
-                <button
-                  key={training.trainingName}
-                  style={{
-                    ...localStyles.trainingCard,
-                    ...(selectedTraining?.trainingName === training.trainingName
-                      ? localStyles.trainingCardActive
-                      : {}),
-                    ...(progress.total > 0 && progress.completed === progress.total
-                      ? localStyles.trainingCardComplete
-                      : {}),
-                  }}
-                  onClick={() => {
-  setSelectedTraining(training);
-  openTrainingLink(training);
-}}
-                >
-                  <strong>{training.trainingName}</strong>
-                  {training.note && <span>{training.note}</span>}
-                  <span>{progress.completed} / {progress.total} complete</span>
-                  <div style={localStyles.progressOuter}>
-                    <div style={{ ...localStyles.progressInner, width: `${progress.percent}%` }} />
-                  </div>
-                </button>
+                <a
+  key={training.trainingName}
+  href={training.trainingUrl}
+  target="_blank"
+  rel="noreferrer"
+  style={{
+    ...localStyles.trainingCard,
+    ...(selectedTraining?.trainingName === training.trainingName
+      ? localStyles.trainingCardActive
+      : {}),
+    ...(progress.total > 0 && progress.completed === progress.total
+      ? localStyles.trainingCardComplete
+      : {}),
+    textDecoration: "none",
+    color: "inherit",
+  }}
+  onClick={() => {
+    setSelectedTraining(training);
+    logUsageEvent("training_link_opened", {
+      module: "training",
+      ship: userShip,
+      monthKey,
+      station: selectedStation,
+      trainingName: training.trainingName,
+    });
+  }}
+>
+  <strong>{training.trainingName}</strong>
+  {training.note && <span>{training.note}</span>}
+  <span>{progress.completed} / {progress.total} complete</span>
+  <div style={localStyles.progressOuter}>
+    <div style={{ ...localStyles.progressInner, width: `${progress.percent}%` }} />
+  </div>
+</a>
               );
             })}
           </div>
