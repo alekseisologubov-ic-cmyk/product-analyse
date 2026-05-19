@@ -720,6 +720,29 @@ export default function TrainingModule({
     }
   };
 
+  const openTrainingLink = (training) => {
+  if (!training?.trainingUrl) {
+    setMessage("This training does not have a valid link.");
+    window.alert("This training does not have a valid link.");
+    return;
+  }
+
+  const opened = window.open(training.trainingUrl, "_blank", "noopener,noreferrer");
+
+  if (!opened) {
+    setMessage("Training link was blocked by the browser. Allow popups and try again.");
+    window.alert("Training link was blocked by the browser. Allow popups and try again.");
+    return;
+  }
+
+  logUsageEvent("training_link_opened", {
+    module: "training",
+    ship: userShip,
+    monthKey,
+    station: selectedStation,
+    trainingName: training.trainingName,
+  });
+};
   const selectedStationProgress = selectedStation
     ? getStationOverallProgress(selectedStation)
     : { completed: 0, total: 0, percent: 0 };
