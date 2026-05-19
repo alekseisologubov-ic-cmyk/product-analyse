@@ -912,7 +912,10 @@ export default function TrainingModule({
                       ? localStyles.trainingCardComplete
                       : {}),
                   }}
-                  onClick={() => setSelectedTraining(training)}
+                  onClick={() => {
+  setSelectedTraining(training);
+  openTrainingLink(training);
+}}
                 >
                   <strong>{training.trainingName}</strong>
                   {training.note && <span>{training.note}</span>}
