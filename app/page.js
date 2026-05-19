@@ -21,6 +21,9 @@ const GenerateNextOrder = lazy(() =>
 const TemperatureCheckModule = lazy(() =>
   import("./components/temperature/TemperatureCheckModule")
 );
+const TrainingModule = lazy(() =>
+  import("./components/training/TrainingModule")
+);
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
