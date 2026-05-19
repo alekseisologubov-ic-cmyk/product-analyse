@@ -609,6 +609,8 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
   const [nextOrderSearch, setNextOrderSearch] = useState("");
   const [fmlSearch, setFmlSearch] = useState("");
   const [fmlLowSearch, setFmlLowSearch] = useState("");
+  const [fmlOrderedNotFmlRows, setFmlOrderedNotFmlRows] = useState([]);
+const [fmlOrderedNotFmlSearch, setFmlOrderedNotFmlSearch] = useState("");
   const [nextOrderFilter, setNextOrderFilter] = useState("all");
   const [nextOrderView, setNextOrderView] = useState("order");
   const [nextOrderLoading, setNextOrderLoading] = useState(false);
