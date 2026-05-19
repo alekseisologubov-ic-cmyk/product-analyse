@@ -19,14 +19,31 @@ const stationNameFromHeader = (value) =>
     .replace(/\s+/g, " ")
     .trim();
 
-const getCompletionKey = ({ ship, monthKey, station, crewName, trainingName }) =>
+const TRAINING_LINK_SCOPE = "GLOBAL";
+
+const getCrewIdentity = ({ crewKey, employeeNumber, crewName }) =>
+  cleanText(crewKey || employeeNumber || crewName || "");
+
+const getCompletionKey = ({ ship, monthKey, crewKey, employeeNumber, crewName, trainingName }) =>
   [
     cleanText(ship),
     cleanText(monthKey),
-    cleanText(station),
-    cleanText(crewName),
+    getCrewIdentity({ crewKey, employeeNumber, crewName }),
     cleanText(trainingName),
   ].join("|");
+
+const normalizeTrainingEmail = (value) => String(value || "").trim().toLowerCase();
+
+const getTrainingAdminShipFromEmail = (email) => {
+  const localPart = normalizeTrainingEmail(email).split("@")[0] || "";
+
+  if (localPart === "val.cul.admin" || localPart === "vl.cul.admin") return "VL";
+  if (localPart === "scarlet.cul.admin" || localPart === "sc.cul.admin") return "SC";
+  if (localPart === "resilient.cul.admin" || localPart === "rl.cul.admin") return "RL";
+  if (localPart === "brilliant.cul.admin" || localPart === "brl.cul.admin") return "BRL";
+
+  return "";
+};
 
 const formatDateTime = (value) => {
   if (!value) return "N/A";
@@ -280,6 +297,9 @@ export default function TrainingModule({
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const trainingAdminShip = getTrainingAdminShipFromEmail(userEmail);
+  const canManageTrainingData = Boolean(isAdmin || (trainingAdminShip && trainingAdminShip === userShip));
+
   const completionMap = useMemo(() => {
     const map = new Map();
 
@@ -288,7 +308,8 @@ export default function TrainingModule({
         getCompletionKey({
           ship: item.ship,
           monthKey: item.month_key,
-          station: item.station,
+          crewKey: item.crew_key,
+          employeeNumber: item.employee_number,
           crewName: item.crew_name,
           trainingName: item.training_name,
         }),
@@ -342,6 +363,23 @@ export default function TrainingModule({
       .sort((a, b) => a.position.localeCompare(b.position) || a.crewName.localeCompare(b.crewName));
   }, [assignments, selectedStation, crewSearch]);
 
+  const assignmentByCrewKey = useMemo(() => {
+    const map = new Map();
+
+    assignments.forEach((person) => {
+      const key = getCrewIdentity({
+        employeeNumber: person.employeeNumber,
+        crewName: person.crewName,
+      });
+
+      if (key && !map.has(key)) {
+        map.set(key, person);
+      }
+    });
+
+    return map;
+  }, [assignments]);
+
   const trainingLaunchCrewOptions = useMemo(() => {
     if (!selectedStation) return [];
 
@@ -389,7 +427,7 @@ export default function TrainingModule({
         getCompletionKey({
           ship: userShip,
           monthKey,
-          station,
+          employeeNumber: person.employeeNumber,
           crewName: person.crewName,
           trainingName,
         })
@@ -418,7 +456,7 @@ export default function TrainingModule({
             getCompletionKey({
               ship: userShip,
               monthKey,
-              station,
+              employeeNumber: person.employeeNumber,
               crewName: person.crewName,
               trainingName: training.trainingName,
             })
@@ -443,7 +481,7 @@ export default function TrainingModule({
       getCompletionKey({
         ship: userShip,
         monthKey,
-        station: person.station,
+        employeeNumber: person.employeeNumber,
         crewName: person.crewName,
         trainingName: training.trainingName,
       })
@@ -464,19 +502,29 @@ export default function TrainingModule({
     const query = reportSearch.toLowerCase().trim();
 
     return completions
-      .map((item, index) => ({
-        Number: index + 1,
-        Ship: item.ship || userShip || "",
-        Month: item.month_key || monthKey,
-        Station: item.station || "",
-        Name: item.crew_name || "",
-        EmployeeNumber: item.employee_number || "",
-        Position: item.position || "",
-        ActualPosition: item.actual_position || "",
-        Training: item.training_name || "",
-        CompletedAt: formatDateTime(item.completed_at),
-        CompletedBy: item.completed_by || "",
-      }))
+      .map((item, index) => {
+        const crewIdentity = getCrewIdentity({
+          crewKey: item.crew_key,
+          employeeNumber: item.employee_number,
+          crewName: item.crew_name,
+        });
+
+        const currentAssignment = assignmentByCrewKey.get(crewIdentity);
+
+        return {
+          Number: index + 1,
+          Ship: item.ship || userShip || "",
+          Month: item.month_key || monthKey,
+          Station: currentAssignment?.station || item.station || "",
+          Name: currentAssignment?.crewName || item.crew_name || "",
+          EmployeeNumber: currentAssignment?.employeeNumber || item.employee_number || "",
+          Position: currentAssignment?.position || item.position || "",
+          ActualPosition: currentAssignment?.actualPosition || item.actual_position || "",
+          Training: item.training_name || "",
+          CompletedAt: formatDateTime(item.completed_at),
+          CompletedBy: item.completed_by || "",
+        };
+      })
       .filter((row) => reportStationFilter === "ALL" || row.Station === reportStationFilter)
       .filter((row) => reportTrainingFilter === "ALL" || row.Training === reportTrainingFilter)
       .filter((row) => {
@@ -505,6 +553,7 @@ export default function TrainingModule({
       .map((row, index) => ({ ...row, Number: index + 1 }));
   }, [
     completions,
+    assignmentByCrewKey,
     userShip,
     monthKey,
     reportStationFilter,
@@ -522,7 +571,7 @@ export default function TrainingModule({
           getCompletionKey({
             ship: userShip,
             monthKey,
-            station: person.station,
+            employeeNumber: person.employeeNumber,
             crewName: person.crewName,
             trainingName: training.trainingName,
           })
@@ -627,7 +676,7 @@ export default function TrainingModule({
         supabase
           .from("training_links")
           .select("*")
-          .eq("ship", userShip)
+          .eq("ship", TRAINING_LINK_SCOPE)
           .order("sort_order", { ascending: true }),
 
         supabase
@@ -761,12 +810,12 @@ export default function TrainingModule({
       const { error: deleteError } = await supabase
         .from("training_links")
         .delete()
-        .eq("ship", userShip);
+        .eq("ship", TRAINING_LINK_SCOPE);
 
       if (deleteError) throw deleteError;
 
       const payload = rows.map((item, index) => ({
-        ship: userShip,
+        ship: TRAINING_LINK_SCOPE,
         training_name: item.trainingName,
         training_url: item.trainingUrl,
         note: item.note || "",
@@ -805,6 +854,12 @@ export default function TrainingModule({
   };
 
   const uploadStationAssignmentFile = async (event) => {
+    if (!canManageTrainingData) {
+      window.alert("Only this ship's Culinary admin can upload the crew list.");
+      event.target.value = "";
+      return;
+    }
+
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -831,6 +886,12 @@ export default function TrainingModule({
   };
 
   const uploadTrainingLinksFile = async (event) => {
+    if (!canManageTrainingData) {
+      window.alert("Only this ship's Culinary admin can update the global training links list.");
+      event.target.value = "";
+      return;
+    }
+
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -867,10 +928,16 @@ export default function TrainingModule({
 
     const now = new Date().toISOString();
 
+    const crewKey = getCrewIdentity({
+      employeeNumber: person.employeeNumber,
+      crewName: person.crewName,
+    });
+
     const payload = {
       ship: userShip,
       month_key: monthKey,
       station: person.station,
+      crew_key: crewKey,
       crew_name: person.crewName,
       employee_number: person.employeeNumber || "",
       position: person.position,
@@ -887,7 +954,7 @@ export default function TrainingModule({
       const { data, error } = await supabase
         .from("training_completion_records")
         .upsert(payload, {
-          onConflict: "ship,month_key,station,crew_name,training_name",
+          onConflict: "ship,month_key,crew_key,training_name",
         })
         .select("*")
         .single();
@@ -898,7 +965,8 @@ export default function TrainingModule({
         const key = getCompletionKey({
           ship: payload.ship,
           monthKey: payload.month_key,
-          station: payload.station,
+          crewKey: payload.crew_key,
+          employeeNumber: payload.employee_number,
           crewName: payload.crew_name,
           trainingName: payload.training_name,
         });
@@ -910,7 +978,8 @@ export default function TrainingModule({
               getCompletionKey({
                 ship: item.ship,
                 monthKey: item.month_key,
-                station: item.station,
+                crewKey: item.crew_key,
+                employeeNumber: item.employee_number,
                 crewName: item.crew_name,
                 trainingName: item.training_name,
               }) !== key
@@ -936,7 +1005,7 @@ export default function TrainingModule({
   };
 
   const resetMonthlyCompletions = async () => {
-    if (!isAdmin) return;
+    if (!canManageTrainingData) return;
 
     if (!supabase) {
       window.alert("Supabase is not connected.");
@@ -1024,7 +1093,9 @@ export default function TrainingModule({
           <input
             type="month"
             value={monthKey}
+            disabled={!canManageTrainingData}
             onChange={(event) => {
+              if (!canManageTrainingData) return;
               setMonthKey(event.target.value);
               setSelectedTraining(null);
               setTrainingLaunchModal(null);
@@ -1034,21 +1105,29 @@ export default function TrainingModule({
             style={styles.searchInput}
           />
 
-          <label style={styles.label}>Upload station assignment file</label>
-          <input
-            type="file"
-            accept=".xlsx,.xls,.xlsm"
-            onChange={uploadStationAssignmentFile}
-            style={styles.fileInput}
-          />
+          {canManageTrainingData ? (
+            <>
+              <label style={styles.label}>Upload station assignment file</label>
+              <input
+                type="file"
+                accept=".xlsx,.xls,.xlsm"
+                onChange={uploadStationAssignmentFile}
+                style={styles.fileInput}
+              />
 
-          <label style={styles.label}>Upload training links file</label>
-          <input
-            type="file"
-            accept=".xlsx,.xls,.xlsm"
-            onChange={uploadTrainingLinksFile}
-            style={styles.fileInput}
-          />
+              <label style={styles.label}>Upload global training links file</label>
+              <input
+                type="file"
+                accept=".xlsx,.xls,.xlsm"
+                onChange={uploadTrainingLinksFile}
+                style={styles.fileInput}
+              />
+            </>
+          ) : (
+            <div style={styles.infoBox}>
+              Only this ship's Culinary admin can change the month, upload the crew list, or update training links.
+            </div>
+          )}
 
           <div style={styles.infoBox}>
             <div>🚢 Ship: <strong>{userShip || "Not selected"}</strong></div>
@@ -1057,6 +1136,12 @@ export default function TrainingModule({
             <div>👥 Crew assignments: <strong>{assignments.length}</strong></div>
             <div>📚 Training links: <strong>{trainingLinks.length}</strong></div>
             <div>✅ Completion records: <strong>{completions.length}</strong></div>
+            <div>🔐 Training admin access: <strong>{canManageTrainingData ? "Yes" : "No"}</strong></div>
+            {trainingAdminShip && trainingAdminShip !== userShip && (
+              <div style={{ color: "#8a5a00" }}>
+                This email is Culinary admin for {trainingAdminShip}, not {userShip}.
+              </div>
+            )}
             {loading && <div>Loading / saving...</div>}
           </div>
 
@@ -1067,7 +1152,7 @@ export default function TrainingModule({
               🔄 Refresh
             </button>
 
-            {isAdmin && (
+            {canManageTrainingData && (
               <button style={styles.deleteButton} onClick={resetMonthlyCompletions} disabled={loading}>
                 🧹 Reset Month
               </button>
