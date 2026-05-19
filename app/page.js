@@ -6322,6 +6322,38 @@ const getEquipmentFallbackImage = (item) => {
     );
   }
 
+  if (module === "training") {
+    return (
+      <Suspense
+        fallback={
+          <main style={styles.page}>
+            <section style={styles.card}>
+              <h2 style={styles.cardTitle}>🎓 Loading Training Module...</h2>
+              <p style={styles.emptyText}>Preparing station training tracker.</p>
+            </section>
+          </main>
+        }
+      >
+        <TrainingModule
+          styles={styles}
+          supabase={supabase}
+          userShip={userShip}
+          userEmail={normalizeAppEmail(userEmail)}
+          isAdmin={isAdmin}
+          onBack={() => {
+            if (equipmentDepartment) {
+              setModule("equipment");
+              setEquipmentMode("");
+              return;
+            }
+
+            setModule("");
+          }}
+          logUsageEvent={logUsageEvent}
+        />
+      </Suspense>
+    );
+  }
   if (module === "temperature") {
     return (
       <Suspense
