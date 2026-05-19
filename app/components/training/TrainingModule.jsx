@@ -399,19 +399,21 @@ export default function TrainingModule({
       if (deleteError) throw deleteError;
 
       const payload = rows.map((item, index) => ({
-        ship: userShip,
-        month_key: monthKey,
-        station: item.station,
-        position: item.position,
-        crew_name: item.crewName,
-        actual_position: item.actualPosition,
-        nationality: item.nationality,
-        source_sheet: item.sourceSheet,
-        source_row: item.sourceRow,
-        source_file: fileName || "",
-        sort_order: index,
-        updated_at: new Date().toISOString(),
-      }));
+  ship: userShip,
+  month_key: monthKey,
+  station: item.station,
+  position: item.position,
+  crew_name: item.crewName,
+  actual_position: item.actualPosition,
+  nationality: item.nationality,
+  cabin_no: item.cabinNo || "",
+  employee_number: item.employeeNumber || "",
+  source_sheet: item.sourceSheet,
+  source_row: item.sourceRow,
+  source_file: fileName || "",
+  sort_order: index,
+  updated_at: new Date().toISOString(),
+}));
 
       const batchSize = 200;
 
