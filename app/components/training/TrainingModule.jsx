@@ -42,43 +42,53 @@ const parseStationAssignmentWorkbook = (workbook) => {
     workbook.SheetNames[0];
 
   const worksheet = workbook.Sheets[preferredSheet];
-  const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+
+  if (!worksheet || !worksheet["!ref"]) {
+    return [];
+  }
+
+  const range = XLSX.utils.decode_range(worksheet["!ref"]);
+
+  const readCell = (rowNumber, columnIndexZeroBased) => {
+    const address = XLSX.utils.encode_cell({
+      r: rowNumber - 1,
+      c: columnIndexZeroBased,
+    });
+
+    return safeText(worksheet[address]?.v);
+  };
 
   const assignments = [];
   let currentStation = "";
 
-  rows.forEach((row, index) => {
-    const excelRow = index + 1;
+  // Start from real Excel row 37.
+  for (let rowNumber = 37; rowNumber <= range.e.r + 1; rowNumber += 1) {
+    const columnB = readCell(rowNumber, 1); // B - station header or position
+    const columnD = readCell(rowNumber, 3); // D - crew name
+    const columnF = readCell(rowNumber, 5); // F - actual position
+    const columnG = readCell(rowNumber, 6); // G - nationality
+    const columnH = readCell(rowNumber, 7); // H - cabin no
+    const columnI = readCell(rowNumber, 8); // I - employee number / unique ID
 
-    // The VAL Manning file starts the usable station section around row 37/38.
-    if (excelRow < 37) return;
-
-    const columnB = getCell(row, 1); // B - station header or position
-    const columnD = getCell(row, 3); // D - name
-    const columnF = getCell(row, 5); // F - actual position
-    const columnG = getCell(row, 6); // G - nationality
-    const columnH = getCell(row, 7); // H - cabin
-    const columnI = getCell(row, 8); // I - employee number / unique ID
-
+    const columnBClean = cleanText(columnB);
     const columnDClean = cleanText(columnD);
     const columnFClean = cleanText(columnF);
     const columnIClean = cleanText(columnI);
 
-    const isStationHeader = Boolean(
+    const isStationHeader =
       columnB &&
-        (
-          columnDClean === "NAME" ||
-          columnFClean.includes("ACTUAL POSITION") ||
-          columnIClean.includes("UNIQUE ID")
-        )
-    );
+      (
+        columnDClean === "NAME" ||
+        columnFClean.includes("ACTUAL POSITION") ||
+        columnIClean.includes("UNIQUE ID")
+      );
 
     if (isStationHeader) {
       currentStation = stationNameFromHeader(columnB);
-      return;
+      continue;
     }
 
-    if (!currentStation) return;
+    if (!currentStation) continue;
 
     const position = columnB;
     const crewName = columnD;
@@ -87,11 +97,11 @@ const parseStationAssignmentWorkbook = (workbook) => {
     const cabinNo = columnH;
     const employeeNumber = columnI;
 
-    if (!position || !crewName) return;
-    if (cleanText(position).includes("TOTAL")) return;
-    if (cleanText(crewName) === "NAME") return;
-    if (cleanText(crewName).includes("#N/A")) return;
-    if (cleanText(employeeNumber).includes("#N/A")) return;
+    if (!position || !crewName) continue;
+    if (columnBClean.includes("TOTAL")) continue;
+    if (columnDClean === "NAME") continue;
+    if (columnDClean.includes("#N/A")) continue;
+    if (columnIClean.includes("#N/A")) continue;
 
     assignments.push({
       station: currentStation,
@@ -101,10 +111,10 @@ const parseStationAssignmentWorkbook = (workbook) => {
       nationality,
       cabinNo,
       employeeNumber,
-      sourceRow: excelRow,
+      sourceRow: rowNumber,
       sourceSheet: preferredSheet,
     });
-  });
+  }
 
   return assignments;
 };
