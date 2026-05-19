@@ -50,25 +50,28 @@ const parseStationAssignmentWorkbook = (workbook) => {
   rows.forEach((row, index) => {
     const excelRow = index + 1;
 
-    // Start reading from row 37 only.
+    // The VAL Manning file starts the usable station section around row 37/38.
     if (excelRow < 37) return;
 
-    const columnB = getCell(row, 1); // B
-    const columnD = getCell(row, 3); // D
-    const columnF = getCell(row, 5); // F
-    const columnI = getCell(row, 8); // I
+    const columnB = getCell(row, 1); // B - station header or position
+    const columnD = getCell(row, 3); // D - name
+    const columnF = getCell(row, 5); // F - actual position
+    const columnG = getCell(row, 6); // G - nationality
+    const columnH = getCell(row, 7); // H - cabin
+    const columnI = getCell(row, 8); // I - employee number / unique ID
 
     const columnDClean = cleanText(columnD);
     const columnFClean = cleanText(columnF);
     const columnIClean = cleanText(columnI);
 
-    const isStationHeader =
+    const isStationHeader = Boolean(
       columnB &&
-      (
-        columnDClean === "NAME" ||
-        columnFClean.includes("ACTUAL POSITION") ||
-        columnIClean.includes("UNIQUE ID")
-      );
+        (
+          columnDClean === "NAME" ||
+          columnFClean.includes("ACTUAL POSITION") ||
+          columnIClean.includes("UNIQUE ID")
+        )
+    );
 
     if (isStationHeader) {
       currentStation = stationNameFromHeader(columnB);
@@ -80,9 +83,9 @@ const parseStationAssignmentWorkbook = (workbook) => {
     const position = columnB;
     const crewName = columnD;
     const actualPosition = columnF;
-    const nationality = getCell(row, 6); // G
-    const cabinNo = getCell(row, 7); // H
-    const employeeNumber = columnI; // I
+    const nationality = columnG;
+    const cabinNo = columnH;
+    const employeeNumber = columnI;
 
     if (!position || !crewName) return;
     if (cleanText(position).includes("TOTAL")) return;
@@ -105,6 +108,7 @@ const parseStationAssignmentWorkbook = (workbook) => {
 
   return assignments;
 };
+
 const parseTrainingLinksWorkbook = (workbook) => {
   const sheetName =
     workbook.SheetNames.find((name) => cleanText(name) === "LINKS") ||
@@ -340,16 +344,16 @@ export default function TrainingModule({
       if (completionResult.error) throw completionResult.error;
 
       const nextAssignments = (assignmentResult.data || []).map((item) => ({
-  station: item.station || "",
-  position: item.position || "",
-  crewName: item.crew_name || "",
-  actualPosition: item.actual_position || "",
-  nationality: item.nationality || "",
-  cabinNo: item.cabin_no || "",
-  employeeNumber: item.employee_number || "",
-  sourceRow: Number(item.source_row || 0),
-  sourceSheet: item.source_sheet || "",
-}));
+        station: item.station || "",
+        position: item.position || "",
+        crewName: item.crew_name || "",
+        actualPosition: item.actual_position || "",
+        nationality: item.nationality || "",
+        cabinNo: item.cabin_no || "",
+        employeeNumber: item.employee_number || "",
+        sourceRow: Number(item.source_row || 0),
+        sourceSheet: item.source_sheet || "",
+      }));
 
       const nextLinks = (linksResult.data || []).map((item) => ({
         trainingName: item.training_name || "",
@@ -401,21 +405,21 @@ export default function TrainingModule({
       if (deleteError) throw deleteError;
 
       const payload = rows.map((item, index) => ({
-  ship: userShip,
-  month_key: monthKey,
-  station: item.station,
-  position: item.position,
-  crew_name: item.crewName,
-  actual_position: item.actualPosition,
-  nationality: item.nationality,
-  cabin_no: item.cabinNo || "",
-  employee_number: item.employeeNumber || "",
-  source_sheet: item.sourceSheet,
-  source_row: item.sourceRow,
-  source_file: fileName || "",
-  sort_order: index,
-  updated_at: new Date().toISOString(),
-}));
+        ship: userShip,
+        month_key: monthKey,
+        station: item.station,
+        position: item.position,
+        crew_name: item.crewName,
+        actual_position: item.actualPosition,
+        nationality: item.nationality,
+        cabin_no: item.cabinNo || "",
+        employee_number: item.employeeNumber || "",
+        source_sheet: item.sourceSheet,
+        source_row: item.sourceRow,
+        source_file: fileName || "",
+        sort_order: index,
+        updated_at: new Date().toISOString(),
+      }));
 
       const batchSize = 200;
 
@@ -514,7 +518,7 @@ export default function TrainingModule({
       const rows = parseStationAssignmentWorkbook(workbook);
 
       if (!rows.length) {
-        throw new Error("No station assignments found. Expected station headers in column B and crew names in column D.");
+        throw new Error("No station assignments found. This parser reads from row 37 down: station header in column B, crew name in column D, and employee number in column I.");
       }
 
       await replaceStationAssignments(rows, file.name);
@@ -564,20 +568,20 @@ export default function TrainingModule({
     const now = new Date().toISOString();
 
     const payload = {
-  ship: userShip,
-  month_key: monthKey,
-  station: person.station,
-  crew_name: person.crewName,
-  employee_number: person.employeeNumber || "",
-  position: person.position,
-  actual_position: person.actualPosition,
-  training_name: training.trainingName,
-  training_url: training.trainingUrl,
-  completed: true,
-  completed_at: now,
-  completed_by: userEmail || "",
-  updated_at: now,
-};
+      ship: userShip,
+      month_key: monthKey,
+      station: person.station,
+      crew_name: person.crewName,
+      employee_number: person.employeeNumber || "",
+      position: person.position,
+      actual_position: person.actualPosition,
+      training_name: training.trainingName,
+      training_url: training.trainingUrl,
+      completed: true,
+      completed_at: now,
+      completed_by: userEmail || "",
+      updated_at: now,
+    };
 
     try {
       const { data, error } = await supabase
@@ -894,6 +898,7 @@ export default function TrainingModule({
                   <div style={styles.recipeMeta}>Actual Position: {person.actualPosition || "N/A"}</div>
                   <div style={styles.recipeMeta}>Nationality: {person.nationality || "N/A"}</div>
                   <div style={styles.recipeMeta}>Employee #: {person.employeeNumber || "N/A"}</div>
+                  <div style={styles.recipeMeta}>Cabin: {person.cabinNo || "N/A"}</div>
 
                   {complete ? (
                     <div style={styles.statusGood}>Completed for {monthKey}</div>
