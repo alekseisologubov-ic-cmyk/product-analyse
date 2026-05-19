@@ -273,6 +273,105 @@ const parseFmlRows = (workbook) => {
     .filter((item) => item.code || item.product)
     .filter((item) => item.venues.length > 0);
 };
+const getFmlOrderCodeKey = (value) => {
+  const cleaned = String(value ?? "")
+    .trim()
+    .replace(/\.0+$/g, "")
+    .replace(/[^A-Z0-9]/gi, "")
+    .toUpperCase()
+    .replace(/^0+/, "");
+
+  return cleaned || "";
+};
+
+const buildOrderedNotInFmlRows = (workbook, orderRows) => {
+  const fmlSheetName =
+    workbook.SheetNames.find((name) => cleanText(name) === "FML") ||
+    workbook.SheetNames.find((name) => cleanText(name).includes("FML"));
+
+  const orderedRows = (orderRows || []).filter(
+    (item) => Number(item.orderedByShip || item.orderedQty || 0) > 0
+  );
+
+  if (!orderedRows.length) return [];
+
+  if (!fmlSheetName || !workbook.Sheets[fmlSheetName]) {
+    return orderedRows.map((item) => ({
+      id: "ordered-not-fml-" + item.excelRow + "-" + (item.code || item.product),
+      excelRow: item.excelRow,
+      code: item.code || "",
+      product: item.product || "",
+      unit: item.unit || "N/A",
+      stock: Number(item.stock || 0),
+      futureOrders: Number(item.futureOrders || 0),
+      orderedByShip: Number(item.orderedByShip || item.orderedQty || 0),
+      suggestedOrder: Number(item.suggestedOrder || 0),
+      pastConsumption: Number(item.pastConsumption || 0),
+      averagePerDay: Number(item.averagePerDay || 0),
+      availableAtArrival: Number(item.availableAtArrival || 0),
+      matchType: "No FML sheet",
+      reason: "This item was ordered by the ship, but no FML sheet was found in the uploaded workbook.",
+    }));
+  }
+
+  const fmlRows = XLSX.utils.sheet_to_json(workbook.Sheets[fmlSheetName], {
+    header: 1,
+    defval: "",
+  });
+
+  const fmlCodeSet = new Set();
+  const fmlProductKeySet = new Set();
+  const fmlProductNames = [];
+
+  fmlRows.forEach((row) => {
+    const code = String(row[3] || "").trim();
+    const product = String(row[4] || "").replace(/\s+/g, " ").trim();
+
+    if (!code && !product) return;
+    if (cleanText(code) === "CODE") return;
+    if (cleanText(product) === "PRODUCT NAME") return;
+    if (cleanText(product).includes("PRODUCT NAME")) return;
+
+    const codeKey = getFmlOrderCodeKey(code);
+    const productKey = compactText(product);
+
+    if (codeKey) fmlCodeSet.add(codeKey);
+    if (productKey) fmlProductKeySet.add(productKey);
+    if (product) fmlProductNames.push(product);
+  });
+
+  return orderedRows
+    .filter((item) => {
+      const codeKey = getFmlOrderCodeKey(item.code);
+      const productKey = compactText(item.product);
+
+      const foundByCode = codeKey && fmlCodeSet.has(codeKey);
+      const foundByExactProduct = productKey && fmlProductKeySet.has(productKey);
+      const foundByProductName = fmlProductNames.some((fmlProduct) =>
+        productNamesMatch(item.product, fmlProduct)
+      );
+
+      return !foundByCode && !foundByExactProduct && !foundByProductName;
+    })
+    .map((item) => ({
+      id: "ordered-not-fml-" + item.excelRow + "-" + (item.code || item.product),
+      excelRow: item.excelRow,
+      code: item.code || "",
+      product: item.product || "",
+      unit: item.unit || "N/A",
+      stock: Number(item.stock || 0),
+      futureOrders: Number(item.futureOrders || 0),
+      orderedByShip: Number(item.orderedByShip || item.orderedQty || 0),
+      suggestedOrder: Number(item.suggestedOrder || 0),
+      pastConsumption: Number(item.pastConsumption || 0),
+      averagePerDay: Number(item.averagePerDay || 0),
+      availableAtArrival: Number(item.availableAtArrival || 0),
+      matchType: "Not found by code or product name",
+      reason:
+        "This item was ordered by the ship in column Y, but it was not found in the FML sheet by code or product name.",
+    }))
+    .sort((a, b) => Number(a.excelRow || 0) - Number(b.excelRow || 0));
+};
 
 const findOrderWorksheetName = (workbook) => {
   const nonFml = workbook.SheetNames.filter((name) => !cleanText(name).includes("FML"));
