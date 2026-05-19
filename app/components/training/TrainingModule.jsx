@@ -9,9 +9,9 @@ const cleanText = (value) =>
     .replace(/\s+/g, " ")
     .trim();
 
-const todayMonthKey = () => new Date().toISOString().slice(0, 7);
-
 const safeText = (value) => String(value || "").replace(/\s+/g, " ").trim();
+
+const todayMonthKey = () => new Date().toISOString().slice(0, 7);
 
 const stationNameFromHeader = (value) =>
   safeText(value)
@@ -19,26 +19,29 @@ const stationNameFromHeader = (value) =>
     .replace(/\s+/g, " ")
     .trim();
 
-const getCell = (row, index) => safeText(row?.[index]);
+const getCompletionKey = ({ ship, monthKey, station, crewName, trainingName }) =>
+  [
+    cleanText(ship),
+    cleanText(monthKey),
+    cleanText(station),
+    cleanText(crewName),
+    cleanText(trainingName),
+  ].join("|");
 
-const looksLikeStationHeader = (row) => {
-  const stationText = getCell(row, 1); // B
-  const nameHeader = cleanText(row?.[3]); // D
-  const actualPositionHeader = cleanText(row?.[5]); // F
+const formatDateTime = (value) => {
+  if (!value) return "N/A";
 
-  if (!stationText) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
 
-  // Your file marks station rows yellow, but browser XLSX parsing does not reliably expose cell colors.
-  // This format also has B = "Station - count", D = "Name", F = "Actual Position".
-  if (nameHeader === "NAME" && actualPositionHeader.includes("ACTUAL POSITION")) return true;
-
-  return /\s-\s*\d+\s*$/.test(stationText) && nameHeader === "NAME";
+  return date.toLocaleString();
 };
 
 const parseStationAssignmentWorkbook = (workbook) => {
   const preferredSheet =
     workbook.SheetNames.find((name) => cleanText(name) === "MASTER PAGE") ||
     workbook.SheetNames.find((name) => cleanText(name).includes("MASTER")) ||
+    workbook.SheetNames.find((name) => cleanText(name).includes("MANNING")) ||
     workbook.SheetNames[0];
 
   const worksheet = workbook.Sheets[preferredSheet];
@@ -61,7 +64,7 @@ const parseStationAssignmentWorkbook = (workbook) => {
   const assignments = [];
   let currentStation = "";
 
-  // Start from real Excel row 37.
+  // Manning file starts from real Excel row 37 downward.
   for (let rowNumber = 37; rowNumber <= range.e.r + 1; rowNumber += 1) {
     const columnB = readCell(rowNumber, 1); // B - station header or position
     const columnD = readCell(rowNumber, 3); // D - crew name
@@ -187,14 +190,67 @@ const parseTrainingLinksWorkbook = (workbook) => {
   return links;
 };
 
-const getCompletionKey = ({ ship, monthKey, station, crewName, trainingName }) =>
-  [
-    cleanText(ship),
-    cleanText(monthKey),
-    cleanText(station),
-    cleanText(crewName),
-    cleanText(trainingName),
-  ].join("|");
+const exportRowsToExcel = (rows, sheetName, fileName) => {
+  if (!rows.length) {
+    window.alert("No rows to export.");
+    return;
+  }
+
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+  const workbook = XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+  XLSX.writeFile(workbook, fileName);
+};
+
+const printRows = ({ title, rows, columns }) => {
+  if (!rows.length) {
+    window.alert("No rows to print.");
+    return;
+  }
+
+  const headerHtml = columns.map((column) => `<th>${column.label}</th>`).join("");
+  const rowsHtml = rows
+    .map(
+      (row) =>
+        "<tr>" +
+        columns
+          .map((column) => `<td>${String(row[column.key] ?? "")}</td>`)
+          .join("") +
+        "</tr>"
+    )
+    .join("");
+
+  const html = `
+    <html>
+      <head>
+        <title>${title}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 24px; }
+          h1 { margin-bottom: 4px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+          th, td { border: 1px solid #ccc; padding: 7px; text-align: left; vertical-align: top; }
+          th { background: #f2f2f2; }
+        </style>
+      </head>
+      <body>
+        <h1>${title}</h1>
+        <table>
+          <thead><tr>${headerHtml}</tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </body>
+    </html>
+  `;
+
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) return;
+
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+  printWindow.print();
+};
 
 export default function TrainingModule({
   styles,
@@ -214,6 +270,10 @@ export default function TrainingModule({
   const [stationSearch, setStationSearch] = useState("");
   const [trainingSearch, setTrainingSearch] = useState("");
   const [crewSearch, setCrewSearch] = useState("");
+  const [reportSearch, setReportSearch] = useState("");
+  const [reportStationFilter, setReportStationFilter] = useState("ALL");
+  const [reportTrainingFilter, setReportTrainingFilter] = useState("ALL");
+  const [reportMode, setReportMode] = useState("station");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -267,6 +327,7 @@ export default function TrainingModule({
 
         return [
           item.crewName,
+          item.employeeNumber,
           item.position,
           item.actualPosition,
           item.nationality,
@@ -361,6 +422,165 @@ export default function TrainingModule({
       })
     );
   };
+
+  const allStationOptions = useMemo(
+    () => [...new Set(assignments.map((item) => item.station).filter(Boolean))].sort(),
+    [assignments]
+  );
+
+  const allTrainingOptions = useMemo(
+    () => [...new Set(trainingLinks.map((item) => item.trainingName).filter(Boolean))].sort(),
+    [trainingLinks]
+  );
+
+  const completionSummaryRows = useMemo(() => {
+    const query = reportSearch.toLowerCase().trim();
+
+    return completions
+      .map((item, index) => ({
+        Number: index + 1,
+        Ship: item.ship || userShip || "",
+        Month: item.month_key || monthKey,
+        Station: item.station || "",
+        Name: item.crew_name || "",
+        EmployeeNumber: item.employee_number || "",
+        Position: item.position || "",
+        ActualPosition: item.actual_position || "",
+        Training: item.training_name || "",
+        CompletedAt: formatDateTime(item.completed_at),
+        CompletedBy: item.completed_by || "",
+      }))
+      .filter((row) => reportStationFilter === "ALL" || row.Station === reportStationFilter)
+      .filter((row) => reportTrainingFilter === "ALL" || row.Training === reportTrainingFilter)
+      .filter((row) => {
+        if (!query) return true;
+
+        return [
+          row.Station,
+          row.Name,
+          row.EmployeeNumber,
+          row.Position,
+          row.ActualPosition,
+          row.Training,
+          row.CompletedAt,
+          row.CompletedBy,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+      })
+      .sort(
+        (a, b) =>
+          a.Station.localeCompare(b.Station) ||
+          a.Name.localeCompare(b.Name) ||
+          a.Training.localeCompare(b.Training)
+      )
+      .map((row, index) => ({ ...row, Number: index + 1 }));
+  }, [
+    completions,
+    userShip,
+    monthKey,
+    reportStationFilter,
+    reportTrainingFilter,
+    reportSearch,
+  ]);
+
+  const notYetCompletedRows = useMemo(() => {
+    const query = reportSearch.toLowerCase().trim();
+    const rows = [];
+
+    assignments.forEach((person) => {
+      trainingLinks.forEach((training) => {
+        const completed = completionMap.has(
+          getCompletionKey({
+            ship: userShip,
+            monthKey,
+            station: person.station,
+            crewName: person.crewName,
+            trainingName: training.trainingName,
+          })
+        );
+
+        if (completed) return;
+
+        rows.push({
+          Ship: userShip || "",
+          Month: monthKey,
+          Station: person.station || "",
+          Name: person.crewName || "",
+          EmployeeNumber: person.employeeNumber || "",
+          Position: person.position || "",
+          ActualPosition: person.actualPosition || "",
+          Training: training.trainingName || "",
+          TrainingUrl: training.trainingUrl || "",
+          Status: "Not Yet Completed",
+        });
+      });
+    });
+
+    return rows
+      .filter((row) => reportStationFilter === "ALL" || row.Station === reportStationFilter)
+      .filter((row) => reportTrainingFilter === "ALL" || row.Training === reportTrainingFilter)
+      .filter((row) => {
+        if (!query) return true;
+
+        return [
+          row.Station,
+          row.Name,
+          row.EmployeeNumber,
+          row.Position,
+          row.ActualPosition,
+          row.Training,
+          row.Status,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+      })
+      .sort(
+        (a, b) =>
+          a.Station.localeCompare(b.Station) ||
+          a.Name.localeCompare(b.Name) ||
+          a.Training.localeCompare(b.Training)
+      )
+      .map((row, index) => ({
+        Number: index + 1,
+        ...row,
+      }));
+  }, [
+    assignments,
+    trainingLinks,
+    completionMap,
+    userShip,
+    monthKey,
+    reportStationFilter,
+    reportTrainingFilter,
+    reportSearch,
+  ]);
+
+  const reportColumns =
+    reportMode === "summary"
+      ? [
+          { key: "Number", label: "#" },
+          { key: "Station", label: "Station" },
+          { key: "Name", label: "Crew Name" },
+          { key: "EmployeeNumber", label: "Employee #" },
+          { key: "Position", label: "Position" },
+          { key: "Training", label: "Training" },
+          { key: "CompletedAt", label: "Completed Date / Time" },
+          { key: "CompletedBy", label: "Completed By" },
+        ]
+      : [
+          { key: "Number", label: "#" },
+          { key: "Station", label: "Station" },
+          { key: "Name", label: "Crew Name" },
+          { key: "EmployeeNumber", label: "Employee #" },
+          { key: "Position", label: "Position" },
+          { key: "Training", label: "Training" },
+          { key: "Status", label: "Status" },
+        ];
+
+  const visibleReportRows = reportMode === "summary" ? completionSummaryRows : notYetCompletedRows;
 
   const loadTrainingData = async () => {
     if (!supabase || !userShip) return;
@@ -569,7 +789,9 @@ export default function TrainingModule({
       const rows = parseStationAssignmentWorkbook(workbook);
 
       if (!rows.length) {
-        throw new Error("No station assignments found. This parser reads from row 37 down: station header in column B, crew name in column D, and employee number in column I.");
+        throw new Error(
+          "No station assignments found. This parser reads from row 37 down: station header in column B, crew name in column D, and employee number in column I."
+        );
       }
 
       await replaceStationAssignments(rows, file.name);
@@ -593,7 +815,7 @@ export default function TrainingModule({
       const rows = parseTrainingLinksWorkbook(workbook);
 
       if (!rows.length) {
-        throw new Error("No training links found. Expected training name in column B and link in column C.");
+        throw new Error("No training links found. Expected training name in column B and link in column C, or hyperlink in column B.");
       }
 
       await replaceTrainingLinks(rows, file.name);
@@ -677,6 +899,7 @@ export default function TrainingModule({
         monthKey,
         station: person.station,
         crewName: person.crewName,
+        employeeNumber: person.employeeNumber || "",
         trainingName: training.trainingName,
       });
     } catch (error) {
@@ -720,29 +943,6 @@ export default function TrainingModule({
     }
   };
 
-  const openTrainingLink = (training) => {
-  if (!training?.trainingUrl) {
-    setMessage("This training does not have a valid link.");
-    window.alert("This training does not have a valid link.");
-    return;
-  }
-
-  const opened = window.open(training.trainingUrl, "_blank", "noopener,noreferrer");
-
-  if (!opened) {
-    setMessage("Training link was blocked by the browser. Allow popups and try again.");
-    window.alert("Training link was blocked by the browser. Allow popups and try again.");
-    return;
-  }
-
-  logUsageEvent("training_link_opened", {
-    module: "training",
-    ship: userShip,
-    monthKey,
-    station: selectedStation,
-    trainingName: training.trainingName,
-  });
-};
   const selectedStationProgress = selectedStation
     ? getStationOverallProgress(selectedStation)
     : { completed: 0, total: 0, percent: 0 };
@@ -765,6 +965,29 @@ export default function TrainingModule({
           <div style={styles.shipBadge}>🎓 {userShip || "Ship"}</div>
         </div>
       </header>
+
+      <div style={styles.viewModeBox}>
+        <button
+          style={{ ...styles.viewModeButton, ...(reportMode === "station" ? styles.viewModeButtonActive : {}) }}
+          onClick={() => setReportMode("station")}
+        >
+          📍 Station Training
+        </button>
+
+        <button
+          style={{ ...styles.viewModeButton, ...(reportMode === "summary" ? styles.viewModeButtonActive : {}) }}
+          onClick={() => setReportMode("summary")}
+        >
+          ✅ Summary Report ({completionSummaryRows.length})
+        </button>
+
+        <button
+          style={{ ...styles.viewModeButton, ...(reportMode === "notCompleted" ? styles.viewModeButtonActive : {}) }}
+          onClick={() => setReportMode("notCompleted")}
+        >
+          ⏳ Not Yet Completed ({notYetCompletedRows.length})
+        </button>
+      </div>
 
       <section style={styles.grid}>
         <div style={styles.card}>
@@ -850,6 +1073,7 @@ export default function TrainingModule({
                     ...(selectedStation === group.station ? localStyles.stationCardActive : {}),
                   }}
                   onClick={() => {
+                    setReportMode("station");
                     setSelectedStation(group.station);
                     setSelectedTraining(null);
                   }}
@@ -868,7 +1092,130 @@ export default function TrainingModule({
         </div>
       </section>
 
-      {selectedStation && (
+      {reportMode !== "station" && (
+        <section style={styles.card}>
+          <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 16 }}>
+            <div>
+              <h2 style={styles.productTitle}>
+                {reportMode === "summary" ? "✅ Training Summary Report" : "⏳ Not Yet Completed"}
+              </h2>
+              <p style={{ ...styles.emptyText, margin: 0 }}>
+                {reportMode === "summary"
+                  ? "Shows completed trainings with crew name, employee number, and completion date/time stamp."
+                  : "Shows all crew members and trainings that have not been submitted yet."}
+              </p>
+            </div>
+
+            <div style={styles.shipBadge}>
+              {visibleReportRows.length} row(s)
+            </div>
+          </div>
+
+          <section style={styles.grid}>
+            <div>
+              <label style={styles.label}>Station filter</label>
+              <select
+                value={reportStationFilter}
+                onChange={(event) => setReportStationFilter(event.target.value)}
+                style={styles.select}
+              >
+                <option value="ALL">All Stations</option>
+                {allStationOptions.map((station) => (
+                  <option key={station} value={station}>{station}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={styles.label}>Training filter</label>
+              <select
+                value={reportTrainingFilter}
+                onChange={(event) => setReportTrainingFilter(event.target.value)}
+                style={styles.select}
+              >
+                <option value="ALL">All Trainings</option>
+                {allTrainingOptions.map((training) => (
+                  <option key={training} value={training}>{training}</option>
+                ))}
+              </select>
+            </div>
+          </section>
+
+          <input
+            placeholder="Search station, name, employee number, training..."
+            value={reportSearch}
+            onChange={(event) => setReportSearch(event.target.value)}
+            style={styles.searchInput}
+          />
+
+          <div style={styles.headerActions}>
+            <button
+              style={styles.backButton}
+              onClick={() =>
+                printRows({
+                  title: reportMode === "summary" ? "Training Summary Report" : "Training Not Yet Completed",
+                  rows: visibleReportRows,
+                  columns: reportColumns,
+                })
+              }
+            >
+              🖨️ Print
+            </button>
+
+            <button
+              style={styles.primaryButton}
+              onClick={() =>
+                exportRowsToExcel(
+                  visibleReportRows,
+                  reportMode === "summary" ? "Summary" : "Not Yet Completed",
+                  reportMode === "summary"
+                    ? `training-summary-${userShip || "ship"}-${monthKey}.xlsx`
+                    : `training-not-yet-completed-${userShip || "ship"}-${monthKey}.xlsx`
+                )
+              }
+            >
+              📥 Export Excel
+            </button>
+          </div>
+
+          {!visibleReportRows.length && (
+            <p style={styles.emptyText}>
+              {reportMode === "summary"
+                ? "No completed trainings found for this filter."
+                : "No not-yet-completed trainings found for this filter."}
+            </p>
+          )}
+
+          <div style={styles.equipmentGrid}>
+            {visibleReportRows.map((row) => (
+              <div
+                key={`${reportMode}-${row.Number}-${row.Station}-${row.Name}-${row.Training}`}
+                style={{
+                  ...styles.equipmentCard,
+                  ...(reportMode === "summary" ? styles.countedCard : styles.zeroCountCard),
+                }}
+              >
+                <div style={styles.recipeName}>{row.Name}</div>
+                <div style={styles.recipeMeta}>Employee #: {row.EmployeeNumber || "N/A"}</div>
+                <div style={styles.recipeMeta}>Station: {row.Station || "N/A"}</div>
+                <div style={styles.recipeMeta}>Position: {row.Position || "N/A"}</div>
+                <div style={styles.recipeMeta}>Training: {row.Training || "N/A"}</div>
+
+                {reportMode === "summary" ? (
+                  <>
+                    <div style={styles.statusGood}>Completed</div>
+                    <div style={styles.recipeMeta}>Date / Time: {row.CompletedAt}</div>
+                  </>
+                ) : (
+                  <div style={styles.statusWarning}>Not Yet Completed</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {reportMode === "station" && selectedStation && (
         <section style={styles.card}>
           <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 16 }}>
             <div>
@@ -902,52 +1249,52 @@ export default function TrainingModule({
 
               return (
                 <a
-  key={training.trainingName}
-  href={training.trainingUrl}
-  target="_blank"
-  rel="noreferrer"
-  style={{
-    ...localStyles.trainingCard,
-    ...(selectedTraining?.trainingName === training.trainingName
-      ? localStyles.trainingCardActive
-      : {}),
-    ...(progress.total > 0 && progress.completed === progress.total
-      ? localStyles.trainingCardComplete
-      : {}),
-    textDecoration: "none",
-    color: "inherit",
-  }}
-  onClick={() => {
-    setSelectedTraining(training);
-    logUsageEvent("training_link_opened", {
-      module: "training",
-      ship: userShip,
-      monthKey,
-      station: selectedStation,
-      trainingName: training.trainingName,
-    });
-  }}
->
-  <strong>{training.trainingName}</strong>
-  {training.note && <span>{training.note}</span>}
-  <span>{progress.completed} / {progress.total} complete</span>
-  <div style={localStyles.progressOuter}>
-    <div style={{ ...localStyles.progressInner, width: `${progress.percent}%` }} />
-  </div>
-</a>
+                  key={training.trainingName}
+                  href={training.trainingUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    ...localStyles.trainingCard,
+                    ...(selectedTraining?.trainingName === training.trainingName
+                      ? localStyles.trainingCardActive
+                      : {}),
+                    ...(progress.total > 0 && progress.completed === progress.total
+                      ? localStyles.trainingCardComplete
+                      : {}),
+                    textDecoration: "none",
+                    color: "inherit",
+                  }}
+                  onClick={() => {
+                    setSelectedTraining(training);
+                    logUsageEvent("training_link_opened", {
+                      module: "training",
+                      ship: userShip,
+                      monthKey,
+                      station: selectedStation,
+                      trainingName: training.trainingName,
+                    });
+                  }}
+                >
+                  <strong>{training.trainingName}</strong>
+                  {training.note && <span>{training.note}</span>}
+                  <span>{progress.completed} / {progress.total} complete</span>
+                  <div style={localStyles.progressOuter}>
+                    <div style={{ ...localStyles.progressInner, width: `${progress.percent}%` }} />
+                  </div>
+                </a>
               );
             })}
           </div>
         </section>
       )}
 
-      {selectedStation && selectedTraining && (
+      {reportMode === "station" && selectedStation && selectedTraining && (
         <section style={styles.card}>
           <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 16 }}>
             <div>
               <h2 style={styles.productTitle}>✅ {selectedTraining.trainingName}</h2>
               <p style={{ ...styles.emptyText, margin: 0 }}>
-                Crew assigned to {selectedStation}. Open the training link, then tap Done.
+                Crew assigned to {selectedStation}. Open the training link, then tap Mark Done.
               </p>
             </div>
 
@@ -957,7 +1304,7 @@ export default function TrainingModule({
           </div>
 
           <input
-            placeholder="Search crew name, position, nationality..."
+            placeholder="Search crew name, employee number, position, nationality..."
             value={crewSearch}
             onChange={(event) => setCrewSearch(event.target.value)}
             style={styles.searchInput}
@@ -982,10 +1329,10 @@ export default function TrainingModule({
                   }}
                 >
                   <div style={styles.recipeName}>{person.crewName}</div>
+                  <div style={styles.recipeMeta}>Employee #: {person.employeeNumber || "N/A"}</div>
                   <div style={styles.recipeMeta}>Position: {person.position || "N/A"}</div>
                   <div style={styles.recipeMeta}>Actual Position: {person.actualPosition || "N/A"}</div>
                   <div style={styles.recipeMeta}>Nationality: {person.nationality || "N/A"}</div>
-                  <div style={styles.recipeMeta}>Employee #: {person.employeeNumber || "N/A"}</div>
                   <div style={styles.recipeMeta}>Cabin: {person.cabinNo || "N/A"}</div>
 
                   {complete ? (
