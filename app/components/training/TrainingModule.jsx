@@ -340,14 +340,16 @@ export default function TrainingModule({
       if (completionResult.error) throw completionResult.error;
 
       const nextAssignments = (assignmentResult.data || []).map((item) => ({
-        station: item.station || "",
-        position: item.position || "",
-        crewName: item.crew_name || "",
-        actualPosition: item.actual_position || "",
-        nationality: item.nationality || "",
-        sourceRow: Number(item.source_row || 0),
-        sourceSheet: item.source_sheet || "",
-      }));
+  station: item.station || "",
+  position: item.position || "",
+  crewName: item.crew_name || "",
+  actualPosition: item.actual_position || "",
+  nationality: item.nationality || "",
+  cabinNo: item.cabin_no || "",
+  employeeNumber: item.employee_number || "",
+  sourceRow: Number(item.source_row || 0),
+  sourceSheet: item.source_sheet || "",
+}));
 
       const nextLinks = (linksResult.data || []).map((item) => ({
         trainingName: item.training_name || "",
