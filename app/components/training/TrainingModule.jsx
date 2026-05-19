@@ -267,6 +267,9 @@ export default function TrainingModule({
   const [completions, setCompletions] = useState([]);
   const [selectedStation, setSelectedStation] = useState("");
   const [selectedTraining, setSelectedTraining] = useState(null);
+  const [trainingLaunchModal, setTrainingLaunchModal] = useState(null);
+  const [trainingLaunchCrewSearch, setTrainingLaunchCrewSearch] = useState("");
+  const [trainingLaunchCrew, setTrainingLaunchCrew] = useState(null);
   const [stationSearch, setStationSearch] = useState("");
   const [trainingSearch, setTrainingSearch] = useState("");
   const [crewSearch, setCrewSearch] = useState("");
@@ -338,6 +341,30 @@ export default function TrainingModule({
       })
       .sort((a, b) => a.position.localeCompare(b.position) || a.crewName.localeCompare(b.crewName));
   }, [assignments, selectedStation, crewSearch]);
+
+  const trainingLaunchCrewOptions = useMemo(() => {
+    if (!selectedStation) return [];
+
+    const query = trainingLaunchCrewSearch.toLowerCase().trim();
+
+    return assignments
+      .filter((item) => item.station === selectedStation)
+      .filter((item) => {
+        if (!query) return true;
+
+        return [
+          item.crewName,
+          item.employeeNumber,
+          item.position,
+          item.actualPosition,
+          item.nationality,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+      })
+      .sort((a, b) => a.position.localeCompare(b.position) || a.crewName.localeCompare(b.crewName));
+  }, [assignments, selectedStation, trainingLaunchCrewSearch]);
 
   const filteredTrainingLinks = useMemo(() => {
     const query = trainingSearch.toLowerCase().trim();
@@ -1000,6 +1027,9 @@ export default function TrainingModule({
             onChange={(event) => {
               setMonthKey(event.target.value);
               setSelectedTraining(null);
+              setTrainingLaunchModal(null);
+              setTrainingLaunchCrew(null);
+              setTrainingLaunchCrewSearch("");
             }}
             style={styles.searchInput}
           />
@@ -1248,11 +1278,9 @@ export default function TrainingModule({
               const progress = getTrainingProgressForStation(selectedStation, training.trainingName);
 
               return (
-                <a
+                <button
                   key={training.trainingName}
-                  href={training.trainingUrl}
-                  target="_blank"
-                  rel="noreferrer"
+                  type="button"
                   style={{
                     ...localStyles.trainingCard,
                     ...(selectedTraining?.trainingName === training.trainingName
@@ -1261,18 +1289,14 @@ export default function TrainingModule({
                     ...(progress.total > 0 && progress.completed === progress.total
                       ? localStyles.trainingCardComplete
                       : {}),
-                    textDecoration: "none",
                     color: "inherit",
+                    fontFamily: "inherit",
                   }}
                   onClick={() => {
                     setSelectedTraining(training);
-                    logUsageEvent("training_link_opened", {
-                      module: "training",
-                      ship: userShip,
-                      monthKey,
-                      station: selectedStation,
-                      trainingName: training.trainingName,
-                    });
+                    setTrainingLaunchModal(training);
+                    setTrainingLaunchCrew(null);
+                    setTrainingLaunchCrewSearch("");
                   }}
                 >
                   <strong>{training.trainingName}</strong>
@@ -1281,11 +1305,139 @@ export default function TrainingModule({
                   <div style={localStyles.progressOuter}>
                     <div style={{ ...localStyles.progressInner, width: `${progress.percent}%` }} />
                   </div>
-                </a>
+                </button>
               );
             })}
           </div>
         </section>
+      )}
+
+      {reportMode === "station" && selectedStation && trainingLaunchModal && (
+        <div
+          style={styles.modalBackdrop}
+          onClick={() => {
+            setTrainingLaunchModal(null);
+            setTrainingLaunchCrew(null);
+            setTrainingLaunchCrewSearch("");
+          }}
+        >
+          <div style={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              style={styles.closeButton}
+              onClick={() => {
+                setTrainingLaunchModal(null);
+                setTrainingLaunchCrew(null);
+                setTrainingLaunchCrewSearch("");
+              }}
+            >
+              ✕
+            </button>
+
+            <h2 style={styles.productTitle}>{trainingLaunchModal.trainingName}</h2>
+
+            <div style={styles.infoBox}>
+              <div>📍 Station: <strong>{selectedStation}</strong></div>
+              <div>📚 Training: <strong>{trainingLaunchModal.trainingName}</strong></div>
+              <div>👤 Choose the CM name first, then open the training link.</div>
+            </div>
+
+            <input
+              placeholder="Search crew name, employee number, position..."
+              value={trainingLaunchCrewSearch}
+              onChange={(event) => setTrainingLaunchCrewSearch(event.target.value)}
+              style={styles.searchInput}
+            />
+
+            <div style={localStyles.crewPickGrid}>
+              {trainingLaunchCrewOptions.map((person) => {
+                const complete = isCrewTrainingComplete(person, trainingLaunchModal);
+                const selected =
+                  trainingLaunchCrew?.crewName === person.crewName &&
+                  trainingLaunchCrew?.employeeNumber === person.employeeNumber;
+
+                return (
+                  <button
+                    key={`${person.station}-${person.crewName}-${person.employeeNumber}-${person.sourceRow}`}
+                    type="button"
+                    style={{
+                      ...localStyles.crewPickCard,
+                      ...(selected ? localStyles.crewPickCardActive : {}),
+                      ...(complete ? styles.countedCard : {}),
+                    }}
+                    onClick={() => setTrainingLaunchCrew(person)}
+                  >
+                    <strong>{person.crewName}</strong>
+                    <span>Employee #: {person.employeeNumber || "N/A"}</span>
+                    <span>{person.position || "N/A"}</span>
+                    <span>{complete ? "Completed" : "Pending"}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {!trainingLaunchCrew && (
+              <p style={styles.warningText}>
+                Select a crew member before opening the training link.
+              </p>
+            )}
+
+            {trainingLaunchCrew && (
+              <div style={styles.infoBox}>
+                <div>Selected CM: <strong>{trainingLaunchCrew.crewName}</strong></div>
+                <div>Employee #: <strong>{trainingLaunchCrew.employeeNumber || "N/A"}</strong></div>
+                <div>Position: <strong>{trainingLaunchCrew.position || "N/A"}</strong></div>
+              </div>
+            )}
+
+            <div style={styles.headerActions}>
+              {trainingLaunchCrew ? (
+                <a
+                  href={trainingLaunchModal.trainingUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    ...styles.primaryButton,
+                    textDecoration: "none",
+                    display: "inline-block",
+                  }}
+                  onClick={() => {
+                    setSelectedTraining(trainingLaunchModal);
+                    logUsageEvent("training_link_opened", {
+                      module: "training",
+                      ship: userShip,
+                      monthKey,
+                      station: selectedStation,
+                      crewName: trainingLaunchCrew.crewName,
+                      employeeNumber: trainingLaunchCrew.employeeNumber || "",
+                      trainingName: trainingLaunchModal.trainingName,
+                    });
+                  }}
+                >
+                  Open Training Link
+                </a>
+              ) : (
+                <button type="button" style={styles.backButton} disabled>
+                  Open Training Link
+                </button>
+              )}
+
+              <button
+                type="button"
+                style={styles.primaryButton}
+                disabled={
+                  !trainingLaunchCrew ||
+                  isCrewTrainingComplete(trainingLaunchCrew, trainingLaunchModal)
+                }
+                onClick={() => markTrainingComplete(trainingLaunchCrew, trainingLaunchModal)}
+              >
+                {trainingLaunchCrew && isCrewTrainingComplete(trainingLaunchCrew, trainingLaunchModal)
+                  ? "Already Done"
+                  : "Mark Done"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {reportMode === "station" && selectedStation && selectedTraining && (
@@ -1426,5 +1578,28 @@ const localStyles = {
     height: "100%",
     borderRadius: 999,
     background: "#2e7d32",
+  },
+  crewPickGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+    gap: 10,
+    maxHeight: 340,
+    overflowY: "auto",
+    paddingRight: 4,
+  },
+  crewPickCard: {
+    border: "1px solid #ddd",
+    borderRadius: 12,
+    padding: 10,
+    background: "#fafafa",
+    display: "grid",
+    gap: 4,
+    textAlign: "left",
+    cursor: "pointer",
+    fontFamily: "inherit",
+  },
+  crewPickCardActive: {
+    border: "2px solid #111",
+    background: "#f2f2f2",
   },
 };
