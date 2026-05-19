@@ -145,7 +145,9 @@ const productNamesMatch = (left, right) => {
     .filter((word) => word.length > 2);
 
   const bText = cleanText(right);
-  const strongWords = aWords.filter((word) => !["THE", "AND", "WITH", "FOR", "FRESH", "FROZEN", "CASE", "PACK"].includes(word));
+  const strongWords = aWords.filter(
+    (word) => !["THE", "AND", "WITH", "FOR", "FRESH", "FROZEN", "CASE", "PACK"].includes(word)
+  );
 
   if (strongWords.length >= 2 && strongWords.slice(0, 4).every((word) => bText.includes(word))) {
     return true;
@@ -229,6 +231,7 @@ const findTemplateMatches = (templateEntries, productName, shipCode) => {
   });
 
   const seen = new Set();
+
   return matches.filter((match) => {
     const key = cleanText(match.location + "|" + match.scopeText);
     if (seen.has(key)) return false;
@@ -273,6 +276,7 @@ const parseFmlRows = (workbook) => {
     .filter((item) => item.code || item.product)
     .filter((item) => item.venues.length > 0);
 };
+
 const getFmlOrderCodeKey = (value) => {
   const cleaned = String(value ?? "")
     .trim()
@@ -345,8 +349,8 @@ const buildOrderedNotInFmlRows = (workbook, orderRows) => {
       const codeKey = getFmlOrderCodeKey(item.code);
       const productKey = compactText(item.product);
 
-      const foundByCode = codeKey && fmlCodeSet.has(codeKey);
-      const foundByExactProduct = productKey && fmlProductKeySet.has(productKey);
+      const foundByCode = Boolean(codeKey && fmlCodeSet.has(codeKey));
+      const foundByExactProduct = Boolean(productKey && fmlProductKeySet.has(productKey));
       const foundByProductName = fmlProductNames.some((fmlProduct) =>
         productNamesMatch(item.product, fmlProduct)
       );
@@ -432,6 +436,7 @@ const parseOrderFile = async (file) => {
     const orderedByShip = toNumber(row[24]); // Y - ordered by ship
 
     let historicalSailorDays = 0;
+
     for (let c = 34; c <= 39; c += 1) {
       historicalSailorDays += getHistoricalSailorDays(historicalDays[c], historicalSailors[c]);
     }
@@ -448,39 +453,40 @@ const parseOrderFile = async (file) => {
     let parCapLimit = 0;
 
     if (Number(voyageDays) === 14 && parLevel > 0) {
-  parCapLimit = parLevel * 1.1;
-  if (suggestedOrder > parCapLimit) {
-    suggestedOrder = parCapLimit;
-    parCapApplied = true;
-  }
-}
+      parCapLimit = parLevel * 1.1;
 
-const suggestedQty = Number(suggestedOrder || 0);
-const orderedQty = Number(orderedByShip || 0);
-const orderDifference = orderedQty - suggestedQty;
+      if (suggestedOrder > parCapLimit) {
+        suggestedOrder = parCapLimit;
+        parCapApplied = true;
+      }
+    }
 
-let orderDifferencePercent = 0;
-let orderComparisonStatus = "green";
-let orderComparisonLabel = "Within +/- 10%";
+    const suggestedQty = Number(suggestedOrder || 0);
+    const orderedQty = Number(orderedByShip || 0);
+    const orderDifference = orderedQty - suggestedQty;
 
-if (suggestedQty > 0) {
-  orderDifferencePercent = (orderDifference / suggestedQty) * 100;
+    let orderDifferencePercent = 0;
+    let orderComparisonStatus = "green";
+    let orderComparisonLabel = "Within +/- 10%";
 
-  if (orderDifferencePercent > 10) {
-    orderComparisonStatus = "red";
-    orderComparisonLabel = "Ordered over suggested by more than 10%";
-  } else if (orderDifferencePercent < -10) {
-    orderComparisonStatus = "blue";
-    orderComparisonLabel = "Ordered under suggested by more than 10%";
-  }
-} else if (orderedQty > 0) {
-  orderDifferencePercent = 100;
-  orderComparisonStatus = "red";
-  orderComparisonLabel = "Ordered but suggested quantity is 0";
-}
+    if (suggestedQty > 0) {
+      orderDifferencePercent = (orderDifference / suggestedQty) * 100;
 
-let alertType = "normal";
-let alertLabel = "Review";
+      if (orderDifferencePercent > 10) {
+        orderComparisonStatus = "red";
+        orderComparisonLabel = "Ordered over suggested by more than 10%";
+      } else if (orderDifferencePercent < -10) {
+        orderComparisonStatus = "blue";
+        orderComparisonLabel = "Ordered under suggested by more than 10%";
+      }
+    } else if (orderedQty > 0) {
+      orderDifferencePercent = 100;
+      orderComparisonStatus = "red";
+      orderComparisonLabel = "Ordered but suggested quantity is 0";
+    }
+
+    let alertType = "normal";
+    let alertLabel = "Review";
 
     if (stock === 0 && pastConsumption === 0) {
       alertType = "no-stock-no-consumption";
@@ -494,42 +500,47 @@ let alertLabel = "Review";
     }
 
     const item = {
-  excelOrder: orderRows.length + 1,
-  excelRow,
-  code,
-  product,
-  unit,
-  stock,
-  futureOrders,
-  parLevel,
-  pastConsumption,
-  historicalSailorDays,
-  averagePerDay,
-  usageUntilArrival,
-  availableAtArrival,
-  projectedVoyageNeed,
-  rawSuggested,
-  suggestedOrder,
-  orderedByShip,
-  orderedQty,
-  suggestedQty,
-  orderDifference,
-  orderDifferencePercent,
-  orderComparisonStatus,
-  orderComparisonLabel,
-  parCapApplied,
-  parCapLimit,
-  alertType,
-  alertLabel,
-};
+      excelOrder: orderRows.length + 1,
+      excelRow,
+      code,
+      product,
+      unit,
+      stock,
+      futureOrders,
+      parLevel,
+      pastConsumption,
+      historicalSailorDays,
+      averagePerDay,
+      usageUntilArrival,
+      availableAtArrival,
+      projectedVoyageNeed,
+      rawSuggested,
+      suggestedOrder,
+      orderedByShip,
+      orderedQty,
+      suggestedQty,
+      orderDifference,
+      orderDifferencePercent,
+      orderComparisonStatus,
+      orderComparisonLabel,
+      parCapApplied,
+      parCapLimit,
+      alertType,
+      alertLabel,
+    };
 
     orderRows.push(item);
-    if (code) orderByCode[cleanText(code)] = item;
+
+    if (code) {
+      orderByCode[cleanText(code)] = item;
+      orderByCode[getFmlOrderCodeKey(code)] = item;
+    }
   }
 
   await yieldToBrowser();
 
   const fmlRows = parseFmlRows(workbook);
+  const fmlOrderedNotFmlRows = buildOrderedNotInFmlRows(workbook, orderRows);
 
   const counts = {
     totalItems: orderRows.length,
@@ -540,6 +551,7 @@ let alertLabel = "Review";
     negativeArrival: orderRows.filter((row) => row.availableAtArrival < 0).length,
     fmlNotUsed: 0,
     fmlRunningLow: 0,
+    fmlOrderedNotFml: fmlOrderedNotFmlRows.length,
   };
 
   return {
@@ -549,6 +561,7 @@ let alertLabel = "Review";
     fmlRows,
     fmlNotUsedRows: [],
     fmlRunningLowRows: [],
+    fmlOrderedNotFmlRows,
     meta: {
       fileName: file.name,
       sheetName,
@@ -577,8 +590,15 @@ const buildFmlReportAsync = async ({
   const templateMatchCache = new Map();
 
   const findOrderMatch = (fmlItem) => {
-    if (fmlItem.code && orderByCode[cleanText(fmlItem.code)]) {
-      return orderByCode[cleanText(fmlItem.code)];
+    const fmlCodeKey = fmlItem.code ? cleanText(fmlItem.code) : "";
+    const normalizedCodeKey = getFmlOrderCodeKey(fmlItem.code);
+
+    if (fmlCodeKey && orderByCode[fmlCodeKey]) {
+      return orderByCode[fmlCodeKey];
+    }
+
+    if (normalizedCodeKey && orderByCode[normalizedCodeKey]) {
+      return orderByCode[normalizedCodeKey];
     }
 
     return orderRows.find((row) => productNamesMatch(fmlItem.product, row.product));
@@ -589,11 +609,13 @@ const buildFmlReportAsync = async ({
       if (onProgress) {
         onProgress("Preparing FML report... " + i + " of " + fmlRows.length);
       }
+
       await yieldToBrowser();
     }
 
     const fmlItem = fmlRows[i];
     const orderMatch = findOrderMatch(fmlItem);
+
     if (!orderMatch) continue;
 
     const cacheKey = compactText(fmlItem.product) + "|" + (shipCode || "");
@@ -655,6 +677,7 @@ const exportRowsToExcel = (rows, sheetName, fileName) => {
 
   const worksheet = XLSX.utils.json_to_sheet(rows);
   const workbook = XLSX.utils.book_new();
+
   XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
   XLSX.writeFile(workbook, fileName);
 };
@@ -695,7 +718,12 @@ const printRows = (title, rows, columns) => {
   printWindow.print();
 };
 
-export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEvent = () => {} }) {
+export default function GenerateNextOrder({
+  styles,
+  userShip,
+  onBack,
+  logUsageEvent = () => {},
+}) {
   const [templateEntries, setTemplateEntries] = useState([]);
   const [templateStatus, setTemplateStatus] = useState("Loading attached ERP template...");
   const [nextOrderRows, setNextOrderRows] = useState([]);
@@ -703,13 +731,13 @@ export default function GenerateNextOrder({ styles, userShip, onBack, logUsageEv
   const [fmlSourceRows, setFmlSourceRows] = useState([]);
   const [fmlNotUsedRows, setFmlNotUsedRows] = useState([]);
   const [fmlRunningLowRows, setFmlRunningLowRows] = useState([]);
+  const [fmlOrderedNotFmlRows, setFmlOrderedNotFmlRows] = useState([]);
   const [nextOrderMeta, setNextOrderMeta] = useState({});
   const [nextOrderFileName, setNextOrderFileName] = useState("");
   const [nextOrderSearch, setNextOrderSearch] = useState("");
   const [fmlSearch, setFmlSearch] = useState("");
   const [fmlLowSearch, setFmlLowSearch] = useState("");
-  const [fmlOrderedNotFmlRows, setFmlOrderedNotFmlRows] = useState([]);
-const [fmlOrderedNotFmlSearch, setFmlOrderedNotFmlSearch] = useState("");
+  const [fmlOrderedNotFmlSearch, setFmlOrderedNotFmlSearch] = useState("");
   const [nextOrderFilter, setNextOrderFilter] = useState("all");
   const [nextOrderView, setNextOrderView] = useState("order");
   const [nextOrderLoading, setNextOrderLoading] = useState(false);
@@ -724,6 +752,7 @@ const [fmlOrderedNotFmlSearch, setFmlOrderedNotFmlSearch] = useState("");
     const loadDefaultTemplate = async () => {
       try {
         const response = await fetch("/template.xlsx");
+
         if (!response.ok) {
           setTemplateStatus("Attached ERP template not found. Upload one if needed.");
           return;
@@ -732,41 +761,61 @@ const [fmlOrderedNotFmlSearch, setFmlOrderedNotFmlSearch] = useState("");
         const arrayBuffer = await response.arrayBuffer();
         const workbook = XLSX.read(arrayBuffer, { type: "array" });
         const entries = parseTemplateWorkbook(workbook);
+
         setTemplateEntries(entries);
         setTemplateStatus("Attached ERP template loaded. " + entries.length + " item lines found.");
-      } catch (error) {
+      } catch {
         setTemplateStatus("Could not load attached ERP template.");
       }
     };
 
     loadDefaultTemplate();
   }, []);
+
   useEffect(() => {
-  setReportDisplayLimit(REPORT_RENDER_BATCH);
-}, [nextOrderView, nextOrderSearch, nextOrderFilter, fmlSearch, fmlLowSearch]);
+    setReportDisplayLimit(REPORT_RENDER_BATCH);
+  }, [
+    nextOrderView,
+    nextOrderSearch,
+    nextOrderFilter,
+    fmlSearch,
+    fmlLowSearch,
+    fmlOrderedNotFmlSearch,
+  ]);
 
   const uploadErpTemplate = (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
+
     reader.onload = (loadEvent) => {
       try {
         const workbook = XLSX.read(loadEvent.target.result, { type: "binary" });
         const entries = parseTemplateWorkbook(workbook);
+
         setTemplateEntries(entries);
         setTemplateStatus("Custom ERP template loaded. " + entries.length + " item lines found.");
+
         logUsageEvent("next_order_erp_template_uploaded", {
           module: "generate_next_order",
           fileName: file.name,
           itemLines: entries.length,
         });
-      } catch (error) {
+      } catch {
         setTemplateStatus("Could not load custom ERP template.");
       }
     };
 
     reader.readAsBinaryString(file);
+  };
+
+  const resetFmlReports = () => {
+    setFmlNotUsedRows([]);
+    setFmlRunningLowRows([]);
+    setFmlOrderedNotFmlRows([]);
+    setFmlNotUsedPrepared(false);
+    setFmlRunningLowPrepared(false);
   };
 
   const uploadNextOrderFile = async (event) => {
@@ -780,13 +829,15 @@ const [fmlOrderedNotFmlSearch, setFmlOrderedNotFmlSearch] = useState("");
 
     try {
       await yieldToBrowser();
-      const parsed = await parseOrderFile(file, templateEntries);
+
+      const parsed = await parseOrderFile(file);
 
       setNextOrderRows(parsed.orderRows);
       setOrderByCode(parsed.orderByCode || {});
       setFmlSourceRows(parsed.fmlRows || []);
       setFmlNotUsedRows([]);
       setFmlRunningLowRows([]);
+      setFmlOrderedNotFmlRows(parsed.fmlOrderedNotFmlRows || []);
       setFmlNotUsedPrepared(false);
       setFmlRunningLowPrepared(false);
       setNextOrderMeta(parsed.meta);
@@ -794,6 +845,7 @@ const [fmlOrderedNotFmlSearch, setFmlOrderedNotFmlSearch] = useState("");
       setNextOrderSearch("");
       setFmlSearch("");
       setFmlLowSearch("");
+      setFmlOrderedNotFmlSearch("");
       setNextOrderFilter("all");
       setNextOrderView("order");
       setNextOrderMessage(
@@ -801,7 +853,9 @@ const [fmlOrderedNotFmlSearch, setFmlOrderedNotFmlSearch] = useState("");
           parsed.meta.totalItems +
           " product rows found. " +
           parsed.meta.itemsNeedingOrder +
-          " need order. Calculated using B2/B3 days to arrival, B5 sailors, B6 voyage days, F:N future orders, AI:AN past consumption, and Q par where applicable. FML reports are preparing in the background."
+          " need order. " +
+          parsed.meta.fmlOrderedNotFml +
+          " ordered item(s) are not in FML. Calculated using B2/B3 days to arrival, B5 sailors, B6 voyage days, F:N future orders, Y ordered by ship, AI:AN past consumption, and Q par where applicable. FML reports are preparing in the background."
       );
 
       logUsageEvent("next_order_file_uploaded", {
@@ -810,6 +864,7 @@ const [fmlOrderedNotFmlSearch, setFmlOrderedNotFmlSearch] = useState("");
         ship: parsed.meta.shipCode,
         totalItems: parsed.meta.totalItems,
         fmlRows: (parsed.fmlRows || []).length,
+        orderedNotInFml: parsed.meta.fmlOrderedNotFml,
       });
 
       window.setTimeout(() => {
@@ -850,6 +905,8 @@ const [fmlOrderedNotFmlSearch, setFmlOrderedNotFmlSearch] = useState("");
                 notUsedRows.length +
                 ", running low: " +
                 runningLowRows.length +
+                ", ordered not in FML: " +
+                (parsed.fmlOrderedNotFmlRows || []).length +
                 "."
             );
           } catch (error) {
@@ -863,10 +920,7 @@ const [fmlOrderedNotFmlSearch, setFmlOrderedNotFmlSearch] = useState("");
       setNextOrderRows([]);
       setOrderByCode({});
       setFmlSourceRows([]);
-      setFmlNotUsedRows([]);
-      setFmlRunningLowRows([]);
-      setFmlNotUsedPrepared(false);
-      setFmlRunningLowPrepared(false);
+      resetFmlReports();
       setNextOrderMessage(error?.message || "Could not prepare order file.");
     } finally {
       setNextOrderLoading(false);
@@ -888,6 +942,7 @@ const [fmlOrderedNotFmlSearch, setFmlOrderedNotFmlSearch] = useState("");
 
     try {
       await yieldToBrowser();
+
       const rows = await buildFmlReportAsync({
         mode,
         fmlRows: fmlSourceRows,
@@ -926,7 +981,6 @@ const [fmlOrderedNotFmlSearch, setFmlOrderedNotFmlSearch] = useState("");
         (nextOrderFilter === "noStock" && row.stock === 0);
 
       if (!filterOk) return false;
-
       if (!query) return true;
 
       return [
@@ -947,7 +1001,6 @@ const [fmlOrderedNotFmlSearch, setFmlOrderedNotFmlSearch] = useState("");
         const aArrival = Number(a.availableAtArrival || 0);
         const bArrival = Number(b.availableAtArrival || 0);
 
-        // Biggest shortage first: -5821 before -126.
         if (aArrival !== bArrival) return aArrival - bArrival;
 
         return Number(a.excelOrder || 0) - Number(b.excelOrder || 0);
@@ -956,80 +1009,81 @@ const [fmlOrderedNotFmlSearch, setFmlOrderedNotFmlSearch] = useState("");
 
     return rows;
   }, [nextOrderRows, nextOrderSearch, nextOrderFilter]);
+
   const orderedVsSuggestedRows = useMemo(() => {
-  const query = nextOrderSearch.toLowerCase().trim();
+    const query = nextOrderSearch.toLowerCase().trim();
 
-  return nextOrderRows
-    .map((row) => {
-      const orderedQty = Number(row.orderedByShip || 0);
-      const suggestedQty = Number(row.suggestedOrder || 0);
-      const orderDifference = orderedQty - suggestedQty;
+    return nextOrderRows
+      .map((row) => {
+        const orderedQty = Number(row.orderedByShip || 0);
+        const suggestedQty = Number(row.suggestedOrder || 0);
+        const orderDifference = orderedQty - suggestedQty;
 
-      let orderDifferencePercent = 0;
-      let orderComparisonStatus = "green";
-      let orderComparisonLabel = "Within +/- 10%";
+        let orderDifferencePercent = 0;
+        let orderComparisonStatus = "green";
+        let orderComparisonLabel = "Within +/- 10%";
 
-      if (suggestedQty > 0) {
-        orderDifferencePercent = (orderDifference / suggestedQty) * 100;
+        if (suggestedQty > 0) {
+          orderDifferencePercent = (orderDifference / suggestedQty) * 100;
 
-        if (orderDifferencePercent > 10) {
+          if (orderDifferencePercent > 10) {
+            orderComparisonStatus = "red";
+            orderComparisonLabel = "Ordered over suggested by more than 10%";
+          } else if (orderDifferencePercent < -10) {
+            orderComparisonStatus = "blue";
+            orderComparisonLabel = "Ordered under suggested by more than 10%";
+          }
+        } else if (orderedQty > 0) {
+          orderDifferencePercent = 100;
           orderComparisonStatus = "red";
-          orderComparisonLabel = "Ordered over suggested by more than 10%";
-        } else if (orderDifferencePercent < -10) {
-          orderComparisonStatus = "blue";
-          orderComparisonLabel = "Ordered under suggested by more than 10%";
+          orderComparisonLabel = "Ordered but suggested quantity is 0";
         }
-      } else if (orderedQty > 0) {
-        orderDifferencePercent = 100;
-        orderComparisonStatus = "red";
-        orderComparisonLabel = "Ordered but suggested quantity is 0";
-      }
 
-      return {
-        ...row,
-        orderedQty,
-        suggestedQty,
-        orderDifference,
-        orderDifferencePercent,
-        orderComparisonStatus,
-        orderComparisonLabel,
-      };
-    })
-    .filter((row) => Number(row.orderedQty || 0) > 0 || Number(row.suggestedQty || 0) > 0)
-    .filter((row) => {
-      if (!query) return true;
+        return {
+          ...row,
+          orderedQty,
+          suggestedQty,
+          orderDifference,
+          orderDifferencePercent,
+          orderComparisonStatus,
+          orderComparisonLabel,
+        };
+      })
+      .filter((row) => Number(row.orderedQty || 0) > 0 || Number(row.suggestedQty || 0) > 0)
+      .filter((row) => {
+        if (!query) return true;
 
-      return [
-        row.product,
-        row.code,
-        row.unit,
-        row.orderComparisonLabel,
-        String(row.excelRow),
-        String(row.excelOrder),
-        String(row.orderedQty),
-        String(row.suggestedQty),
-        String(row.orderDifference),
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(query);
-    })
-    .sort((a, b) => {
-      const statusRank = {
-        red: 0,
-        blue: 1,
-        green: 2,
-      };
+        return [
+          row.product,
+          row.code,
+          row.unit,
+          row.orderComparisonLabel,
+          String(row.excelRow),
+          String(row.excelOrder),
+          String(row.orderedQty),
+          String(row.suggestedQty),
+          String(row.orderDifference),
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+      })
+      .sort((a, b) => {
+        const statusRank = {
+          red: 0,
+          blue: 1,
+          green: 2,
+        };
 
-      const statusDiff =
-        (statusRank[a.orderComparisonStatus] ?? 9) -
-        (statusRank[b.orderComparisonStatus] ?? 9);
+        const statusDiff =
+          (statusRank[a.orderComparisonStatus] ?? 9) -
+          (statusRank[b.orderComparisonStatus] ?? 9);
 
-      if (statusDiff !== 0) return statusDiff;
+        if (statusDiff !== 0) return statusDiff;
 
-      return Math.abs(Number(b.orderDifferencePercent || 0)) - Math.abs(Number(a.orderDifferencePercent || 0));
-    });
-}, [nextOrderRows, nextOrderSearch]);
+        return Math.abs(Number(b.orderDifferencePercent || 0)) - Math.abs(Number(a.orderDifferencePercent || 0));
+      });
+  }, [nextOrderRows, nextOrderSearch]);
 
   const filteredFmlNotUsedRows = useMemo(() => {
     const query = fmlSearch.toLowerCase().trim();
@@ -1055,21 +1109,44 @@ const [fmlOrderedNotFmlSearch, setFmlOrderedNotFmlSearch] = useState("");
     );
   }, [fmlRunningLowRows, fmlLowSearch]);
 
+  const filteredFmlOrderedNotFmlRows = useMemo(() => {
+    const query = fmlOrderedNotFmlSearch.toLowerCase().trim();
+
+    if (!query) return fmlOrderedNotFmlRows;
+
+    return fmlOrderedNotFmlRows.filter((row) =>
+      [
+        row.product,
+        row.code,
+        row.unit,
+        row.excelRow,
+        row.matchType,
+        row.reason,
+        String(row.orderedByShip),
+        String(row.suggestedOrder),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query)
+    );
+  }, [fmlOrderedNotFmlRows, fmlOrderedNotFmlSearch]);
+
   const orderedVsSuggestedExportRows = orderedVsSuggestedRows.map((row, index) => ({
-  Number: index + 1,
-  ExcelRow: row.excelRow,
-  Code: row.code,
-  Product: row.product,
-  UM: row.unit,
-  CurrentQuantityOnHand: row.stock,
-  UpcomingOrder: row.futureOrders,
-  DailyConsumption: row.averagePerDay,
-  OrderedByShipColumnY: row.orderedQty,
-  SuggestedOrder: row.suggestedQty,
-  Difference: row.orderDifference,
-  DifferencePercent: row.orderDifferencePercent,
-  Status: row.orderComparisonLabel,
-}));
+    Number: index + 1,
+    ExcelRow: row.excelRow,
+    Code: row.code,
+    Product: row.product,
+    UM: row.unit,
+    CurrentQuantityOnHand: row.stock,
+    UpcomingOrder: row.futureOrders,
+    DailyConsumption: row.averagePerDay,
+    OrderedByShipColumnY: row.orderedQty,
+    SuggestedOrder: row.suggestedQty,
+    Difference: row.orderDifference,
+    DifferencePercent: row.orderDifferencePercent,
+    Status: row.orderComparisonLabel,
+  }));
+
   const nextOrderExportRows = filteredNextOrderRows.map((row) => ({
     ExcelOrder: row.excelOrder,
     ExcelRow: row.excelRow,
@@ -1110,19 +1187,39 @@ const [fmlOrderedNotFmlSearch, setFmlOrderedNotFmlSearch] = useState("");
       Reason: row.reason,
     }));
 
+  const fmlOrderedNotFmlExportRows = filteredFmlOrderedNotFmlRows.map((row, index) => ({
+    Number: index + 1,
+    ExcelRow: row.excelRow,
+    Code: row.code,
+    Product: row.product,
+    UM: row.unit,
+    Stock: row.stock,
+    FutureOrders: row.futureOrders,
+    OrderedByShipColumnY: row.orderedByShip,
+    SuggestedOrder: row.suggestedOrder,
+    PastConsumption: row.pastConsumption,
+    AveragePerDay: row.averagePerDay,
+    AvailableAtArrival: row.availableAtArrival,
+    MatchType: row.matchType,
+    Reason: row.reason,
+  }));
+
   const countNeedsOrder = nextOrderRows.filter((row) => row.suggestedOrder > 0).length;
   const countRunningLowBeforeLoading = nextOrderRows.filter((row) => Number(row.availableAtArrival || 0) < 0).length;
   const countNoConsumption = nextOrderRows.filter((row) => row.pastConsumption === 0).length;
   const countNoStock = nextOrderRows.filter((row) => row.stock === 0).length;
-  const visibleNextOrderRows = filteredNextOrderRows.slice(0, reportDisplayLimit);
-const visibleOrderedVsSuggestedRows = orderedVsSuggestedRows.slice(0, reportDisplayLimit);
-const visibleFmlNotUsedRows = filteredFmlNotUsedRows.slice(0, reportDisplayLimit);
-const visibleFmlRunningLowRows = filteredFmlRunningLowRows.slice(0, reportDisplayLimit);
 
-const hasMoreNextOrderRows = filteredNextOrderRows.length > visibleNextOrderRows.length;
-const hasMoreOrderedVsSuggestedRows = orderedVsSuggestedRows.length > visibleOrderedVsSuggestedRows.length;
-const hasMoreFmlNotUsedRows = filteredFmlNotUsedRows.length > visibleFmlNotUsedRows.length;
-const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRunningLowRows.length;
+  const visibleNextOrderRows = filteredNextOrderRows.slice(0, reportDisplayLimit);
+  const visibleOrderedVsSuggestedRows = orderedVsSuggestedRows.slice(0, reportDisplayLimit);
+  const visibleFmlNotUsedRows = filteredFmlNotUsedRows.slice(0, reportDisplayLimit);
+  const visibleFmlRunningLowRows = filteredFmlRunningLowRows.slice(0, reportDisplayLimit);
+  const visibleFmlOrderedNotFmlRows = filteredFmlOrderedNotFmlRows.slice(0, reportDisplayLimit);
+
+  const hasMoreNextOrderRows = filteredNextOrderRows.length > visibleNextOrderRows.length;
+  const hasMoreOrderedVsSuggestedRows = orderedVsSuggestedRows.length > visibleOrderedVsSuggestedRows.length;
+  const hasMoreFmlNotUsedRows = filteredFmlNotUsedRows.length > visibleFmlNotUsedRows.length;
+  const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRunningLowRows.length;
+  const hasMoreFmlOrderedNotFmlRows = filteredFmlOrderedNotFmlRows.length > visibleFmlOrderedNotFmlRows.length;
 
   const orderSheetShip = nextOrderMeta.shipCode || userShip || "";
 
@@ -1147,16 +1244,16 @@ const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRu
         >
           🛒 Next Order ({nextOrderRows.length})
         </button>
-        
+
         <button
-  style={{
-    ...styles.viewModeButton,
-    ...(nextOrderView === "orderedVsSuggested" ? styles.viewModeButtonActive : {}),
-  }}
-  onClick={() => setNextOrderView("orderedVsSuggested")}
->
-  📊 Ordered vs Suggested ({orderedVsSuggestedRows.length})
-</button>
+          style={{
+            ...styles.viewModeButton,
+            ...(nextOrderView === "orderedVsSuggested" ? styles.viewModeButtonActive : {}),
+          }}
+          onClick={() => setNextOrderView("orderedVsSuggested")}
+        >
+          📊 Ordered vs Suggested ({orderedVsSuggestedRows.length})
+        </button>
 
         <button
           style={{ ...styles.viewModeButton, ...(nextOrderView === "fml" ? styles.viewModeButtonActive : {}) }}
@@ -1176,6 +1273,13 @@ const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRu
           }}
         >
           ⚠️ FML Running Low ({fmlRunningLowRows.length})
+        </button>
+
+        <button
+          style={{ ...styles.viewModeButton, ...(nextOrderView === "fmlordered" ? styles.viewModeButtonActive : {}) }}
+          onClick={() => setNextOrderView("fmlordered")}
+        >
+          🧾 Ordered Not In FML ({fmlOrderedNotFmlRows.length})
         </button>
       </div>
 
@@ -1198,11 +1302,15 @@ const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRu
             <div>👥 Sailors B5: <strong>{formatQty(nextOrderMeta.sailors)}</strong></div>
             <div>🗓️ Voyage days B6: <strong>{formatQty(nextOrderMeta.voyageDays)}</strong></div>
             <div>⏱️ Days until arrival: <strong>{formatQty(nextOrderMeta.daysUntilArrival)}</strong></div>
-            {nextOrderMessage && <div style={{ color: nextOrderMessage.includes("Could not") ? "#b00020" : "#555" }}>{nextOrderMessage}</div>}
+            {nextOrderMessage && (
+              <div style={{ color: nextOrderMessage.includes("Could not") ? "#b00020" : "#555" }}>
+                {nextOrderMessage}
+              </div>
+            )}
           </div>
         </div>
 
-                <div style={styles.card}>
+        <div style={styles.card}>
           <h2 style={styles.cardTitle}>⚙️ Report Actions</h2>
 
           {nextOrderView === "order" && (
@@ -1292,14 +1400,14 @@ const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRu
               />
 
               <div style={styles.infoBox}>
-  <div>📘 Ordered by ship source: <strong>Column Y</strong></div>
-  <div>📦 Current quantity on hand: <strong>Stock column D</strong></div>
-  <div>🚚 Upcoming order: <strong>Future orders F:N</strong></div>
-  <div>📊 Daily consumption: <strong>average daily usage from past consumption</strong></div>
-  <div>🔴 Red: <strong>ordered more than suggested by over 10%</strong></div>
-  <div>🔵 Blue: <strong>ordered less than suggested by over 10%</strong></div>
-  <div>🟢 Green: <strong>within -10% to +10%</strong></div>
-</div>
+                <div>📘 Ordered by ship source: <strong>Column Y</strong></div>
+                <div>📦 Current quantity on hand: <strong>Stock column D</strong></div>
+                <div>🚚 Upcoming order: <strong>Future orders F:N</strong></div>
+                <div>📊 Daily consumption: <strong>average daily usage from past consumption</strong></div>
+                <div>🔴 Red: <strong>ordered more than suggested by over 10%</strong></div>
+                <div>🔵 Blue: <strong>ordered less than suggested by over 10%</strong></div>
+                <div>🟢 Green: <strong>within -10% to +10%</strong></div>
+              </div>
 
               <div style={styles.headerActions}>
                 <button
@@ -1307,18 +1415,18 @@ const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRu
                   onClick={() =>
                     printRows("Ordered vs Suggested", orderedVsSuggestedExportRows, [
                       { key: "Number", label: "#" },
-{ key: "ExcelRow", label: "Row" },
-{ key: "Code", label: "Code" },
-{ key: "Product", label: "Product" },
-{ key: "UM", label: "U/M" },
-{ key: "CurrentQuantityOnHand", label: "On Hand" },
-{ key: "UpcomingOrder", label: "Upcoming Order" },
-{ key: "DailyConsumption", label: "Daily Consumption" },
-{ key: "OrderedByShipColumnY", label: "Ordered Y" },
-{ key: "SuggestedOrder", label: "Suggested" },
-{ key: "Difference", label: "Difference" },
-{ key: "DifferencePercent", label: "Diff %" },
-{ key: "Status", label: "Status" },
+                      { key: "ExcelRow", label: "Row" },
+                      { key: "Code", label: "Code" },
+                      { key: "Product", label: "Product" },
+                      { key: "UM", label: "U/M" },
+                      { key: "CurrentQuantityOnHand", label: "On Hand" },
+                      { key: "UpcomingOrder", label: "Upcoming Order" },
+                      { key: "DailyConsumption", label: "Daily Consumption" },
+                      { key: "OrderedByShipColumnY", label: "Ordered Y" },
+                      { key: "SuggestedOrder", label: "Suggested" },
+                      { key: "Difference", label: "Difference" },
+                      { key: "DifferencePercent", label: "Diff %" },
+                      { key: "Status", label: "Status" },
                     ])
                   }
                 >
@@ -1418,6 +1526,52 @@ const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRu
               </div>
             </>
           )}
+
+          {nextOrderView === "fmlordered" && (
+            <>
+              <input
+                placeholder="Search ordered item missing from FML, code, row, or reason..."
+                value={fmlOrderedNotFmlSearch}
+                onChange={(event) => setFmlOrderedNotFmlSearch(event.target.value)}
+                style={styles.searchInput}
+              />
+
+              <div style={styles.infoBox}>
+                <div>📘 Report logic: <strong>Column Y ordered by ship is greater than 0</strong></div>
+                <div>🧾 FML match: <strong>checks FML by code and product name</strong></div>
+                <div>🔴 Shows: <strong>ordered items that are not found in FML</strong></div>
+              </div>
+
+              <div style={styles.headerActions}>
+                <button
+                  style={styles.backButton}
+                  onClick={() =>
+                    printRows("Ordered Not In FML", fmlOrderedNotFmlExportRows, [
+                      { key: "Number", label: "#" },
+                      { key: "ExcelRow", label: "Order Row" },
+                      { key: "Code", label: "Code" },
+                      { key: "Product", label: "Product" },
+                      { key: "UM", label: "U/M" },
+                      { key: "OrderedByShipColumnY", label: "Ordered Y" },
+                      { key: "SuggestedOrder", label: "Suggested" },
+                      { key: "Stock", label: "Stock" },
+                      { key: "FutureOrders", label: "Future" },
+                      { key: "Reason", label: "Reason" },
+                    ])
+                  }
+                >
+                  🖨️ Print
+                </button>
+
+                <button
+                  style={styles.primaryButton}
+                  onClick={() => exportRowsToExcel(fmlOrderedNotFmlExportRows, "Ordered Not In FML", "ordered-not-in-fml.xlsx")}
+                >
+                  📥 Export Excel
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </section>
 
@@ -1470,14 +1624,17 @@ const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRu
                       <span>Stock</span>
                       <strong>{formatQty(row.stock)}</strong>
                     </div>
+
                     <div style={localStyles.metricBox}>
                       <span>Future</span>
                       <strong>{formatQty(row.futureOrders)}</strong>
                     </div>
+
                     <div style={negativeArrival ? localStyles.metricBoxBad : localStyles.metricBox}>
                       <span>{negativeArrival ? "⚠️ At arrival" : "At arrival"}</span>
                       <strong>{formatQty(row.availableAtArrival)}</strong>
                     </div>
+
                     {showPar && (
                       <div style={row.parCapApplied ? localStyles.metricBoxWarning : localStyles.metricBox}>
                         <span>Par Q</span>
@@ -1506,7 +1663,7 @@ const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRu
                 </div>
               );
             })}
-                    </div>
+          </div>
 
           {hasMoreNextOrderRows && (
             <button
@@ -1518,7 +1675,8 @@ const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRu
           )}
         </section>
       )}
-            {nextOrderView === "orderedVsSuggested" && (
+
+      {nextOrderView === "orderedVsSuggested" && (
         <section style={styles.card}>
           <h2 style={styles.productTitle}>📊 Ordered vs Suggested Report</h2>
 
@@ -1558,38 +1716,38 @@ const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRu
                   <div style={styles.recipeMeta}>U/M: {row.unit || "N/A"}</div>
 
                   <div style={localStyles.metricGrid}>
-  <div style={localStyles.metricBox}>
-    <span>On Hand</span>
-    <strong>{formatQty(row.stock)}</strong>
-  </div>
+                    <div style={localStyles.metricBox}>
+                      <span>On Hand</span>
+                      <strong>{formatQty(row.stock)}</strong>
+                    </div>
 
-  <div style={localStyles.metricBox}>
-    <span>Upcoming</span>
-    <strong>{formatQty(row.futureOrders)}</strong>
-  </div>
+                    <div style={localStyles.metricBox}>
+                      <span>Upcoming</span>
+                      <strong>{formatQty(row.futureOrders)}</strong>
+                    </div>
 
-  <div style={localStyles.metricBox}>
-    <span>Daily Use</span>
-    <strong>{formatQty(row.averagePerDay)}</strong>
-  </div>
-</div>
+                    <div style={localStyles.metricBox}>
+                      <span>Daily Use</span>
+                      <strong>{formatQty(row.averagePerDay)}</strong>
+                    </div>
+                  </div>
 
-<div style={localStyles.metricGrid}>
-  <div style={localStyles.metricBox}>
-    <span>Ordered Y</span>
-    <strong>{formatQty(row.orderedQty)}</strong>
-  </div>
+                  <div style={localStyles.metricGrid}>
+                    <div style={localStyles.metricBox}>
+                      <span>Ordered Y</span>
+                      <strong>{formatQty(row.orderedQty)}</strong>
+                    </div>
 
-  <div style={localStyles.metricBox}>
-    <span>Suggested</span>
-    <strong>{formatQty(row.suggestedQty)}</strong>
-  </div>
+                    <div style={localStyles.metricBox}>
+                      <span>Suggested</span>
+                      <strong>{formatQty(row.suggestedQty)}</strong>
+                    </div>
 
-  <div style={localStyles.metricBox}>
-    <span>Diff</span>
-    <strong>{formatQty(row.orderDifference)}</strong>
-  </div>
-</div>
+                    <div style={localStyles.metricBox}>
+                      <span>Diff</span>
+                      <strong>{formatQty(row.orderDifference)}</strong>
+                    </div>
+                  </div>
 
                   <div style={localStyles.calcStrip}>
                     <div>
@@ -1603,7 +1761,7 @@ const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRu
                 </div>
               );
             })}
-                    </div>
+          </div>
 
           {hasMoreOrderedVsSuggestedRows && (
             <button
@@ -1663,7 +1821,16 @@ const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRu
                 <div style={localStyles.reviewBadge}>{row.reason}</div>
               </div>
             ))}
-                    </div>
+          </div>
+
+          {hasMoreFmlNotUsedRows && (
+            <button
+              style={styles.backButton}
+              onClick={() => setReportDisplayLimit((value) => value + REPORT_RENDER_BATCH)}
+            >
+              Show more ({visibleFmlNotUsedRows.length} / {filteredFmlNotUsedRows.length})
+            </button>
+          )}
         </section>
       )}
 
@@ -1714,7 +1881,7 @@ const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRu
                 <div style={localStyles.reviewBadge}>{row.reason}</div>
               </div>
             ))}
-                    </div>
+          </div>
 
           {hasMoreFmlRunningLowRows && (
             <button
@@ -1722,6 +1889,78 @@ const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRu
               onClick={() => setReportDisplayLimit((value) => value + REPORT_RENDER_BATCH)}
             >
               Show more ({visibleFmlRunningLowRows.length} / {filteredFmlRunningLowRows.length})
+            </button>
+          )}
+        </section>
+      )}
+
+      {nextOrderView === "fmlordered" && (
+        <section style={styles.card}>
+          <h2 style={styles.productTitle}>🧾 Ordered Items Not In FML</h2>
+
+          {filteredFmlOrderedNotFmlRows.length === 0 && (
+            <p style={styles.emptyText}>
+              No ordered items missing from FML found. This report checks Column Y ordered quantities against the FML sheet.
+            </p>
+          )}
+
+          <div style={localStyles.compactGrid}>
+            {visibleFmlOrderedNotFmlRows.map((row, index) => (
+              <div key={row.id || row.excelRow + "-" + row.product} style={localStyles.fmlOrderedCard}>
+                <div style={localStyles.cardTopLine}>
+                  <span>#{index + 1}</span>
+                  <span>Order Row {row.excelRow}</span>
+                </div>
+
+                <div style={localStyles.productName}>{row.product}</div>
+                <div style={localStyles.miniMeta}>Code: {row.code || "N/A"} · U/M: {row.unit || "N/A"}</div>
+
+                <div style={localStyles.metricGrid}>
+                  <div style={localStyles.metricBox}>
+                    <span>Ordered Y</span>
+                    <strong>{formatQty(row.orderedByShip)}</strong>
+                  </div>
+
+                  <div style={localStyles.metricBox}>
+                    <span>Suggested</span>
+                    <strong>{formatQty(row.suggestedOrder)}</strong>
+                  </div>
+
+                  <div style={localStyles.metricBox}>
+                    <span>Stock</span>
+                    <strong>{formatQty(row.stock)}</strong>
+                  </div>
+                </div>
+
+                <div style={localStyles.metricGrid}>
+                  <div style={localStyles.metricBox}>
+                    <span>Future</span>
+                    <strong>{formatQty(row.futureOrders)}</strong>
+                  </div>
+
+                  <div style={localStyles.metricBox}>
+                    <span>Past</span>
+                    <strong>{formatQty(row.pastConsumption)}</strong>
+                  </div>
+
+                  <div style={localStyles.metricBox}>
+                    <span>Avg/day</span>
+                    <strong>{formatQty(row.averagePerDay)}</strong>
+                  </div>
+                </div>
+
+                <div style={localStyles.dangerBadge}>Not found in FML</div>
+                <div style={localStyles.reviewBadge}>{row.reason}</div>
+              </div>
+            ))}
+          </div>
+
+          {hasMoreFmlOrderedNotFmlRows && (
+            <button
+              style={styles.backButton}
+              onClick={() => setReportDisplayLimit((value) => value + REPORT_RENDER_BATCH)}
+            >
+              Show more ({visibleFmlOrderedNotFmlRows.length} / {filteredFmlOrderedNotFmlRows.length})
             </button>
           )}
         </section>
@@ -1750,6 +1989,18 @@ const localStyles = {
     borderRadius: 10,
     padding: 6,
     background: "#eef5ff",
+    display: "grid",
+    gap: 4,
+    fontSize: 10,
+    minWidth: 0,
+    alignContent: "start",
+    overflow: "hidden",
+  },
+  fmlOrderedCard: {
+    border: "1.5px solid #b00020",
+    borderRadius: 10,
+    padding: 6,
+    background: "#fff0f0",
     display: "grid",
     gap: 4,
     fontSize: 10,
@@ -1860,6 +2111,16 @@ const localStyles = {
     fontSize: 9.5,
     lineHeight: 1.1,
   },
+  dangerBadge: {
+    padding: "4px 5px",
+    borderRadius: 7,
+    background: "#b00020",
+    color: "#fff",
+    fontWeight: "bold",
+    textAlign: "center",
+    fontSize: 9.5,
+    lineHeight: 1.1,
+  },
   reviewBadge: {
     padding: "5px 5px",
     borderRadius: 7,
@@ -1870,13 +2131,12 @@ const localStyles = {
     fontSize: 9.5,
     lineHeight: 1.1,
   },
-    templateNote: {
+  templateNote: {
     color: "#0057b8",
     fontWeight: "bold",
     fontSize: 9.5,
     lineHeight: 1.1,
   },
-
   orderedVsSuggestedCard: {
     border: "1px solid #ddd",
     borderRadius: 14,
@@ -1886,22 +2146,18 @@ const localStyles = {
     gap: 6,
     fontSize: 11,
   },
-
   orderedVsSuggestedRed: {
     border: "2px solid #b00020",
     background: "#fff0f0",
   },
-
   orderedVsSuggestedBlue: {
     border: "2px solid #0057b8",
     background: "#eef5ff",
   },
-
   orderedVsSuggestedGreen: {
     border: "2px solid #2e7d32",
     background: "#e8f5e9",
   },
-
   comparisonBadgeRed: {
     padding: 6,
     borderRadius: 8,
@@ -1912,7 +2168,6 @@ const localStyles = {
     fontSize: 10,
     lineHeight: 1.1,
   },
-
   comparisonBadgeBlue: {
     padding: 6,
     borderRadius: 8,
@@ -1923,7 +2178,6 @@ const localStyles = {
     fontSize: 10,
     lineHeight: 1.1,
   },
-
   comparisonBadgeGreen: {
     padding: 6,
     borderRadius: 8,
