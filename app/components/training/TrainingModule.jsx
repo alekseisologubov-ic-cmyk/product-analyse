@@ -48,22 +48,47 @@ const parseStationAssignmentWorkbook = (workbook) => {
   let currentStation = "";
 
   rows.forEach((row, index) => {
-    if (looksLikeStationHeader(row)) {
-      currentStation = stationNameFromHeader(row[1]);
+    const excelRow = index + 1;
+
+    // Start reading from row 37 only.
+    if (excelRow < 37) return;
+
+    const columnB = getCell(row, 1); // B
+    const columnD = getCell(row, 3); // D
+    const columnF = getCell(row, 5); // F
+    const columnI = getCell(row, 8); // I
+
+    const columnDClean = cleanText(columnD);
+    const columnFClean = cleanText(columnF);
+    const columnIClean = cleanText(columnI);
+
+    const isStationHeader =
+      columnB &&
+      (
+        columnDClean === "NAME" ||
+        columnFClean.includes("ACTUAL POSITION") ||
+        columnIClean.includes("UNIQUE ID")
+      );
+
+    if (isStationHeader) {
+      currentStation = stationNameFromHeader(columnB);
       return;
     }
 
     if (!currentStation) return;
 
-    const position = getCell(row, 1); // B
-    const crewName = getCell(row, 3); // D
-    const actualPosition = getCell(row, 5); // F
+    const position = columnB;
+    const crewName = columnD;
+    const actualPosition = columnF;
     const nationality = getCell(row, 6); // G
+    const cabinNo = getCell(row, 7); // H
+    const employeeNumber = columnI; // I
 
     if (!position || !crewName) return;
     if (cleanText(position).includes("TOTAL")) return;
     if (cleanText(crewName) === "NAME") return;
     if (cleanText(crewName).includes("#N/A")) return;
+    if (cleanText(employeeNumber).includes("#N/A")) return;
 
     assignments.push({
       station: currentStation,
@@ -71,14 +96,15 @@ const parseStationAssignmentWorkbook = (workbook) => {
       crewName,
       actualPosition,
       nationality,
-      sourceRow: index + 1,
+      cabinNo,
+      employeeNumber,
+      sourceRow: excelRow,
       sourceSheet: preferredSheet,
     });
   });
 
   return assignments;
 };
-
 const parseTrainingLinksWorkbook = (workbook) => {
   const sheetName =
     workbook.SheetNames.find((name) => cleanText(name) === "LINKS") ||
