@@ -564,19 +564,20 @@ export default function TrainingModule({
     const now = new Date().toISOString();
 
     const payload = {
-      ship: userShip,
-      month_key: monthKey,
-      station: person.station,
-      crew_name: person.crewName,
-      position: person.position,
-      actual_position: person.actualPosition,
-      training_name: training.trainingName,
-      training_url: training.trainingUrl,
-      completed: true,
-      completed_at: now,
-      completed_by: userEmail || "",
-      updated_at: now,
-    };
+  ship: userShip,
+  month_key: monthKey,
+  station: person.station,
+  crew_name: person.crewName,
+  employee_number: person.employeeNumber || "",
+  position: person.position,
+  actual_position: person.actualPosition,
+  training_name: training.trainingName,
+  training_url: training.trainingUrl,
+  completed: true,
+  completed_at: now,
+  completed_by: userEmail || "",
+  updated_at: now,
+};
 
     try {
       const { data, error } = await supabase
