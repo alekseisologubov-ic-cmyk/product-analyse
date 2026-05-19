@@ -6567,7 +6567,23 @@ isAdmin={isAdmin}
       <span>Upload latest order file and calculate suggested next-order quantities</span>
     </button>
   )}
-
+{equipmentDepartment === "culinary" && (
+  <button
+    style={styles.moduleCard}
+    onClick={() => {
+      setModule("training");
+      logUsageEvent("module_opened", {
+        module: "training",
+        equipmentDepartment,
+        ship: userShip,
+      });
+    }}
+  >
+    <div style={styles.moduleIcon}>🎓</div>
+    <strong>Training</strong>
+    <span>Monthly station training tracker by crew assignment and training links.</span>
+  </button>
+)}
   <button
     style={styles.moduleCard}
     onClick={() => {
