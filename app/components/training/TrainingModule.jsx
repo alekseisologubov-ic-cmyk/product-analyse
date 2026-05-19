@@ -994,7 +994,7 @@ export default function TrainingModule({
                         display: "inline-block",
                       }}
                     >
-                      Open Training
+                      Open Training Link
                     </a>
 
                     <button
