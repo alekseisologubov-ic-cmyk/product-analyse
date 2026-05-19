@@ -892,6 +892,7 @@ export default function TrainingModule({
                   <div style={styles.recipeMeta}>Position: {person.position || "N/A"}</div>
                   <div style={styles.recipeMeta}>Actual Position: {person.actualPosition || "N/A"}</div>
                   <div style={styles.recipeMeta}>Nationality: {person.nationality || "N/A"}</div>
+                  <div style={styles.recipeMeta}>Employee #: {person.employeeNumber || "N/A"}</div>
 
                   {complete ? (
                     <div style={styles.statusGood}>Completed for {monthKey}</div>
