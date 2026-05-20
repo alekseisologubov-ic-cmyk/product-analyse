@@ -180,6 +180,71 @@ const isProcessedOrPreparedItem = (value) => {
   ].some((word) => text.includes(word));
 };
 
+const PREMADE_COMMON_ALLERGEN_RULES = [
+  {
+    words: ["chili sauce", "chilli sauce", "hot sauce", "sauce", "dressing", "marinade", "glaze"],
+    allergens: ["Soy", "Gluten / Wheat", "Sulphites"],
+  },
+  {
+    words: ["cookie", "cookies", "biscuit", "cake", "muffin", "brownie", "donut", "doughnut"],
+    allergens: ["Gluten / Wheat", "Milk", "Eggs", "Soy", "Tree Nuts"],
+  },
+  {
+    words: ["chocolate chip", "chocolate chips", "chocolate", "cocoa mix"],
+    allergens: ["Milk", "Soy", "Tree Nuts"],
+  },
+  {
+    words: ["peanut butter", "peanutbutter", "satay"],
+    allergens: ["Peanuts"],
+  },
+  {
+    words: ["pesto"],
+    allergens: ["Milk", "Tree Nuts"],
+  },
+  {
+    words: ["mayonnaise", "mayo", "aioli", "hollandaise"],
+    allergens: ["Eggs", "Mustard"],
+  },
+  {
+    words: ["bread", "bun", "brioche", "croissant", "pastry", "tart shell", "pie shell", "cracker"],
+    allergens: ["Gluten / Wheat", "Milk", "Eggs", "Soy", "Sesame"],
+  },
+  {
+    words: ["curry paste", "spice mix", "seasoning", "seasoning mix", "rub mix"],
+    allergens: ["Mustard", "Sesame", "Celery", "Sulphites", "Gluten / Wheat"],
+  },
+  {
+    words: ["cereal", "granola", "muesli"],
+    allergens: ["Gluten / Wheat", "Milk", "Soy", "Tree Nuts", "Peanuts", "Sesame"],
+  },
+];
+
+const getPreparedCommonAllergens = (...values) => {
+  const text = values.map((value) => cleanText(value)).join(" ");
+  const compact = text.replace(/[^A-Z0-9]/g, "");
+  const found = new Set();
+
+  if (!text.trim()) return [];
+
+  PREMADE_COMMON_ALLERGEN_RULES.forEach((rule) => {
+    const matched = rule.words.some((word) => {
+      const cleanWord = cleanText(word);
+      const compactWord = cleanWord.replace(/[^A-Z0-9]/g, "");
+
+      if (!cleanWord) return false;
+      if (compactWord && compact.includes(compactWord)) return true;
+
+      return new RegExp(`(^|[^A-Z0-9])${cleanWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^A-Z0-9]|$)`).test(text);
+    });
+
+    if (matched) {
+      rule.allergens.forEach((allergen) => found.add(allergen));
+    }
+  });
+
+  return [...found].sort();
+};
+
 const keywordAllergensForText = (...values) => {
   const text = values.map((value) => cleanText(value)).join(" ");
   const compact = text.replace(/[^A-Z0-9]/g, "");
@@ -295,15 +360,20 @@ const parseIngredientByLocationWorkbook = (workbook) => {
     const ingredientAllergens = splitAllergens(get(indexes.ingredientAllergens));
     const recipeAllergens = splitAllergens(get(indexes.recipeAllergens));
     const explicitAllergens = [...new Set([...ingredientAllergens, ...recipeAllergens])].sort();
-    const detectedAllergens = keywordAllergensForText(
+    // Possible hidden allergens must be detected from the ingredient/product name only.
+    // Do not use category/sub-category here. Example: "Yogurt" can be in category
+    // "Egg, Milk, Yogurt", but that does not mean the yogurt contains egg.
+    const nameKeywordAllergens = keywordAllergensForText(
       ingredientName,
-      get(indexes.assigned),
-      get(indexes.category),
-      get(indexes.subCategory)
+      get(indexes.assigned)
     );
+    const processedItem = isProcessedOrPreparedItem(ingredientName) || isProcessedOrPreparedItem(get(indexes.assigned));
+    const preparedCommonAllergens = processedItem
+      ? getPreparedCommonAllergens(ingredientName, get(indexes.assigned))
+      : [];
+    const detectedAllergens = [...new Set([...nameKeywordAllergens, ...preparedCommonAllergens])].sort();
     const possibleHiddenAllergens = detectedAllergens.filter((allergen) => !explicitAllergens.includes(allergen));
     const ignoredBasic = isIgnoredBasicIngredient(ingredientName);
-    const processedItem = isProcessedOrPreparedItem(ingredientName) || isProcessedOrPreparedItem(get(indexes.assigned));
     const gfClaim = looksGlutenFreeClaim(menuName, recipeName, get(indexes.specialInstructions), get(indexes.specialInstructions2));
     const hasGluten = explicitAllergens.includes("Gluten / Wheat") || detectedAllergens.includes("Gluten / Wheat");
     const hiddenWarnings = [];
@@ -312,8 +382,8 @@ const parseIngredientByLocationWorkbook = (workbook) => {
       hiddenWarnings.push("Possible hidden gluten: recipe/menu says GF or gluten free but ingredient data shows gluten/wheat.");
     }
 
-    if (!ignoredBasic && processedItem && possibleHiddenAllergens.length) {
-      hiddenWarnings.push("Prepared item: verify supplier label for possible hidden allergens.");
+    if (!ignoredBasic && processedItem) {
+      hiddenWarnings.push("Prepared / pre-made item: read the supplier label for may-contain, cross-contact, and full allergen information.");
     }
 
     parsedRows.push({
@@ -677,7 +747,7 @@ export default function AllergenModule({ styles, userShip, onBack, logUsageEvent
           {message && <p style={styles.message}>{message}</p>}
 
           <div style={styles.warningText}>
-            This is a support tool only. It uses the workbook allergen columns first and keyword detection for possible hidden allergens. Always verify against official recipe cards and supplier specifications before answering a Sailor allergy request.
+            This is a support tool only. It uses the workbook allergen columns first and checks the ingredient/product name for possible hidden allergens. Category and sub-category are shown for information only and are not used to create allergen warnings. Always verify against official recipe cards and supplier specifications before answering a Sailor allergy request.
           </div>
 
           <button style={styles.primaryButton} onClick={exportRecipeMatrix} disabled={!rows.length}>
