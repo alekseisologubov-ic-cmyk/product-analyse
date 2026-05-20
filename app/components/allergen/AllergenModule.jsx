@@ -515,14 +515,14 @@ const allergenBadgeStyle = (allergen, possible = false) => {
     display: "inline-flex",
     alignItems: "center",
     gap: 4,
-    padding: "5px 8px",
+    padding: "4px 7px",
     borderRadius: 999,
     background: possible ? "#fff0f0" : "#f2f2f2",
     border: `1px solid ${possible ? "#b00020" : config.color}`,
     color: possible ? "#b00020" : config.color,
     fontWeight: "bold",
-    fontSize: 12,
-    margin: "3px 4px 3px 0",
+    fontSize: 11,
+    margin: "2px 3px 2px 0",
   };
 };
 
@@ -675,7 +675,7 @@ export default function AllergenModule({ styles, userShip, onBack, logUsageEvent
 
     return combined.filter((item) => {
       if (!query) return true;
-      return [item.ingredientCode, item.ingredientName, item.assigned, item.category, item.subCategory, item.explicitAllergens.join(" "), item.possibleHiddenAllergens.join(" ")]
+      return [item.ingredientName, item.assigned, item.explicitAllergens.join(" "), item.possibleHiddenAllergens.join(" ")]
         .join(" ")
         .toLowerCase()
         .includes(query);
@@ -747,7 +747,7 @@ export default function AllergenModule({ styles, userShip, onBack, logUsageEvent
           {message && <p style={styles.message}>{message}</p>}
 
           <div style={styles.warningText}>
-            This is a support tool only. It uses the workbook allergen columns first and checks the ingredient/product name for possible hidden allergens. Category and sub-category are shown for information only and are not used to create allergen warnings. Always verify against official recipe cards and supplier specifications before answering a Sailor allergy request.
+            This is a support tool only. It uses the workbook allergen columns first and checks the ingredient/product name for possible hidden allergens. Category and sub-category are not used to create allergen warnings and are hidden from compact cards. Always verify against official recipe cards and supplier specifications before answering a Sailor allergy request.
           </div>
 
           <button style={styles.primaryButton} onClick={exportRecipeMatrix} disabled={!rows.length}>
@@ -802,6 +802,7 @@ export default function AllergenModule({ styles, userShip, onBack, logUsageEvent
               onClick={() => {
                 setSelectedVenueKey(venue.venueKey);
                 setSelectedRecipeKey("");
+                setIngredientSearch("");
               }}
             >
               <div style={localStyles.venueIcon}>{venue.icon}</div>
@@ -836,12 +837,14 @@ export default function AllergenModule({ styles, userShip, onBack, logUsageEvent
                   ...(selectedRecipeKey === recipe.recipeKey ? localStyles.recipeCardActive : {}),
                   ...(recipe.hiddenWarnings.length > 0 ? localStyles.recipeCardWarning : {}),
                 }}
-                onClick={() => setSelectedRecipeKey(recipe.recipeKey)}
+                onClick={() => {
+                  setSelectedRecipeKey(recipe.recipeKey);
+                  setIngredientSearch("");
+                }}
               >
                 <strong>{recipe.recipeName}</strong>
                 <span>Recipe code: {recipe.recipeCode || "N/A"}</span>
-                <span>Menu: {recipe.menuName || "N/A"}</span>
-                <span>Menu code: {recipe.menuCode || "N/A"}</span>
+                {recipe.menuName && <span>Menu: {recipe.menuName}</span>}
                 <span>{recipe.ingredients.length} ingredient(s), {recipe.subRecipes.length} sub recipe line(s)</span>
                 <AllergenBadges allergens={recipe.allergens.slice(0, 6)} />
                 {recipe.possibleHidden.length > 0 && <AllergenBadges allergens={recipe.possibleHidden.slice(0, 4)} possible />}
@@ -853,85 +856,102 @@ export default function AllergenModule({ styles, userShip, onBack, logUsageEvent
       )}
 
       {selectedRecipe && (
-        <section style={styles.card}>
-          <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 16 }}>
-            <div>
-              <h2 style={styles.productTitle}>🧾 {selectedRecipe.recipeName}</h2>
-              <p style={{ ...styles.emptyText, margin: 0 }}>
-                Recipe code {selectedRecipe.recipeCode || "N/A"} • Menu {selectedRecipe.menuName || "N/A"}
-              </p>
+        <div
+          style={styles.modalBackdrop}
+          onClick={() => {
+            setSelectedRecipeKey("");
+            setIngredientSearch("");
+          }}
+        >
+          <div style={localStyles.recipeModalCard} onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              style={styles.closeButton}
+              onClick={() => {
+                setSelectedRecipeKey("");
+                setIngredientSearch("");
+              }}
+            >
+              ✕
+            </button>
+
+            <div style={localStyles.modalHeader}>
+              <div>
+                <h2 style={{ ...styles.productTitle, marginBottom: 4 }}>🧾 {selectedRecipe.recipeName}</h2>
+                <p style={{ ...styles.emptyText, margin: 0 }}>
+                  Recipe code {selectedRecipe.recipeCode || "N/A"} • Menu {selectedRecipe.menuName || "N/A"}
+                </p>
+              </div>
+              <div style={selectedRecipe.hiddenWarnings.length ? styles.statusBad : styles.statusGood}>
+                {selectedRecipe.hiddenWarnings.length ? "Review Required" : "Allergen Review"}
+              </div>
             </div>
-            <div style={selectedRecipe.hiddenWarnings.length ? styles.statusBad : styles.statusGood}>
-              {selectedRecipe.hiddenWarnings.length ? "Review Required" : "Allergen Review"}
-            </div>
-          </div>
 
-          <section style={styles.grid}>
-            <div style={styles.infoBox}>
-              <strong>Declared allergens</strong>
-              <AllergenBadges allergens={selectedRecipe.allergens} />
-            </div>
-            <div style={styles.infoBox}>
-              <strong>Possible hidden allergens</strong>
-              <AllergenBadges allergens={selectedRecipe.possibleHidden} possible />
-            </div>
-          </section>
+            <section style={localStyles.modalSummaryGrid}>
+              <div style={styles.infoBox}>
+                <strong>Declared allergens</strong>
+                <AllergenBadges allergens={selectedRecipe.allergens} />
+              </div>
+              <div style={styles.infoBox}>
+                <strong>Possible hidden allergens</strong>
+                <AllergenBadges allergens={selectedRecipe.possibleHidden} possible />
+              </div>
+            </section>
 
-          {selectedRecipe.hiddenWarnings.length > 0 && (
-            <div style={styles.statusBad}>
-              {selectedRecipe.hiddenWarnings.map((warning, index) => (
-                <div key={`${warning.ingredientName}-${index}`}>⚠️ {warning.warning} Ingredient: {warning.ingredientName}</div>
-              ))}
-            </div>
-          )}
-
-          <input
-            placeholder="Search ingredient, allergen, category..."
-            value={ingredientSearch}
-            onChange={(event) => setIngredientSearch(event.target.value)}
-            style={{ ...styles.searchInput, marginTop: 14 }}
-          />
-
-          <div style={styles.equipmentGrid}>
-            {visibleIngredients.map((item) => (
-              <div
-                key={`${item.sourceRow}-${item.ingredientCode}-${item.ingredientName}`}
-                style={{
-                  ...styles.equipmentCard,
-                  ...(item.hiddenWarnings.length > 0 ? styles.orderWarningCard : {}),
-                  ...(item.possibleHiddenAllergens.length > 0 && !item.hiddenWarnings.length ? styles.zeroCountCard : {}),
-                }}
-              >
-                <div style={styles.recipeName}>{item.ingredientName}</div>
-                <div style={styles.recipeMeta}>Code: {item.ingredientCode || "N/A"}</div>
-                {item.assigned && item.assigned !== item.ingredientName && (
-                  <div style={styles.recipeMeta}>Product / Assigned: {item.assigned}</div>
-                )}
-                <div style={styles.recipeMeta}>Type: {item.assignedType === "R" ? "Sub Recipe" : "Ingredient"}</div>
-                <div style={styles.recipeMeta}>Category: {item.category || "N/A"}</div>
-                <div style={styles.recipeMeta}>Sub Category: {item.subCategory || "N/A"}</div>
-                {item.specialInstructions && <div style={styles.recipeMeta}>Instruction: {item.specialInstructions}</div>}
-                {item.ignoredBasic && <div style={styles.statusNeutral}>Ignored basic item</div>}
-
-                <div>
-                  <strong>Declared:</strong>
-                  <AllergenBadges allergens={item.explicitAllergens} />
-                </div>
-
-                {item.possibleHiddenAllergens.length > 0 && (
-                  <div>
-                    <strong>Possible hidden:</strong>
-                    <AllergenBadges allergens={item.possibleHiddenAllergens} possible />
+            {selectedRecipe.hiddenWarnings.length > 0 && (
+              <div style={{ ...styles.statusBad, textAlign: "left" }}>
+                {selectedRecipe.hiddenWarnings.map((warning, index) => (
+                  <div key={`${warning.ingredientName}-${index}`}>
+                    ⚠️ {warning.warning} Ingredient: {warning.ingredientName}
                   </div>
-                )}
-
-                {item.hiddenWarnings.map((warning, index) => (
-                  <div key={`${warning}-${index}`} style={styles.statusBad}>⚠️ {warning}</div>
                 ))}
               </div>
-            ))}
+            )}
+
+            <input
+              placeholder="Search ingredient or allergen..."
+              value={ingredientSearch}
+              onChange={(event) => setIngredientSearch(event.target.value)}
+              style={{ ...styles.searchInput, marginTop: 14 }}
+            />
+
+            <div style={localStyles.ingredientGrid}>
+              {visibleIngredients.map((item) => (
+                <div
+                  key={`${item.sourceRow}-${item.ingredientCode}-${item.ingredientName}`}
+                  style={{
+                    ...localStyles.ingredientCard,
+                    ...(item.hiddenWarnings.length > 0 ? localStyles.ingredientCardWarning : {}),
+                    ...(item.possibleHiddenAllergens.length > 0 && !item.hiddenWarnings.length ? localStyles.ingredientCardPossible : {}),
+                  }}
+                >
+                  <div style={localStyles.ingredientTitle}>{item.ingredientName}</div>
+                  {item.assigned && item.assigned !== item.ingredientName && (
+                    <div style={localStyles.compactMeta}>Product / Assigned: {item.assigned}</div>
+                  )}
+                  <div style={localStyles.typePill}>{item.assignedType === "R" ? "Sub Recipe" : "Ingredient"}</div>
+                  {item.ignoredBasic && <div style={styles.statusNeutral}>Ignored basic item</div>}
+
+                  <div>
+                    <strong>Declared:</strong>
+                    <AllergenBadges allergens={item.explicitAllergens} />
+                  </div>
+
+                  {item.possibleHiddenAllergens.length > 0 && (
+                    <div>
+                      <strong>Possible hidden:</strong>
+                      <AllergenBadges allergens={item.possibleHiddenAllergens} possible />
+                    </div>
+                  )}
+
+                  {item.hiddenWarnings.map((warning, index) => (
+                    <div key={`${warning}-${index}`} style={styles.statusBad}>⚠️ {warning}</div>
+                  ))}
+                </div>
+              ))}
+            </div>
           </div>
-        </section>
+        </div>
       )}
     </main>
   );
@@ -940,20 +960,22 @@ export default function AllergenModule({ styles, userShip, onBack, logUsageEvent
 const localStyles = {
   venueGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))",
-    gap: 12,
+    gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))",
+    gap: 8,
   },
   venueCard: {
     border: "1px solid #ddd",
-    borderRadius: 16,
-    padding: 14,
+    borderRadius: 14,
+    padding: 8,
     background: "#fff",
     display: "grid",
-    gap: 8,
+    gap: 4,
     textAlign: "left",
     cursor: "pointer",
     fontFamily: "inherit",
     color: "inherit",
+    fontSize: 12,
+    alignContent: "start",
   },
   venueCardActive: {
     border: "2px solid #111",
@@ -964,24 +986,27 @@ const localStyles = {
     background: "#fff0f0",
   },
   venueIcon: {
-    fontSize: 34,
+    fontSize: 26,
+    lineHeight: 1,
   },
   recipeGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
-    gap: 12,
+    gridTemplateColumns: "repeat(auto-fill, minmax(165px, 1fr))",
+    gap: 8,
   },
   recipeCard: {
     border: "1px solid #ddd",
-    borderRadius: 16,
-    padding: 14,
+    borderRadius: 14,
+    padding: 8,
     background: "#fafafa",
     display: "grid",
-    gap: 7,
+    gap: 4,
     textAlign: "left",
     cursor: "pointer",
     fontFamily: "inherit",
     color: "inherit",
+    fontSize: 12,
+    alignContent: "start",
   },
   recipeCardActive: {
     border: "2px solid #111",
@@ -990,5 +1015,75 @@ const localStyles = {
   recipeCardWarning: {
     border: "2px solid #b00020",
     background: "#fff0f0",
+  },
+  recipeModalCard: {
+    background: "#fff",
+    borderRadius: 18,
+    padding: 20,
+    maxWidth: 1180,
+    width: "96%",
+    maxHeight: "90vh",
+    overflowY: "auto",
+    position: "relative",
+    boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+  },
+  modalHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 12,
+    alignItems: "flex-start",
+    marginBottom: 14,
+    paddingRight: 42,
+    flexWrap: "wrap",
+  },
+  modalSummaryGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
+    gap: 12,
+    marginBottom: 12,
+  },
+  ingredientGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(165px, 1fr))",
+    gap: 8,
+  },
+  ingredientCard: {
+    border: "1px solid #ddd",
+    borderRadius: 14,
+    padding: 8,
+    background: "#fff",
+    display: "grid",
+    gap: 4,
+    fontSize: 11,
+    alignContent: "start",
+  },
+  ingredientCardPossible: {
+    border: "1.5px solid #8a5a00",
+    background: "#fff8e1",
+  },
+  ingredientCardWarning: {
+    border: "2px solid #b00020",
+    background: "#fff0f0",
+  },
+  ingredientTitle: {
+    fontWeight: "bold",
+    fontSize: 12.5,
+    lineHeight: 1.12,
+    overflowWrap: "anywhere",
+  },
+  compactMeta: {
+    color: "#555",
+    fontSize: 11,
+    lineHeight: 1.2,
+    overflowWrap: "anywhere",
+  },
+  typePill: {
+    justifySelf: "start",
+    padding: "3px 7px",
+    borderRadius: 999,
+    background: "#f2f2f2",
+    color: "#555",
+    fontSize: 11,
+    fontWeight: "bold",
   },
 };
