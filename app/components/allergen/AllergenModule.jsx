@@ -41,6 +41,32 @@ const getVenueIcon = (venue) => {
   return "🏢";
 };
 
+const VENUE_NAME_COLORS = [
+  "#4b5563",
+  "#5b4b7a",
+  "#6b4e16",
+  "#0f5f5c",
+  "#7a3e3e",
+  "#315d7d",
+  "#556b2f",
+  "#6b4f5b",
+  "#4f5f7a",
+  "#5a5f37",
+];
+
+const getVenueNameColor = (venue) => {
+  const text = cleanText(venue);
+
+  if (!text) return VENUE_NAME_COLORS[0];
+
+  let hash = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = (hash + text.charCodeAt(index) * (index + 1)) % VENUE_NAME_COLORS.length;
+  }
+
+  return VENUE_NAME_COLORS[hash];
+};
+
 const normalizeVenueName = (value) =>
   safeText(value)
     .replace(/\s*-\s*VV$/i, "")
@@ -804,9 +830,15 @@ export default function AllergenModule({ styles, userShip, onBack, logUsageEvent
                 setIngredientSearch("");
               }}
             >
-              <div style={localStyles.venueIcon}>{venue.icon}</div>
-              <strong>{venue.restaurantName}</strong>
-              <span>{venue.recipes.length} recipe(s)</span>
+              <strong
+                style={{
+                  ...localStyles.venueName,
+                  color: getVenueNameColor(venue.restaurantName),
+                }}
+              >
+                {venue.restaurantName}
+              </strong>
+              <span style={localStyles.venueRecipeCount}>{venue.recipes.length} recipe(s)</span>
             </button>
           ))}
         </div>
@@ -816,7 +848,7 @@ export default function AllergenModule({ styles, userShip, onBack, logUsageEvent
         <section style={styles.card}>
           <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 16 }}>
             <div>
-              <h2 style={styles.productTitle}>{selectedVenue.icon} {selectedVenue.restaurantName}</h2>
+              <h2 style={styles.productTitle}>{selectedVenue.restaurantName}</h2>
               <p style={{ ...styles.emptyText, margin: 0 }}>Click a recipe to view ingredients, sub-recipes and allergen detail.</p>
             </div>
             <div style={styles.shipBadge}>{filteredRecipes.length} recipe(s)</div>
@@ -951,17 +983,17 @@ const localStyles = {
   venueCard: {
     border: "1px solid #ddd",
     borderRadius: 14,
-    padding: 10,
+    padding: 12,
     background: "#fff",
     display: "grid",
-    gap: 5,
+    gap: 6,
     textAlign: "left",
     cursor: "pointer",
     fontFamily: "inherit",
     color: "inherit",
     fontSize: 12,
-    alignContent: "start",
-    minHeight: 96,
+    alignContent: "center",
+    minHeight: 74,
   },
   venueCardActive: {
     border: "2px solid #111",
@@ -972,8 +1004,18 @@ const localStyles = {
     background: "#fff0f0",
   },
   venueIcon: {
-    fontSize: 22,
-    lineHeight: 1,
+    display: "none",
+  },
+  venueName: {
+    fontSize: 14,
+    lineHeight: 1.15,
+    fontWeight: 800,
+    overflowWrap: "anywhere",
+  },
+  venueRecipeCount: {
+    color: "#555",
+    fontSize: 12,
+    fontWeight: 700,
   },
   recipeGrid: {
     display: "grid",
