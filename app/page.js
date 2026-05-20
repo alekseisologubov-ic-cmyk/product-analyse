@@ -2429,7 +2429,12 @@ for (let index = 0; index < items.length; index += 1) {
     item_name: normalizedItem.name || "",
     category: normalizedItem.category || "",
     sheet_name: normalizedItem.sheetName || "",
-    image: persistentImageUrl || cleanSharedMasterImage(normalizedItem.image),
+    image:
+  persistentImageUrl ||
+  cleanSharedMasterImage(normalizedItem.image) ||
+  cleanSharedMasterImage(normalizedItem.imageFallback) ||
+  existingImageByCode[getEquipmentImageMatchCode(normalizedItem.code)] ||
+  "",
     source_row: Number(normalizedItem.sourceRow || index + 1),
     sort_order: index,
     updated_at: new Date().toISOString(),
