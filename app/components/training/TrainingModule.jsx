@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
+import { useAppContext } from "../../context/AppContext";
 
 const cleanText = (value) =>
   String(value || "")
