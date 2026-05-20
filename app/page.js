@@ -2280,7 +2280,13 @@ const imageFallback = imageCandidates.find((value) => value !== image) || "";
         item_name: normalizedItem.name || "",
         category: normalizedItem.category || "",
         sheet_name: normalizedItem.sheetName || "",
-        image: cleanSharedMasterImage(normalizedItem.image),
+        image:
+  [
+    normalizedItem.image,
+    normalizedItem.imageFallback,
+  ]
+    .map((value) => cleanSharedMasterImage(value))
+    .find(Boolean) || "",
         source_row: Number(normalizedItem.sourceRow || index + 1),
         sort_order: index,
         updated_at: new Date().toISOString(),
