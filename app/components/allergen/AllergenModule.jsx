@@ -797,7 +797,6 @@ export default function AllergenModule({ styles, userShip, onBack, logUsageEvent
               style={{
                 ...localStyles.venueCard,
                 ...(selectedVenueKey === venue.venueKey ? localStyles.venueCardActive : {}),
-                ...(venue.hiddenWarningCount > 0 ? localStyles.venueCardWarning : {}),
               }}
               onClick={() => {
                 setSelectedVenueKey(venue.venueKey);
@@ -808,10 +807,6 @@ export default function AllergenModule({ styles, userShip, onBack, logUsageEvent
               <div style={localStyles.venueIcon}>{venue.icon}</div>
               <strong>{venue.restaurantName}</strong>
               <span>{venue.recipes.length} recipe(s)</span>
-              <span>{venue.ingredientCount} ingredient line(s)</span>
-              <AllergenBadges allergens={venue.allergens.slice(0, 5)} />
-              {venue.possibleHidden.length > 0 && <AllergenBadges allergens={venue.possibleHidden.slice(0, 4)} possible />}
-              {venue.hiddenWarningCount > 0 && <div style={styles.statusBad}>{venue.hiddenWarningCount} hidden warning(s)</div>}
             </button>
           ))}
         </div>
@@ -960,22 +955,23 @@ export default function AllergenModule({ styles, userShip, onBack, logUsageEvent
 const localStyles = {
   venueGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fill, minmax(145px, 1fr))",
     gap: 8,
   },
   venueCard: {
     border: "1px solid #ddd",
     borderRadius: 14,
-    padding: 8,
+    padding: 10,
     background: "#fff",
     display: "grid",
-    gap: 4,
+    gap: 5,
     textAlign: "left",
     cursor: "pointer",
     fontFamily: "inherit",
     color: "inherit",
     fontSize: 12,
     alignContent: "start",
+    minHeight: 96,
   },
   venueCardActive: {
     border: "2px solid #111",
@@ -986,7 +982,7 @@ const localStyles = {
     background: "#fff0f0",
   },
   venueIcon: {
-    fontSize: 26,
+    fontSize: 22,
     lineHeight: 1,
   },
   recipeGrid: {
