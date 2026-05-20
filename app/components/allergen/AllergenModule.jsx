@@ -871,7 +871,6 @@ export default function AllergenModule({ styles, userShip, onBack, logUsageEvent
               >
                 <strong>{recipe.recipeName}</strong>
                 <span>Recipe code: {recipe.recipeCode || "N/A"}</span>
-                {recipe.menuName && <span>Menu: {recipe.menuName}</span>}
                 <span>{recipe.ingredients.length} ingredient(s), {recipe.subRecipes.length} sub recipe line(s)</span>
                 <AllergenBadges allergens={recipe.allergens.slice(0, 6)} />
                 {recipe.possibleHidden.length > 0 && <AllergenBadges allergens={recipe.possibleHidden.slice(0, 4)} possible />}
