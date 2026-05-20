@@ -2196,6 +2196,97 @@ const imageFallback = imageCandidates.find((value) => value !== image) || "";
 
     return text;
   };
+  const getImageMimeFromDataUrl = (dataUrl) => {
+  const match = String(dataUrl || "").match(/^data:([^;]+);base64,/);
+  return match?.[1] || "image/png";
+};
+
+const getImageExtensionFromMime = (mime) => {
+  const value = String(mime || "").toLowerCase();
+
+  if (value.includes("jpeg") || value.includes("jpg")) return "jpg";
+  if (value.includes("webp")) return "webp";
+  if (value.includes("gif")) return "gif";
+  return "png";
+};
+
+const makeStorageSafePart = (value) => {
+  const cleaned = String(value || "item")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 90);
+
+  return cleaned || "item";
+};
+
+const uploadEquipmentDataImageToStorage = async ({ dataUrl, scope, item, index }) => {
+  const value = String(dataUrl || "").trim();
+
+  if (!supabase || !value.startsWith("data:image/")) {
+    return "";
+  }
+
+  const mime = getImageMimeFromDataUrl(value);
+  const extension = getImageExtensionFromMime(mime);
+
+  const codePart = makeStorageSafePart(item?.code || item?.name || index + 1);
+  const rowPart = makeStorageSafePart(item?.sourceRow || index + 1);
+  const path = `${scope}/${codePart}-${rowPart}.${extension}`;
+
+  const blob = await fetch(value).then((response) => response.blob());
+
+  const { error } = await supabase.storage
+    .from(EQUIPMENT_PICTURE_BUCKET)
+    .upload(path, blob, {
+      contentType: mime,
+      upsert: true,
+      cacheControl: "31536000",
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  const { data } = supabase.storage
+    .from(EQUIPMENT_PICTURE_BUCKET)
+    .getPublicUrl(path);
+
+  return data?.publicUrl || "";
+};
+
+const getPersistentEquipmentImageUrl = async (item, scope, index) => {
+  const imageCandidates = [
+    item?.image,
+    item?.imageFallback,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  const directUrl = imageCandidates.find(
+    (value) =>
+      !value.startsWith("data:image/") &&
+      isUsableImageValue(value) &&
+      value.length <= 5000
+  );
+
+  if (directUrl) {
+    return directUrl;
+  }
+
+  const dataUrl = imageCandidates.find((value) => value.startsWith("data:image/"));
+
+  if (dataUrl) {
+    return uploadEquipmentDataImageToStorage({
+      dataUrl,
+      scope,
+      item,
+      index,
+    });
+  }
+
+  return "";
+};
 
   const deleteMasterInventoryRowsInBatches = async (scope) => {
     const batchSize = 100;
