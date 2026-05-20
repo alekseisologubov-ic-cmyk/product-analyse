@@ -7805,6 +7805,7 @@ isAdmin={isAdmin}
               <div style={styles.equipmentGrid}>
                 {items.map((item, index) => {
   const displayImage = getEquipmentDisplayImage(item);
+  const fallbackImage = getEquipmentFallbackImage(item);
 
   return (
                   <button
