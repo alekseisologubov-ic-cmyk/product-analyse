@@ -55,21 +55,23 @@ const formatDateTime = (value) => {
 };
 
 const parseStationAssignmentWorkbook = (workbook) => {
-  const preferredSheet =
-    workbook.SheetNames.find((name) => cleanText(name) === "MASTER PAGE") ||
-    workbook.SheetNames.find((name) => cleanText(name).includes("MASTER")) ||
-    workbook.SheetNames.find((name) => cleanText(name).includes("MANNING")) ||
-    workbook.SheetNames[0];
+  const candidateSheetNames = workbook.SheetNames.filter((name) => {
+    const text = cleanText(name);
 
-  const worksheet = workbook.Sheets[preferredSheet];
+    return (
+      text.includes("MASTER") ||
+      text.includes("MANNING") ||
+      text.includes("MANING") ||
+      text.includes("CREW") ||
+      text.includes("ROSTER")
+    );
+  });
 
-  if (!worksheet || !worksheet["!ref"]) {
-    return [];
-  }
+  const sheetNamesToCheck = candidateSheetNames.length
+    ? candidateSheetNames
+    : workbook.SheetNames;
 
-  const range = XLSX.utils.decode_range(worksheet["!ref"]);
-
-  const readCell = (rowNumber, columnIndexZeroBased) => {
+  const readCell = (worksheet, rowNumber, columnIndexZeroBased) => {
     const address = XLSX.utils.encode_cell({
       r: rowNumber - 1,
       c: columnIndexZeroBased,
@@ -78,65 +80,130 @@ const parseStationAssignmentWorkbook = (workbook) => {
     return safeText(worksheet[address]?.v);
   };
 
-  const assignments = [];
-  let currentStation = "";
+  const looksLikeStationText = (value) => {
+    const text = cleanText(value);
 
-  // Manning file starts from real Excel row 37 downward.
-  for (let rowNumber = 37; rowNumber <= range.e.r + 1; rowNumber += 1) {
-    const columnB = readCell(rowNumber, 1); // B - station header or position
-    const columnD = readCell(rowNumber, 3); // D - crew name
-    const columnF = readCell(rowNumber, 5); // F - actual position
-    const columnG = readCell(rowNumber, 6); // G - nationality
-    const columnH = readCell(rowNumber, 7); // H - cabin no
-    const columnI = readCell(rowNumber, 8); // I - employee number / unique ID
+    if (!text) return false;
 
-    const columnBClean = cleanText(columnB);
-    const columnDClean = cleanText(columnD);
-    const columnFClean = cleanText(columnF);
-    const columnIClean = cleanText(columnI);
+    return (
+      /\s-\s*\d+\s*$/.test(String(value || "")) ||
+      text.includes("CULINARY") ||
+      text.includes("GALLEY") ||
+      text.includes("KITCHEN") ||
+      text.includes("BAKERY") ||
+      text.includes("PASTRY") ||
+      text.includes("BUTCHER") ||
+      text.includes("FISH PREP") ||
+      text.includes("VEG PREP") ||
+      text.includes("POT WASH") ||
+      text.includes("RESTAURANT") ||
+      text.includes("BAR") ||
+      text.includes("EXTRA VIRGIN") ||
+      text.includes("PINK AGAVE") ||
+      text.includes("RAZZLE") ||
+      text.includes("WAKE") ||
+      text.includes("GALLEY") ||
+      text.includes("GUNBAE") ||
+      text.includes("DOCK") ||
+      text.includes("SOCIAL") ||
+      text.includes("PIZZA")
+    );
+  };
 
-    const isStationHeader =
-      columnB &&
-      (
-        columnDClean === "NAME" ||
-        columnFClean.includes("ACTUAL POSITION") ||
-        columnIClean.includes("UNIQUE ID")
-      );
+  const isStationHeaderRow = (worksheet, rowNumber) => {
+    const columnB = readCell(worksheet, rowNumber, 1); // B
+    const columnD = cleanText(readCell(worksheet, rowNumber, 3)); // D
+    const columnF = cleanText(readCell(worksheet, rowNumber, 5)); // F
+    const columnI = cleanText(readCell(worksheet, rowNumber, 8)); // I
 
-    if (isStationHeader) {
-      currentStation = stationNameFromHeader(columnB);
-      continue;
+    if (!columnB) return false;
+
+    const hasCrewHeader =
+      columnD === "NAME" ||
+      columnD.includes("CREW NAME") ||
+      columnF.includes("ACTUAL POSITION") ||
+      columnI.includes("UNIQUE ID") ||
+      columnI.includes("EMPLOYEE");
+
+    return hasCrewHeader && looksLikeStationText(columnB);
+  };
+
+  const parseSheet = (sheetName) => {
+    const worksheet = workbook.Sheets[sheetName];
+
+    if (!worksheet || !worksheet["!ref"]) {
+      return [];
     }
 
-    if (!currentStation) continue;
+    const range = XLSX.utils.decode_range(worksheet["!ref"]);
+    const assignments = [];
+    let currentStation = "";
 
-    const position = columnB;
-    const crewName = columnD;
-    const actualPosition = columnF;
-    const nationality = columnG;
-    const cabinNo = columnH;
-    const employeeNumber = columnI;
+    for (let rowNumber = range.s.r + 1; rowNumber <= range.e.r + 1; rowNumber += 1) {
+      const columnB = readCell(worksheet, rowNumber, 1); // B - station header or position
+      const columnD = readCell(worksheet, rowNumber, 3); // D - crew name
+      const columnF = readCell(worksheet, rowNumber, 5); // F - actual position
+      const columnG = readCell(worksheet, rowNumber, 6); // G - nationality
+      const columnH = readCell(worksheet, rowNumber, 7); // H - cabin no
+      const columnI = readCell(worksheet, rowNumber, 8); // I - employee number / unique ID
 
-    if (!position || !crewName) continue;
-    if (columnBClean.includes("TOTAL")) continue;
-    if (columnDClean === "NAME") continue;
-    if (columnDClean.includes("#N/A")) continue;
-    if (columnIClean.includes("#N/A")) continue;
+      if (isStationHeaderRow(worksheet, rowNumber)) {
+        currentStation = stationNameFromHeader(columnB);
+        continue;
+      }
 
-    assignments.push({
-      station: currentStation,
-      position,
-      crewName,
-      actualPosition,
-      nationality,
-      cabinNo,
-      employeeNumber,
-      sourceRow: rowNumber,
-      sourceSheet: preferredSheet,
+      if (!currentStation) continue;
+
+      const position = columnB;
+      const crewName = columnD;
+      const actualPosition = columnF;
+      const nationality = columnG;
+      const cabinNo = columnH;
+      const employeeNumber = columnI;
+
+      const positionClean = cleanText(position);
+      const crewNameClean = cleanText(crewName);
+      const employeeNumberClean = cleanText(employeeNumber);
+
+      if (!position || !crewName) continue;
+      if (positionClean.includes("TOTAL")) continue;
+      if (positionClean === "POSITION") continue;
+      if (crewNameClean === "NAME") continue;
+      if (crewNameClean.includes("#N/A")) continue;
+      if (employeeNumberClean.includes("#N/A")) continue;
+
+      assignments.push({
+        station: currentStation,
+        position,
+        crewName,
+        actualPosition,
+        nationality,
+        cabinNo,
+        employeeNumber,
+        sourceRow: rowNumber,
+        sourceSheet: sheetName,
+      });
+    }
+
+    return assignments;
+  };
+
+  const allAssignments = [];
+  const seen = new Set();
+
+  sheetNamesToCheck.forEach((sheetName) => {
+    parseSheet(sheetName).forEach((item) => {
+      const personKey = cleanText(item.employeeNumber || item.crewName);
+      const uniqueKey = [cleanText(item.station), cleanText(item.position), personKey].join("|");
+
+      if (!personKey || seen.has(uniqueKey)) return;
+
+      seen.add(uniqueKey);
+      allAssignments.push(item);
     });
-  }
+  });
 
-  return assignments;
+  return allAssignments;
 };
 
 const parseTrainingLinksWorkbook = (workbook) => {
@@ -872,7 +939,9 @@ export default function TrainingModule({
 
       if (!rows.length) {
         throw new Error(
-          "No station assignments found. This parser reads from row 37 down: station header in column B, crew name in column D, and employee number in column I."
+          "No station assignments found. Checked sheets: " +
+            workbook.SheetNames.join(", ") +
+            ". Expected station header in column B with Name in column D, Actual Position in column F, or Unique ID / Employee number in column I."
         );
       }
 
