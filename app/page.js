@@ -25,7 +25,9 @@ const TemperatureCheckModule = lazy(() =>
 const TrainingModule = lazy(() =>
   import("./components/training/TrainingModule")
 );
-
+const AllergenModule = lazy(() =>
+  import("./components/allergen/AllergenModule")
+);
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
