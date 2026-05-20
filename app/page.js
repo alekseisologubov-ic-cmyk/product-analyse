@@ -2287,6 +2287,47 @@ const getPersistentEquipmentImageUrl = async (item, scope, index) => {
 
   return "";
 };
+  const getEquipmentImageMatchCode = (value) => {
+  const text = String(value || "")
+    .trim()
+    .replace(/\.0+$/g, "");
+
+  const match = text.match(/\d{4,}/);
+
+  if (match) {
+    return match[0].replace(/^0+/, "");
+  }
+
+  return cleanText(text).replace(/[^A-Z0-9]/g, "");
+};
+
+const loadExistingMasterImagesByCode = async (scope) => {
+  const imageByCode = {};
+
+  if (!supabase || !scope) {
+    return imageByCode;
+  }
+
+  const { data, error } = await supabase
+    .from("inventory_master_items")
+    .select("code,image")
+    .eq("ship", scope);
+
+  if (error) {
+    return imageByCode;
+  }
+
+  (data || []).forEach((row) => {
+    const codeKey = getEquipmentImageMatchCode(row.code);
+    const image = String(row.image || "").trim();
+
+    if (codeKey && image && !imageByCode[codeKey]) {
+      imageByCode[codeKey] = image;
+    }
+  });
+
+  return imageByCode;
+};
 
   const deleteMasterInventoryRowsInBatches = async (scope) => {
     const batchSize = 100;
