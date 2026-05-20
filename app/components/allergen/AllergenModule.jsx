@@ -215,37 +215,52 @@ const looksGlutenFreeClaim = (...values) => {
 
 const getHeaderIndexes = (headers) => {
   const cleanHeaders = headers.map((header) => cleanText(header));
+  const compactHeaders = cleanHeaders.map((header) => header.replace(/[^A-Z0-9]/g, ""));
 
-  const find = (names, fallback = -1) => {
-    const index = cleanHeaders.findIndex((header) =>
-      names.some((name) => header === cleanText(name) || header.includes(cleanText(name)))
-    );
+  const compactName = (value) => cleanText(value).replace(/[^A-Z0-9]/g, "");
 
+  const findExact = (names, fallback = -1) => {
+    const wanted = names.map(compactName).filter(Boolean);
+    const index = compactHeaders.findIndex((header) => wanted.includes(header));
     return index >= 0 ? index : fallback;
   };
 
+  const ingredientCodeIndex = findExact(
+    ["Code", "IngredientCode", "Ingredient Code", "ProductCode", "Product Code"],
+    6
+  );
+
+  const ingredientNameIndex = findExact(
+    ["Name", "IngredientName", "Ingredient Name", "ProductName", "Product Name"],
+    7
+  );
+
   return {
-    restaurantCode: find(["RestaurantCode"], 0),
-    restaurantName: find(["RestaurantName"], 1),
-    menuCode: find(["MenuCode"], 2),
-    menuName: find(["MenuName"], 3),
-    category: find(["Category"], 4),
-    subCategory: find(["SubCategory"], 5),
-    ingredientCode: find(["Code"], 6),
-    ingredientName: find(["Name"], 7),
-    assigned: find(["Assigned"], 12),
-    assignedType: find(["AssignedType"], 13),
-    recipeCode: find(["RecipeCode"], 15),
-    recipeName: find(["RecipeName"], 16),
-    specialInstructions: find(["SpecialInstructions"], 17),
-    specialInstructions2: find(["SpecialInstructions2"], 18),
-    recipeIsBasic: find(["RecipeIsBasic"], 19),
-    hasProductRelation: find(["HasProductRelation"], 20),
-    ingredientAllergens: find(["IngredientAllergens"], 21),
-    recipeAllergens: find(["RecipeAllergens"], 22),
+    restaurantCode: findExact(["RestaurantCode", "Restaurant Code"], 0),
+    restaurantName: findExact(["RestaurantName", "Restaurant Name"], 1),
+    menuCode: findExact(["MenuCode", "Menu Code"], 2),
+    menuName: findExact(["MenuName", "Menu Name"], 3),
+    category: findExact(["Category"], 4),
+    subCategory: findExact(["SubCategory", "Sub Category"], 5),
+
+    // Important: these must match the actual ingredient/product columns.
+    // Do not use loose header matching here, because RestaurantName and RestaurantCode
+    // also contain the words Name and Code.
+    ingredientCode: ingredientCodeIndex,
+    ingredientName: ingredientNameIndex,
+
+    assigned: findExact(["Assigned"], 12),
+    assignedType: findExact(["AssignedType", "Assigned Type"], 13),
+    recipeCode: findExact(["RecipeCode", "Recipe Code"], 15),
+    recipeName: findExact(["RecipeName", "Recipe Name"], 16),
+    specialInstructions: findExact(["SpecialInstructions", "Special Instructions"], 17),
+    specialInstructions2: findExact(["SpecialInstructions2", "Special Instructions 2"], 18),
+    recipeIsBasic: findExact(["RecipeIsBasic", "Recipe Is Basic"], 19),
+    hasProductRelation: findExact(["HasProductRelation", "Has Product Relation"], 20),
+    ingredientAllergens: findExact(["IngredientAllergens", "Ingredient Allergens"], 21),
+    recipeAllergens: findExact(["RecipeAllergens", "Recipe Allergens"], 22),
   };
 };
-
 const parseIngredientByLocationWorkbook = (workbook) => {
   const sheetName = workbook.SheetNames.find((name) => cleanText(name).includes("SHEET")) || workbook.SheetNames[0];
   const worksheet = workbook.Sheets[sheetName];
@@ -819,6 +834,9 @@ export default function AllergenModule({ styles, userShip, onBack, logUsageEvent
               >
                 <div style={styles.recipeName}>{item.ingredientName}</div>
                 <div style={styles.recipeMeta}>Code: {item.ingredientCode || "N/A"}</div>
+                {item.assigned && item.assigned !== item.ingredientName && (
+                  <div style={styles.recipeMeta}>Product / Assigned: {item.assigned}</div>
+                )}
                 <div style={styles.recipeMeta}>Type: {item.assignedType === "R" ? "Sub Recipe" : "Ingredient"}</div>
                 <div style={styles.recipeMeta}>Category: {item.category || "N/A"}</div>
                 <div style={styles.recipeMeta}>Sub Category: {item.subCategory || "N/A"}</div>
