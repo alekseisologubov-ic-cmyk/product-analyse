@@ -1164,19 +1164,18 @@ export default function TrainingModule({ styles, onBack }) {
 
           <label style={styles.label}>Training month</label>
           <input
-            type="month"
-            value={monthKey}
-            disabled={!canManageTrainingData}
-            onChange={(event) => {
-              if (!canManageTrainingData) return;
-              setMonthKey(event.target.value);
-              setSelectedTraining(null);
-              setTrainingLaunchModal(null);
-              setTrainingLaunchCrew(null);
-              setTrainingLaunchCrewSearch("");
-            }}
-            style={styles.searchInput}
-          />
+  type="month"
+  value={monthKey}
+  disabled={!canManageTraining}
+  onChange={(event) => {
+    setMonthKey(event.target.value);
+    setSelectedTraining(null);
+    setTrainingLaunchModal(null);
+    setTrainingLaunchCrew(null);
+    setTrainingLaunchCrewSearch("");
+  }}
+  style={styles.searchInput}
+/>
 
           {canManageTrainingData ? (
             <>
