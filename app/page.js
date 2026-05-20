@@ -2357,35 +2357,42 @@ const getPersistentEquipmentImageUrl = async (item, scope, index) => {
 
     const rowMap = new Map();
 
-    items.forEach((item, index) => {
-      const normalizedItem = {
-        ...item,
-        equipmentDepartment: item.equipmentDepartment || equipmentDepartment || "culinary",
-      };
+for (let index = 0; index < items.length; index += 1) {
+  const item = items[index];
 
-      const itemKey = getInventoryItemKey(normalizedItem);
-      if (!itemKey || rowMap.has(itemKey)) return;
+  const normalizedItem = {
+    ...item,
+    equipmentDepartment: item.equipmentDepartment || equipmentDepartment || "culinary",
+  };
 
-      rowMap.set(itemKey, {
-        ship: masterScope,
-        item_key: itemKey,
-        code: normalizedItem.code || "",
-        item_name: normalizedItem.name || "",
-        category: normalizedItem.category || "",
-        sheet_name: normalizedItem.sheetName || "",
-        image:
-  [
-    normalizedItem.image,
-    normalizedItem.imageFallback,
-  ]
-    .map((value) => cleanSharedMasterImage(value))
-    .find(Boolean) || "",
-        source_row: Number(normalizedItem.sourceRow || index + 1),
-        sort_order: index,
-        updated_at: new Date().toISOString(),
-      });
-    });
+  const itemKey = getInventoryItemKey(normalizedItem);
+  if (!itemKey || rowMap.has(itemKey)) continue;
 
+  if (index > 0 && index % 25 === 0) {
+    setMakeInventoryMessage(
+      `Saving ${departmentLabel} pictures and master list... ${index} of ${items.length}`
+    );
+  }
+
+  const persistentImageUrl = await getPersistentEquipmentImageUrl(
+    normalizedItem,
+    masterScope,
+    index
+  );
+
+  rowMap.set(itemKey, {
+    ship: masterScope,
+    item_key: itemKey,
+    code: normalizedItem.code || "",
+    item_name: normalizedItem.name || "",
+    category: normalizedItem.category || "",
+    sheet_name: normalizedItem.sheetName || "",
+    image: persistentImageUrl || cleanSharedMasterImage(normalizedItem.image),
+    source_row: Number(normalizedItem.sourceRow || index + 1),
+    sort_order: index,
+    updated_at: new Date().toISOString(),
+  });
+}
     const rows = [...rowMap.values()];
     const batchSize = 75;
 
