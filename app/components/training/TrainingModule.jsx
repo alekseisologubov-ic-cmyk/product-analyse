@@ -925,6 +925,10 @@ export default function TrainingModule({ styles, onBack }) {
   };
 
   const uploadStationAssignmentFile = async (event) => {
+    if (!canManageTraining) {
+  window.alert("Only Culinary admins can upload station assignments.");
+  return;
+}
     if (!canManageTrainingData) {
       window.alert("Only this ship's Culinary admin can upload the crew list.");
       event.target.value = "";
