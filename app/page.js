@@ -2384,6 +2384,7 @@ const loadExistingMasterImagesByCode = async (scope) => {
 
     setMakeInventoryMessage("Sharing " + departmentLabel + " master inventory list for all users...");
     setMusterMessage("Sharing " + departmentLabel + " master inventory list for all users...");
+    const existingImageByCode = await loadExistingMasterImagesByCode(masterScope);
 
     try {
   await deleteMasterInventoryRowsInBatches(masterScope);
