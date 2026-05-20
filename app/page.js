@@ -8058,8 +8058,7 @@ isAdmin={isAdmin}
     >
       {pictureLibraryBusy ? "Syncing pictures..." : "🖼️ Sync Picture Library"}
     </button>
-{equipmentDepartment === "culinary" && (
-  <>
+
     <label style={styles.label}>Upload Culinary Picture ZIP</label>
     <input
       type="file"
@@ -8068,14 +8067,12 @@ isAdmin={isAdmin}
       style={styles.fileInput}
       disabled={pictureLibraryBusy || masterInventoryLoading}
     />
-  </>
-)}
+
     {pictureLibraryMessage && (
       <p style={styles.message}>{pictureLibraryMessage}</p>
     )}
   </>
 )}
-
 {musterMessage && <p style={styles.message}>{musterMessage}</p>}
 
             <div style={styles.infoBox}>
