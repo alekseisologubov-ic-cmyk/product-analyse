@@ -337,15 +337,14 @@ const printRows = ({ title, rows, columns }) => {
   printWindow.print();
 };
 
-export default function TrainingModule({
-  styles,
-  supabase,
-  userShip,
-  userEmail,
-  isAdmin = false,
-  onBack,
-  logUsageEvent = () => {},
-}) {
+export default function TrainingModule({ styles, onBack }) {
+  const {
+    supabase,
+    userShip,
+    userEmail,
+    isAdmin,
+    logUsageEvent,
+  } = useAppContext();
   const [monthKey, setMonthKey] = useState(todayMonthKey());
   const [assignments, setAssignments] = useState([]);
   const [trainingLinks, setTrainingLinks] = useState([]);
