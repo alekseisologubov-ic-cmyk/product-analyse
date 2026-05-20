@@ -11,6 +11,7 @@ import {
 import MakeInventoryTopBar from "./components/equipment/MakeInventoryTopBar";
 import InventoryAiHelper from "./components/equipment/InventoryAiHelper";
 import AdminDashboard from "./components/admin/AdminDashboard";
+import { AppProvider } from "./context/AppContext";
 
 const loadPeopleScheduleModule = () => import("./components/PeopleScheduleModule");
 const PeopleScheduleModule = lazy(loadPeopleScheduleModule);
