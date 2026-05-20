@@ -877,8 +877,8 @@ export default function AllergenModule({ styles, userShip, onBack, logUsageEvent
                   Recipe code {selectedRecipe.recipeCode || "N/A"} • Menu {selectedRecipe.menuName || "N/A"}
                 </p>
               </div>
-              <div style={selectedRecipe.hiddenWarnings.length ? styles.statusBad : styles.statusGood}>
-                {selectedRecipe.hiddenWarnings.length ? "Review Required" : "Allergen Review"}
+              <div style={styles.statusNeutral}>
+                Allergen Review
               </div>
             </div>
 
@@ -892,16 +892,6 @@ export default function AllergenModule({ styles, userShip, onBack, logUsageEvent
                 <AllergenBadges allergens={selectedRecipe.possibleHidden} possible />
               </div>
             </section>
-
-            {selectedRecipe.hiddenWarnings.length > 0 && (
-              <div style={{ ...styles.statusBad, textAlign: "left" }}>
-                {selectedRecipe.hiddenWarnings.map((warning, index) => (
-                  <div key={`${warning.ingredientName}-${index}`}>
-                    ⚠️ {warning.warning} Ingredient: {warning.ingredientName}
-                  </div>
-                ))}
-              </div>
-            )}
 
             <input
               placeholder="Search ingredient or allergen..."
