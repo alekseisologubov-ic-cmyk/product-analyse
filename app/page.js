@@ -1891,16 +1891,17 @@ const image = imageCandidates[0] || "";
 const imageFallback = imageCandidates.find((value) => value !== image) || "";
 
         return {
-          equipmentDepartment: "bar",
-          sheetName: oldSheetName,
-          category: "Bar",
-          code,
-          name,
-          unit,
-          um: unit,
-          image,
-          sourceRow,
-        };
+  equipmentDepartment: "bar",
+  sheetName: oldSheetName,
+  category: "Bar",
+  code,
+  name,
+  unit,
+  um: unit,
+  image,
+  imageFallback,
+  sourceRow,
+};
       })
       .filter((item) => item.name)
       .filter((item) => cleanText(item.name) !== "PRODUCT NAME")
