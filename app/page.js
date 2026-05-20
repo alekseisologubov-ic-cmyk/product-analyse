@@ -6969,6 +6969,23 @@ isAdmin={isAdmin}
     <span>Monthly station training tracker by crew assignment and training links.</span>
   </button>
 )}
+  {(equipmentDepartment === "culinary" || equipmentDepartment === "restaurant") && (
+  <button
+    style={styles.moduleCard}
+    onClick={() => {
+      setModule("allergen");
+      logUsageEvent("module_opened", {
+        module: "allergen",
+        equipmentDepartment,
+        ship: userShip,
+      });
+    }}
+  >
+    <div style={styles.moduleIcon}>🧬</div>
+    <strong>Allergen Matrix</strong>
+    <span>Recipe, ingredient, sub-recipe, and possible hidden allergen review by venue.</span>
+  </button>
+)}
   <button
     style={styles.moduleCard}
     onClick={() => {
