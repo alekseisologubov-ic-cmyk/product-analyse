@@ -4028,7 +4028,202 @@ for (let index = 0; index < items.length; index += 1) {
   const match = text.match(/\d{4,}/);
   return match ? match[0].replace(/^0+/, "") : "";
 };
+const getZipImageMimeType = (fileName) => {
+  const text = String(fileName || "").toLowerCase();
 
+  if (text.endsWith(".jpg") || text.endsWith(".jpeg")) return "image/jpeg";
+  if (text.endsWith(".webp")) return "image/webp";
+  if (text.endsWith(".gif")) return "image/gif";
+  return "image/png";
+};
+
+const getZipImageExtension = (fileName) => {
+  const text = String(fileName || "").toLowerCase();
+
+  if (text.endsWith(".jpg") || text.endsWith(".jpeg")) return "jpg";
+  if (text.endsWith(".webp")) return "webp";
+  if (text.endsWith(".gif")) return "gif";
+  return "png";
+};
+
+const uploadEquipmentPictureZipFile = async (event) => {
+  const file = event.target.files?.[0];
+
+  if (!file) return;
+
+  if (!isAdmin) {
+    const text = "Only admin can upload the equipment picture ZIP.";
+    setPictureLibraryMessage(text);
+    window.alert(text);
+    event.target.value = "";
+    return;
+  }
+
+  if (equipmentDepartment !== "culinary") {
+    const text = "This picture ZIP upload is for Culinary equipment only.";
+    setPictureLibraryMessage(text);
+    window.alert(text);
+    event.target.value = "";
+    return;
+  }
+
+  if (!supabase) {
+    const text = "Supabase is not connected. Cannot upload picture ZIP.";
+    setPictureLibraryMessage(text);
+    window.alert(text);
+    event.target.value = "";
+    return;
+  }
+
+  const sourceItems = makeInventoryItems.length ? makeInventoryItems : musterItems;
+
+  if (!sourceItems.length) {
+    const text = "Upload or refresh the Culinary master inventory list first, then upload the picture ZIP.";
+    setPictureLibraryMessage(text);
+    window.alert(text);
+    event.target.value = "";
+    return;
+  }
+
+  setPictureLibraryBusy(true);
+  setPictureLibraryMessage("Reading picture ZIP...");
+
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const zip = await JSZip.loadAsync(arrayBuffer);
+    const entries = [];
+
+    zip.forEach((relativePath, zipEntry) => {
+      if (zipEntry.dir) return;
+
+      const fileName = relativePath.split("/").pop() || "";
+      const isImage = /\.(jpg|jpeg|png|webp|gif)$/i.test(fileName);
+
+      if (!isImage) return;
+
+      const codeKey = normalizeEquipmentPictureCode(fileName);
+
+      if (!codeKey) return;
+
+      entries.push({
+        relativePath,
+        fileName,
+        zipEntry,
+        codeKey,
+      });
+    });
+
+    if (!entries.length) {
+      throw new Error("No usable image files found in the ZIP. Filenames must contain the equipment code.");
+    }
+
+    const masterScope = getMasterInventoryScope("culinary");
+    const pictureByCode = {};
+    let uploadedCount = 0;
+    let skippedDuplicateCount = 0;
+
+    for (let index = 0; index < entries.length; index += 1) {
+      const entry = entries[index];
+
+      if (pictureByCode[entry.codeKey]) {
+        skippedDuplicateCount += 1;
+        continue;
+      }
+
+      if (index > 0 && index % 25 === 0) {
+        setPictureLibraryMessage(
+          `Uploading ZIP pictures... ${index} of ${entries.length}`
+        );
+      }
+
+      const blob = await entry.zipEntry.async("blob");
+      const mimeType = getZipImageMimeType(entry.fileName);
+      const extension = getZipImageExtension(entry.fileName);
+      const storagePath = `${masterScope}/zip-library/${entry.codeKey}.${extension}`;
+
+      const { error } = await supabase.storage
+        .from(EQUIPMENT_PICTURE_BUCKET)
+        .upload(storagePath, blob, {
+          contentType: mimeType,
+          upsert: true,
+          cacheControl: "31536000",
+        });
+
+      if (error) {
+        throw error;
+      }
+
+      const { data } = supabase.storage
+        .from(EQUIPMENT_PICTURE_BUCKET)
+        .getPublicUrl(storagePath);
+
+      const publicUrl = data?.publicUrl || "";
+
+      if (publicUrl) {
+        pictureByCode[entry.codeKey] = publicUrl;
+        uploadedCount += 1;
+      }
+    }
+
+    let matchedCount = 0;
+    const unmatchedCodes = [];
+
+    const updatedItems = sourceItems.map((item) => {
+      const codeKey = normalizeEquipmentPictureCode(item.code);
+      const pictureUrl = codeKey ? pictureByCode[codeKey] : "";
+
+      if (!pictureUrl) {
+        if (codeKey) unmatchedCodes.push(codeKey);
+        return item;
+      }
+
+      matchedCount += 1;
+
+      return {
+        ...item,
+        image: pictureUrl,
+        imageFallback: item.imageFallback || item.image || "",
+        pictureFileName: `${codeKey}`,
+      };
+    });
+
+    setDrivePictureLibraryByCode((current) => ({
+      ...current,
+      ...pictureByCode,
+    }));
+
+    setMakeInventoryItems(updatedItems);
+    setMusterItems(updatedItems);
+
+    setPictureLibraryMessage(
+      `ZIP pictures uploaded. ${uploadedCount} picture code(s) saved. ${matchedCount} master item(s) matched. Saving master list...`
+    );
+
+    await saveMasterInventoryItems(null, updatedItems);
+
+    setPictureLibraryMessage(
+      `Picture ZIP sync completed. ${uploadedCount} picture code(s) saved from ZIP. ${matchedCount} item(s) matched. ${unmatchedCodes.length} master item code(s) had no ZIP picture. ${skippedDuplicateCount} duplicate picture file(s) skipped.`
+    );
+
+    logUsageEvent("equipment_picture_zip_uploaded", {
+      module: "make_inventory",
+      ship: makeInventoryShip || userShip,
+      equipmentDepartment,
+      fileName: file.name,
+      uploadedCount,
+      matchedCount,
+      unmatchedCount: unmatchedCodes.length,
+      duplicateCount: skippedDuplicateCount,
+    });
+  } catch (error) {
+    const text = error?.message || "Could not upload equipment picture ZIP.";
+    setPictureLibraryMessage(text);
+    window.alert(text);
+  } finally {
+    setPictureLibraryBusy(false);
+    event.target.value = "";
+  }
+};
   const loadDrivePictureLibrary = async ({ silent = false } = {}) => {
   try {
     if (!silent) {
