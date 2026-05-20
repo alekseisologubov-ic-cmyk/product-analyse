@@ -1183,21 +1183,25 @@ export default function TrainingModule({ styles, onBack }) {
 )}
           {canManageTrainingData ? (
             <>
-              <label style={styles.label}>Upload station assignment file</label>
-              <input
-                type="file"
-                accept=".xlsx,.xls,.xlsm"
-                onChange={uploadStationAssignmentFile}
-                style={styles.fileInput}
-              />
+              {canManageTraining && (
+  <>
+    <label style={styles.label}>Upload station assignment file</label>
+    <input
+      type="file"
+      accept=".xlsx,.xls,.xlsm"
+      onChange={uploadStationAssignmentFile}
+      style={styles.fileInput}
+    />
 
-              <label style={styles.label}>Upload global training links file</label>
-              <input
-                type="file"
-                accept=".xlsx,.xls,.xlsm"
-                onChange={uploadTrainingLinksFile}
-                style={styles.fileInput}
-              />
+    <label style={styles.label}>Upload training links file</label>
+    <input
+      type="file"
+      accept=".xlsx,.xls,.xlsm"
+      onChange={uploadTrainingLinksFile}
+      style={styles.fileInput}
+    />
+  </>
+)}
             </>
           ) : (
             <div style={styles.infoBox}>
