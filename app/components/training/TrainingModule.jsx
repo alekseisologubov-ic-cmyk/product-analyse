@@ -1176,7 +1176,11 @@ export default function TrainingModule({ styles, onBack }) {
   }}
   style={styles.searchInput}
 />
-
+{!canManageTraining && (
+  <div style={styles.recipeMeta}>
+    Month changes are available only for Culinary admins.
+  </div>
+)}
           {canManageTrainingData ? (
             <>
               <label style={styles.label}>Upload station assignment file</label>
