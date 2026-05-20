@@ -339,12 +339,16 @@ const printRows = ({ title, rows, columns }) => {
 
 export default function TrainingModule({ styles, onBack }) {
   const {
-    supabase,
-    userShip,
-    userEmail,
-    isAdmin,
-    logUsageEvent,
-  } = useAppContext();
+    const {
+  supabase,
+  userShip,
+  userEmail,
+  isAdmin,
+  culinaryAdminShip,
+  isShipCulinaryAdmin,
+  canManageTraining,
+  logUsageEvent,
+} = useAppContext();
   const [monthKey, setMonthKey] = useState(todayMonthKey());
   const [assignments, setAssignments] = useState([]);
   const [trainingLinks, setTrainingLinks] = useState([]);
