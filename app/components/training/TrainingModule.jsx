@@ -1202,6 +1202,12 @@ export default function TrainingModule({ styles, onBack }) {
     />
   </>
 )}
+              {!canManageTraining && (
+  <div style={styles.infoBox}>
+    <div>🔒 Crew users can complete training and view reports.</div>
+    <div>📤 Uploads are available only for Culinary admins.</div>
+  </div>
+)}
             </>
           ) : (
             <div style={styles.infoBox}>
