@@ -6335,23 +6335,28 @@ const getEquipmentFallbackImage = (item) => {
           </main>
         }
       >
-        <TrainingModule
-          styles={styles}
-          supabase={supabase}
-          userShip={userShip}
-          userEmail={normalizeAppEmail(userEmail)}
-          isAdmin={isAdmin}
-          onBack={() => {
-            if (equipmentDepartment) {
-              setModule("equipment");
-              setEquipmentMode("");
-              return;
-            }
+        <AppProvider
+  value={{
+    supabase,
+    userShip,
+    userEmail: normalizeAppEmail(userEmail),
+    isAdmin,
+    logUsageEvent,
+  }}
+>
+  <TrainingModule
+    styles={styles}
+    onBack={() => {
+      if (equipmentDepartment) {
+        setModule("equipment");
+        setEquipmentMode("");
+        return;
+      }
 
-            setModule("");
-          }}
-          logUsageEvent={logUsageEvent}
-        />
+      setModule("");
+    }}
+  />
+</AppProvider>
       </Suspense>
     );
   }
