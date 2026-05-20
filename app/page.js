@@ -6710,6 +6710,35 @@ const getEquipmentFallbackImage = (item) => {
       </Suspense>
     );
   }
+if (module === "allergen") {
+  return (
+    <Suspense
+      fallback={
+        <main style={styles.page}>
+          <section style={styles.card}>
+            <h2 style={styles.cardTitle}>🧬 Loading Allergen Module...</h2>
+            <p style={styles.emptyText}>Preparing recipe allergen matrix.</p>
+          </section>
+        </main>
+      }
+    >
+      <AllergenModule
+        styles={styles}
+        userShip={userShip}
+        onBack={() => {
+          if (equipmentDepartment) {
+            setModule("equipment");
+            setEquipmentMode("");
+            return;
+          }
+
+          setModule("");
+        }}
+        logUsageEvent={logUsageEvent}
+      />
+    </Suspense>
+  );
+}
   if (module === "temperature") {
     return (
       <Suspense
