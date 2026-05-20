@@ -38,9 +38,9 @@ const normalizeTrainingEmail = (value) => String(value || "").trim().toLowerCase
 const getTrainingAdminShipFromEmail = (email) => {
   const localPart = normalizeTrainingEmail(email).split("@")[0] || "";
 
-  if (localPart === "val.cul.admin" || localPart === "vl.cul.admin") return "VL";
-  if (localPart === "scarlet.cul.admin" || localPart === "sc.cul.admin") return "SC";
-  if (localPart === "resilient.cul.admin" || localPart === "rl.cul.admin") return "RL";
+  if (localPart === "val.cul.admin" || localPart === "vl.cul.admin" || localPart === "valiant.cul.admin") return "VL";
+  if (localPart === "scarlet.cul.admin" || localPart === "sc.cul.admin" || localPart === "scl.cul.admin") return "SC";
+  if (localPart === "resilient.cul.admin" || localPart === "rl.cul.admin" || localPart === "res.cul.admin") return "RL";
   if (localPart === "brilliant.cul.admin" || localPart === "brl.cul.admin") return "BRL";
 
   return "";
@@ -103,7 +103,6 @@ const parseStationAssignmentWorkbook = (workbook) => {
       text.includes("PINK AGAVE") ||
       text.includes("RAZZLE") ||
       text.includes("WAKE") ||
-      text.includes("GALLEY") ||
       text.includes("GUNBAE") ||
       text.includes("DOCK") ||
       text.includes("SOCIAL") ||
@@ -339,16 +338,16 @@ const printRows = ({ title, rows, columns }) => {
 
 export default function TrainingModule({ styles, onBack }) {
   const {
-    const {
-  supabase,
-  userShip,
-  userEmail,
-  isAdmin,
-  culinaryAdminShip,
-  isShipCulinaryAdmin,
-  canManageTraining,
-  logUsageEvent,
-} = useAppContext();
+    supabase,
+    userShip,
+    userEmail,
+    isAdmin,
+    culinaryAdminShip,
+    isShipCulinaryAdmin,
+    canManageTraining,
+    logUsageEvent,
+  } = useAppContext();
+
   const [monthKey, setMonthKey] = useState(todayMonthKey());
   const [assignments, setAssignments] = useState([]);
   const [trainingLinks, setTrainingLinks] = useState([]);
@@ -368,8 +367,8 @@ export default function TrainingModule({ styles, onBack }) {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const trainingAdminShip = getTrainingAdminShipFromEmail(userEmail);
-  const canManageTrainingData = Boolean(isAdmin || (trainingAdminShip && trainingAdminShip === userShip));
+  const trainingAdminShip = culinaryAdminShip || getTrainingAdminShipFromEmail(userEmail);
+  const canManageTrainingData = Boolean(canManageTraining);
 
   const completionMap = useMemo(() => {
     const map = new Map();
@@ -925,12 +924,8 @@ export default function TrainingModule({ styles, onBack }) {
   };
 
   const uploadStationAssignmentFile = async (event) => {
-    if (!canManageTraining) {
-  window.alert("Only Culinary admins can upload station assignments.");
-  return;
-}
     if (!canManageTrainingData) {
-      window.alert("Only this ship's Culinary admin can upload the crew list.");
+      window.alert("Only this ship's Culinary admin can upload station assignments.");
       event.target.value = "";
       return;
     }
@@ -1082,7 +1077,10 @@ export default function TrainingModule({ styles, onBack }) {
   };
 
   const resetMonthlyCompletions = async () => {
-    if (!canManageTrainingData) return;
+    if (!canManageTrainingData) {
+      window.alert("Only Culinary admins can reset monthly completions.");
+      return;
+    }
 
     if (!supabase) {
       window.alert("Supabase is not connected.");
@@ -1168,54 +1166,47 @@ export default function TrainingModule({ styles, onBack }) {
 
           <label style={styles.label}>Training month</label>
           <input
-  type="month"
-  value={monthKey}
-  disabled={!canManageTraining}
-  onChange={(event) => {
-    setMonthKey(event.target.value);
-    setSelectedTraining(null);
-    setTrainingLaunchModal(null);
-    setTrainingLaunchCrew(null);
-    setTrainingLaunchCrewSearch("");
-  }}
-  style={styles.searchInput}
-/>
-{!canManageTraining && (
-  <div style={styles.recipeMeta}>
-    Month changes are available only for Culinary admins.
-  </div>
-)}
+            type="month"
+            value={monthKey}
+            disabled={!canManageTrainingData}
+            onChange={(event) => {
+              setMonthKey(event.target.value);
+              setSelectedTraining(null);
+              setTrainingLaunchModal(null);
+              setTrainingLaunchCrew(null);
+              setTrainingLaunchCrewSearch("");
+            }}
+            style={styles.searchInput}
+          />
+
+          {!canManageTrainingData && (
+            <div style={styles.recipeMeta}>
+              Month changes are available only for Culinary admins.
+            </div>
+          )}
+
           {canManageTrainingData ? (
             <>
-              {canManageTraining && (
-  <>
-    <label style={styles.label}>Upload station assignment file</label>
-    <input
-      type="file"
-      accept=".xlsx,.xls,.xlsm"
-      onChange={uploadStationAssignmentFile}
-      style={styles.fileInput}
-    />
+              <label style={styles.label}>Upload station assignment file</label>
+              <input
+                type="file"
+                accept=".xlsx,.xls,.xlsm"
+                onChange={uploadStationAssignmentFile}
+                style={styles.fileInput}
+              />
 
-    <label style={styles.label}>Upload training links file</label>
-    <input
-      type="file"
-      accept=".xlsx,.xls,.xlsm"
-      onChange={uploadTrainingLinksFile}
-      style={styles.fileInput}
-    />
-  </>
-)}
-              {!canManageTraining && (
-  <div style={styles.infoBox}>
-    <div>🔒 Crew users can complete training and view reports.</div>
-    <div>📤 Uploads are available only for Culinary admins.</div>
-  </div>
-)}
+              <label style={styles.label}>Upload training links file</label>
+              <input
+                type="file"
+                accept=".xlsx,.xls,.xlsm"
+                onChange={uploadTrainingLinksFile}
+                style={styles.fileInput}
+              />
             </>
           ) : (
             <div style={styles.infoBox}>
-              Only this ship's Culinary admin can change the month, upload the crew list, or update training links.
+              <div>🔒 Crew users can complete training and view reports.</div>
+              <div>📤 Uploads are available only for Culinary admins.</div>
             </div>
           )}
 
@@ -1226,8 +1217,17 @@ export default function TrainingModule({ styles, onBack }) {
             <div>👥 Crew assignments: <strong>{assignments.length}</strong></div>
             <div>📚 Training links: <strong>{trainingLinks.length}</strong></div>
             <div>✅ Completion records: <strong>{completions.length}</strong></div>
-            <div>🔐 Training admin access: <strong>{canManageTrainingData ? "Yes" : "No"}</strong></div>
-            {trainingAdminShip && trainingAdminShip !== userShip && (
+            <div>
+              🔐 Training admin:
+              <strong>
+                {canManageTrainingData
+                  ? isAdmin
+                    ? " Global admin"
+                    : ` ${trainingAdminShip || culinaryAdminShip} Culinary admin`
+                  : " No"}
+              </strong>
+            </div>
+            {trainingAdminShip && !isShipCulinaryAdmin && !isAdmin && (
               <div style={{ color: "#8a5a00" }}>
                 This email is Culinary admin for {trainingAdminShip}, not {userShip}.
               </div>
