@@ -7324,8 +7324,10 @@ isAdmin={isAdmin}
             >
               <option value="">Choose ship</option>
               {SHIPS.map((ship) => (
-                <option key={ship} value={ship}>{ship}</option>
-              ))}
+  <option key={ship} value={ship}>
+    {getShipDisplayName(ship)}
+  </option>
+))}
             </select>
 
             <label style={styles.label}>Choose {inventoryStationLabel}</label>
