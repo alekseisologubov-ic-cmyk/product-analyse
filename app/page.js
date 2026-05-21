@@ -4021,38 +4021,62 @@ for (let index = 0; index < items.length; index += 1) {
   const file = e.target.files?.[0];
   if (!file) return;
 
-  try {
-    if (supabase && isAdmin) {
-      setMessage("Saving permanent Ingredient by Location file...");
-      await uploadIngredientByLocationFileToStorage({ supabase, file });
-    }
-  } catch (error) {
-    const text = error?.message || "Could not save permanent Ingredient by Location file.";
+  if (!isAdmin) {
+    const text = "Only admins can replace the permanent Ingredient by Location file.";
     setMessage(text);
     window.alert(text);
+    e.target.value = "";
+    return;
   }
 
-  readExcelFile(file, (workbook) => {
+  if (!supabase) {
+    const text = "Supabase is not connected. Cannot save the permanent Ingredient by Location file.";
+    setMessage(text);
+    window.alert(text);
+    e.target.value = "";
+    return;
+  }
+
+  try {
+    setMessage("Saving permanent Ingredient by Location file...");
+
+    await uploadIngredientByLocationFileToStorage({
+      supabase,
+      file,
+    });
+
+    const arrayBuffer = await file.arrayBuffer();
+    const workbook = XLSX.read(arrayBuffer, {
+      type: "array",
+      cellDates: true,
+    });
+
     const rows = workbookToRows(workbook);
 
     setRecipeRows(rows);
     setSelectedRecipe(null);
 
     setMessage(
-      isAdmin
-        ? "Recipe / location file loaded and saved as permanent Ingredient by Location file."
-        : "Recipe / location file loaded locally."
+      `Permanent Ingredient by Location file updated. ${Math.max(
+        rows.length - 1,
+        0
+      )} recipe/location row(s) loaded.`
     );
 
-    logUsageEvent("product_recipe_location_file_uploaded", {
+    logUsageEvent("permanent_ingredient_by_location_updated", {
       module: "product_dashboard",
       fileName: file.name,
       rowCount: Math.max(rows.length - 1, 0),
-      permanent: Boolean(supabase && isAdmin),
+      permanent: true,
     });
-  });
-
-  e.target.value = "";
+  } catch (error) {
+    const text =
+      error?.message || "Could not save permanent Ingredient by Location file.";
+    setMessage(text);
+    window.alert(text);
+  } finally {
+    e.target.value = "";
+  }
 };
 
   const uploadTemplateFile = (e) => {
