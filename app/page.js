@@ -4,10 +4,7 @@ import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "rea
 import * as XLSX from "xlsx";
 import JSZip from "jszip";
 import { createClient } from "@supabase/supabase-js";
-import {
-  downloadInventoryPdfReport,
-  downloadInventoryExcelReportUsingTemplate,
-} from "./lib/inventoryReportDownloads";
+
 import {
   downloadInventoryPdfReport,
   downloadInventoryExcelReportUsingTemplate,
@@ -18,9 +15,6 @@ import {
   uploadIngredientByLocationFileToStorage,
 } from "./lib/permanentFiles";
 
-import MakeInventoryTopBar from "./components/equipment/MakeInventoryTopBar";
-import InventoryAiHelper from "./components/equipment/InventoryAiHelper";
-import AdminDashboard from "./components/admin/AdminDashboard";
 import MakeInventoryTopBar from "./components/equipment/MakeInventoryTopBar";
 import InventoryAiHelper from "./components/equipment/InventoryAiHelper";
 import AdminDashboard from "./components/admin/AdminDashboard";
