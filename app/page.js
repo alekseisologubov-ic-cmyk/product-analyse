@@ -553,7 +553,6 @@ export default function App() {
   const [equipmentMode, setEquipmentMode] = useState("");
 
   const [musterItems, setMusterItems] = useState([]);
-  const [musterSearch, setMusterSearch] = useState("");
   const [musterMessage, setMusterMessage] = useState("");
   const [selectedEquipment, setSelectedEquipment] = useState(null);
 
