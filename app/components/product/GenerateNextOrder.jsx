@@ -5,6 +5,8 @@ import * as XLSX from "xlsx";
 
 const SHIPS = ["BRL", "RL", "SC", "VL"];
 const REPORT_RENDER_BATCH = 120;
+const HISTORICAL_CONSUMPTION_COLUMNS = [35, 36, 37, 38, 39, 40]; // AJ:AO, 0-based indexes
+const CONSUMPTION_INCREASE_THRESHOLD_PERCENT = 25;
 
 const cleanText = (value) =>
   String(value || "")
@@ -129,6 +131,115 @@ const sumRowRange = (row, startIndex, endIndex) => {
 
   return total;
 };
+
+const averagePositiveValues = (values) => {
+  const cleanValues = values
+    .map((value) => Number(value || 0))
+    .filter((value) => Number.isFinite(value) && value > 0);
+
+  if (!cleanValues.length) return 0;
+
+  return cleanValues.reduce((sum, value) => sum + value, 0) / cleanValues.length;
+};
+
+const getIncreasePercent = (currentValue, baselineValue) => {
+  const current = Number(currentValue || 0);
+  const baseline = Number(baselineValue || 0);
+
+  if (baseline <= 0 || current <= 0) return 0;
+
+  return ((current - baseline) / baseline) * 100;
+};
+
+const getHistoricalConsumptionPeriods = ({ workbookRows, row, targetSailors }) => {
+  const daysRow = workbookRows[5] || []; // Excel row 6: # days
+  const paxRow = workbookRows[6] || workbookRows[4] || []; // Excel row 7, fallback row 5
+  const targetPax = Number(targetSailors || 0) > 0 ? Number(targetSailors || 0) : 2500;
+
+  return HISTORICAL_CONSUMPTION_COLUMNS.map((columnIndex) => {
+    const quantity = toNumber(row?.[columnIndex]);
+    const days = toNumber(daysRow?.[columnIndex]);
+    const pax = toNumber(paxRow?.[columnIndex]);
+
+    const normalizedDaily =
+      quantity > 0 && days > 0 && pax > 0
+        ? (quantity / days / pax) * targetPax
+        : 0;
+
+    return {
+      columnIndex,
+      columnLetter: XLSX.utils.encode_col(columnIndex),
+      quantity,
+      days,
+      pax,
+      normalizedDaily,
+    };
+  });
+};
+
+const getConsumptionIncreaseMetrics = ({ workbookRows, row, targetSailors }) => {
+  const periods = getHistoricalConsumptionPeriods({
+    workbookRows,
+    row,
+    targetSailors,
+  });
+
+  // AJ:AO = 6 historical voyages.
+  // Last 1 voyage = AO; baseline = average AJ:AN.
+  const previousFive = periods.slice(0, 5);
+  const latestOne = periods[5];
+
+  const previousFiveVoyageDailyAverage = averagePositiveValues(
+    previousFive.map((period) => period.normalizedDaily)
+  );
+
+  const latestOneVoyageDaily = Number(latestOne?.normalizedDaily || 0);
+  const oneVoyageIncreasePercent = getIncreasePercent(
+    latestOneVoyageDaily,
+    previousFiveVoyageDailyAverage
+  );
+
+  // Last 2 voyages = AN:AO; baseline = average AJ:AM.
+  const previousFour = periods.slice(0, 4);
+  const latestTwo = periods.slice(4, 6);
+
+  const previousFourVoyageDailyAverage = averagePositiveValues(
+    previousFour.map((period) => period.normalizedDaily)
+  );
+
+  const latestTwoVoyageDailyAverage = averagePositiveValues(
+    latestTwo.map((period) => period.normalizedDaily)
+  );
+
+  const twoVoyageIncreasePercent = getIncreasePercent(
+    latestTwoVoyageDailyAverage,
+    previousFourVoyageDailyAverage
+  );
+
+  return {
+    historicalConsumptionPeriods: periods,
+
+    latestOneVoyageColumn: latestOne?.columnLetter || "",
+    latestOneVoyageQty: latestOne?.quantity || 0,
+    latestOneVoyageDaily,
+    previousFiveVoyageDailyAverage,
+    oneVoyageIncreasePercent,
+    oneVoyageIncreaseFlag:
+      oneVoyageIncreasePercent >= CONSUMPTION_INCREASE_THRESHOLD_PERCENT,
+
+    latestTwoVoyageColumns: latestTwo.map((period) => period.columnLetter).join(":"),
+    latestTwoVoyageQty: latestTwo.reduce(
+      (sum, period) => sum + Number(period.quantity || 0),
+      0
+    ),
+    latestTwoVoyageDailyAverage,
+    previousFourVoyageDailyAverage,
+    twoVoyageIncreasePercent,
+    twoVoyageIncreaseFlag:
+      twoVoyageIncreasePercent >= CONSUMPTION_INCREASE_THRESHOLD_PERCENT,
+  };
+};
+
 
 const productNamesMatch = (left, right) => {
   const a = compactText(left);
@@ -434,6 +545,11 @@ const parseOrderFile = async (file) => {
     const parLevel = toNumber(row[16]);
     const pastConsumption = sumRowRange(row, 34, 39);
     const orderedByShip = toNumber(row[24]); // Y - ordered by ship
+    const consumptionIncreaseMetrics = getConsumptionIncreaseMetrics({
+      workbookRows: rows,
+      row,
+      targetSailors: sailors,
+    });
 
     let historicalSailorDays = 0;
 
@@ -525,6 +641,7 @@ const parseOrderFile = async (file) => {
       orderComparisonLabel,
       parCapApplied,
       parCapLimit,
+      ...consumptionIncreaseMetrics,
       alertType,
       alertLabel,
     };
@@ -1085,6 +1202,62 @@ export default function GenerateNextOrder({
       });
   }, [nextOrderRows, nextOrderSearch]);
 
+  const oneVoyageConsumptionIncreaseRows = useMemo(() => {
+    const query = nextOrderSearch.toLowerCase().trim();
+
+    return nextOrderRows
+      .filter((row) => row.oneVoyageIncreaseFlag)
+      .filter((row) => {
+        if (!query) return true;
+
+        return [
+          row.product,
+          row.code,
+          row.unit,
+          String(row.excelRow),
+          String(row.latestOneVoyageDaily),
+          String(row.previousFiveVoyageDailyAverage),
+          String(row.oneVoyageIncreasePercent),
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+      })
+      .sort(
+        (a, b) =>
+          Number(b.oneVoyageIncreasePercent || 0) -
+          Number(a.oneVoyageIncreasePercent || 0)
+      );
+  }, [nextOrderRows, nextOrderSearch]);
+
+  const twoVoyageConsumptionIncreaseRows = useMemo(() => {
+    const query = nextOrderSearch.toLowerCase().trim();
+
+    return nextOrderRows
+      .filter((row) => row.twoVoyageIncreaseFlag)
+      .filter((row) => {
+        if (!query) return true;
+
+        return [
+          row.product,
+          row.code,
+          row.unit,
+          String(row.excelRow),
+          String(row.latestTwoVoyageDailyAverage),
+          String(row.previousFourVoyageDailyAverage),
+          String(row.twoVoyageIncreasePercent),
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+      })
+      .sort(
+        (a, b) =>
+          Number(b.twoVoyageIncreasePercent || 0) -
+          Number(a.twoVoyageIncreasePercent || 0)
+      );
+  }, [nextOrderRows, nextOrderSearch]);
+
   const filteredFmlNotUsedRows = useMemo(() => {
     const query = fmlSearch.toLowerCase().trim();
     if (!query) return fmlNotUsedRows;
@@ -1146,6 +1319,39 @@ export default function GenerateNextOrder({
     DifferencePercent: row.orderDifferencePercent,
     Status: row.orderComparisonLabel,
   }));
+
+  const getConsumptionIncreaseExportRows = (rows, modeLabel) =>
+    rows.map((row, index) => ({
+      Number: index + 1,
+      Mode: modeLabel,
+      ExcelRow: row.excelRow,
+      Code: row.code,
+      Product: row.product,
+      UM: row.unit,
+      StockOnHand: row.stock,
+      FutureOrders: row.futureOrders,
+      PastConsumptionTotal: row.pastConsumption,
+      LatestOneVoyageColumn: row.latestOneVoyageColumn,
+      LatestOneVoyageQty: row.latestOneVoyageQty,
+      LatestOneVoyageDaily: row.latestOneVoyageDaily,
+      PreviousFiveVoyageDailyAverage: row.previousFiveVoyageDailyAverage,
+      OneVoyageIncreasePercent: row.oneVoyageIncreasePercent,
+      LatestTwoVoyageColumns: row.latestTwoVoyageColumns,
+      LatestTwoVoyageQty: row.latestTwoVoyageQty,
+      LatestTwoVoyageDailyAverage: row.latestTwoVoyageDailyAverage,
+      PreviousFourVoyageDailyAverage: row.previousFourVoyageDailyAverage,
+      TwoVoyageIncreasePercent: row.twoVoyageIncreasePercent,
+    }));
+
+  const oneVoyageConsumptionIncreaseExportRows = getConsumptionIncreaseExportRows(
+    oneVoyageConsumptionIncreaseRows,
+    "1 Voyage Increase"
+  );
+
+  const twoVoyageConsumptionIncreaseExportRows = getConsumptionIncreaseExportRows(
+    twoVoyageConsumptionIncreaseRows,
+    "2 Voyage Increase"
+  );
 
   const nextOrderExportRows = filteredNextOrderRows.map((row) => ({
     ExcelOrder: row.excelOrder,
@@ -1214,12 +1420,16 @@ export default function GenerateNextOrder({
   const visibleFmlNotUsedRows = filteredFmlNotUsedRows.slice(0, reportDisplayLimit);
   const visibleFmlRunningLowRows = filteredFmlRunningLowRows.slice(0, reportDisplayLimit);
   const visibleFmlOrderedNotFmlRows = filteredFmlOrderedNotFmlRows.slice(0, reportDisplayLimit);
+  const visibleOneVoyageConsumptionIncreaseRows = oneVoyageConsumptionIncreaseRows.slice(0, reportDisplayLimit);
+  const visibleTwoVoyageConsumptionIncreaseRows = twoVoyageConsumptionIncreaseRows.slice(0, reportDisplayLimit);
 
   const hasMoreNextOrderRows = filteredNextOrderRows.length > visibleNextOrderRows.length;
   const hasMoreOrderedVsSuggestedRows = orderedVsSuggestedRows.length > visibleOrderedVsSuggestedRows.length;
   const hasMoreFmlNotUsedRows = filteredFmlNotUsedRows.length > visibleFmlNotUsedRows.length;
   const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRunningLowRows.length;
   const hasMoreFmlOrderedNotFmlRows = filteredFmlOrderedNotFmlRows.length > visibleFmlOrderedNotFmlRows.length;
+  const hasMoreOneVoyageConsumptionIncreaseRows = oneVoyageConsumptionIncreaseRows.length > visibleOneVoyageConsumptionIncreaseRows.length;
+  const hasMoreTwoVoyageConsumptionIncreaseRows = twoVoyageConsumptionIncreaseRows.length > visibleTwoVoyageConsumptionIncreaseRows.length;
 
   const orderSheetShip = nextOrderMeta.shipCode || userShip || "";
 
@@ -1253,6 +1463,26 @@ export default function GenerateNextOrder({
           onClick={() => setNextOrderView("orderedVsSuggested")}
         >
           📊 Ordered vs Suggested ({orderedVsSuggestedRows.length})
+        </button>
+
+        <button
+          style={{
+            ...styles.viewModeButton,
+            ...(nextOrderView === "increase1" ? styles.viewModeButtonActive : {}),
+          }}
+          onClick={() => setNextOrderView("increase1")}
+        >
+          📈 Increase 1 Voyage ({oneVoyageConsumptionIncreaseRows.length})
+        </button>
+
+        <button
+          style={{
+            ...styles.viewModeButton,
+            ...(nextOrderView === "increase2" ? styles.viewModeButtonActive : {}),
+          }}
+          onClick={() => setNextOrderView("increase2")}
+        >
+          📈 Increase 2 Voyages ({twoVoyageConsumptionIncreaseRows.length})
         </button>
 
         <button
@@ -1448,6 +1678,110 @@ export default function GenerateNextOrder({
               </div>
             </>
           )}
+
+
+          {nextOrderView === "increase1" && (
+            <>
+              <input
+                placeholder="Search 1-voyage consumption increase item, code, U/M..."
+                value={nextOrderSearch}
+                onChange={(event) => setNextOrderSearch(event.target.value)}
+                style={styles.searchInput}
+              />
+
+              <div style={styles.infoBox}>
+                <div>📈 Report: <strong>Consumption Increase - Last 1 Voyage</strong></div>
+                <div>📘 Source: <strong>AJ:AO historical consumption columns</strong></div>
+                <div>📊 Logic: <strong>Latest voyage AO vs average of previous voyages AJ:AN</strong></div>
+                <div>⚠️ Shows items with normalized daily consumption increase of <strong>25% or more</strong>.</div>
+              </div>
+
+              <div style={styles.headerActions}>
+                <button
+                  style={styles.backButton}
+                  onClick={() =>
+                    printRows("Consumption Increase - 1 Voyage", oneVoyageConsumptionIncreaseExportRows, [
+                      { key: "Number", label: "#" },
+                      { key: "ExcelRow", label: "Row" },
+                      { key: "Code", label: "Code" },
+                      { key: "Product", label: "Product" },
+                      { key: "UM", label: "U/M" },
+                      { key: "LatestOneVoyageDaily", label: "Latest Daily" },
+                      { key: "PreviousFiveVoyageDailyAverage", label: "Previous Avg" },
+                      { key: "OneVoyageIncreasePercent", label: "Increase %" },
+                    ])
+                  }
+                >
+                  🖨️ Print
+                </button>
+
+                <button
+                  style={styles.primaryButton}
+                  onClick={() =>
+                    exportRowsToExcel(
+                      oneVoyageConsumptionIncreaseExportRows,
+                      "Increase 1 Voyage",
+                      "consumption-increase-1-voyage.xlsx"
+                    )
+                  }
+                >
+                  📥 Export Excel
+                </button>
+              </div>
+            </>
+          )}
+
+          {nextOrderView === "increase2" && (
+            <>
+              <input
+                placeholder="Search 2-voyage consumption increase item, code, U/M..."
+                value={nextOrderSearch}
+                onChange={(event) => setNextOrderSearch(event.target.value)}
+                style={styles.searchInput}
+              />
+
+              <div style={styles.infoBox}>
+                <div>📈 Report: <strong>Consumption Increase - Last 2 Voyages</strong></div>
+                <div>📘 Source: <strong>AJ:AO historical consumption columns</strong></div>
+                <div>📊 Logic: <strong>Latest two voyages AN:AO vs average of previous voyages AJ:AM</strong></div>
+                <div>⚠️ Shows items with normalized daily consumption increase of <strong>25% or more</strong>.</div>
+              </div>
+
+              <div style={styles.headerActions}>
+                <button
+                  style={styles.backButton}
+                  onClick={() =>
+                    printRows("Consumption Increase - 2 Voyages", twoVoyageConsumptionIncreaseExportRows, [
+                      { key: "Number", label: "#" },
+                      { key: "ExcelRow", label: "Row" },
+                      { key: "Code", label: "Code" },
+                      { key: "Product", label: "Product" },
+                      { key: "UM", label: "U/M" },
+                      { key: "LatestTwoVoyageDailyAverage", label: "Latest 2 Avg" },
+                      { key: "PreviousFourVoyageDailyAverage", label: "Previous Avg" },
+                      { key: "TwoVoyageIncreasePercent", label: "Increase %" },
+                    ])
+                  }
+                >
+                  🖨️ Print
+                </button>
+
+                <button
+                  style={styles.primaryButton}
+                  onClick={() =>
+                    exportRowsToExcel(
+                      twoVoyageConsumptionIncreaseExportRows,
+                      "Increase 2 Voyages",
+                      "consumption-increase-2-voyages.xlsx"
+                    )
+                  }
+                >
+                  📥 Export Excel
+                </button>
+              </div>
+            </>
+          )}
+
 
           {nextOrderView === "fml" && (
             <>
@@ -1773,6 +2107,128 @@ export default function GenerateNextOrder({
           )}
         </section>
       )}
+
+
+      {nextOrderView === "increase1" && (
+        <section style={styles.card}>
+          <h2 style={styles.productTitle}>📈 Consumption Increase - Last 1 Voyage</h2>
+
+          {oneVoyageConsumptionIncreaseRows.length === 0 && (
+            <p style={styles.emptyText}>
+              No items found with a 25% or higher increase in the latest voyage.
+            </p>
+          )}
+
+          <div style={localStyles.compactGrid}>
+            {visibleOneVoyageConsumptionIncreaseRows.map((row, index) => (
+              <div
+                key={row.excelRow + "-" + row.product + "-increase1"}
+                style={{ ...localStyles.orderedVsSuggestedCard, ...localStyles.orderedVsSuggestedRed }}
+              >
+                <div style={localStyles.cardTopLine}>
+                  <span>#{index + 1}</span>
+                  <span>Row {row.excelRow}</span>
+                </div>
+
+                <div style={localStyles.productName}>{row.product}</div>
+                <div style={styles.recipeMeta}>Code: {row.code || "N/A"}</div>
+                <div style={styles.recipeMeta}>U/M: {row.unit || "N/A"}</div>
+
+                <div style={localStyles.metricGrid}>
+                  <div style={localStyles.metricBox}>
+                    <span>Latest {row.latestOneVoyageColumn}</span>
+                    <strong>{formatQty(row.latestOneVoyageDaily)}</strong>
+                  </div>
+
+                  <div style={localStyles.metricBox}>
+                    <span>Prev Avg</span>
+                    <strong>{formatQty(row.previousFiveVoyageDailyAverage)}</strong>
+                  </div>
+
+                  <div style={localStyles.metricBoxBad}>
+                    <span>Increase</span>
+                    <strong>{formatQty(row.oneVoyageIncreasePercent)}%</strong>
+                  </div>
+                </div>
+
+                <div style={localStyles.comparisonBadgeRed}>
+                  Latest voyage consumption increased by {formatQty(row.oneVoyageIncreasePercent)}%
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {hasMoreOneVoyageConsumptionIncreaseRows && (
+            <button
+              style={styles.backButton}
+              onClick={() => setReportDisplayLimit((value) => value + REPORT_RENDER_BATCH)}
+            >
+              Show more ({visibleOneVoyageConsumptionIncreaseRows.length} / {oneVoyageConsumptionIncreaseRows.length})
+            </button>
+          )}
+        </section>
+      )}
+
+      {nextOrderView === "increase2" && (
+        <section style={styles.card}>
+          <h2 style={styles.productTitle}>📈 Consumption Increase - Last 2 Voyages</h2>
+
+          {twoVoyageConsumptionIncreaseRows.length === 0 && (
+            <p style={styles.emptyText}>
+              No items found with a 25% or higher increase across the latest two voyages.
+            </p>
+          )}
+
+          <div style={localStyles.compactGrid}>
+            {visibleTwoVoyageConsumptionIncreaseRows.map((row, index) => (
+              <div
+                key={row.excelRow + "-" + row.product + "-increase2"}
+                style={{ ...localStyles.orderedVsSuggestedCard, ...localStyles.orderedVsSuggestedRed }}
+              >
+                <div style={localStyles.cardTopLine}>
+                  <span>#{index + 1}</span>
+                  <span>Row {row.excelRow}</span>
+                </div>
+
+                <div style={localStyles.productName}>{row.product}</div>
+                <div style={styles.recipeMeta}>Code: {row.code || "N/A"}</div>
+                <div style={styles.recipeMeta}>U/M: {row.unit || "N/A"}</div>
+
+                <div style={localStyles.metricGrid}>
+                  <div style={localStyles.metricBox}>
+                    <span>Latest {row.latestTwoVoyageColumns}</span>
+                    <strong>{formatQty(row.latestTwoVoyageDailyAverage)}</strong>
+                  </div>
+
+                  <div style={localStyles.metricBox}>
+                    <span>Prev Avg</span>
+                    <strong>{formatQty(row.previousFourVoyageDailyAverage)}</strong>
+                  </div>
+
+                  <div style={localStyles.metricBoxBad}>
+                    <span>Increase</span>
+                    <strong>{formatQty(row.twoVoyageIncreasePercent)}%</strong>
+                  </div>
+                </div>
+
+                <div style={localStyles.comparisonBadgeRed}>
+                  Latest 2 voyages consumption increased by {formatQty(row.twoVoyageIncreasePercent)}%
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {hasMoreTwoVoyageConsumptionIncreaseRows && (
+            <button
+              style={styles.backButton}
+              onClick={() => setReportDisplayLimit((value) => value + REPORT_RENDER_BATCH)}
+            >
+              Show more ({visibleTwoVoyageConsumptionIncreaseRows.length} / {twoVoyageConsumptionIncreaseRows.length})
+            </button>
+          )}
+        </section>
+      )}
+
 
       {nextOrderView === "fml" && (
         <section style={styles.card}>
