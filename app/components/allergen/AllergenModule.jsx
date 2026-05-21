@@ -1,7 +1,11 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
+import {
+  downloadIngredientByLocationFileFromStorage,
+  uploadIngredientByLocationFileToStorage,
+} from "../../lib/permanentFiles";
 
 const cleanText = (value) =>
   String(value || "")
@@ -583,7 +587,14 @@ const exportRowsToExcel = (rows, sheetName, fileName) => {
   XLSX.writeFile(workbook, fileName);
 };
 
-export default function AllergenModule({ styles, userShip, onBack, logUsageEvent = () => {} }) {
+export default function AllergenModule({
+  styles,
+  supabase,
+  userShip,
+  isAdmin = false,
+  onBack,
+  logUsageEvent = () => {},
+}) {
   const [sourceFileName, setSourceFileName] = useState("");
   const [sourceSheetName, setSourceSheetName] = useState("");
   const [rows, setRows] = useState([]);
@@ -596,40 +607,112 @@ export default function AllergenModule({ styles, userShip, onBack, logUsageEvent
   const [allergenFilter, setAllergenFilter] = useState("ALL");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [permanentFileLoading, setPermanentFileLoading] = useState(false);
+
+  const applyIngredientByLocationArrayBuffer = (arrayBuffer, fileName = "Permanent Ingredient by Location") => {
+    const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+    const parsed = parseIngredientByLocationWorkbook(workbook);
+
+    if (!parsed.rows.length) {
+      throw new Error("No usable recipe ingredient rows found in the file.");
+    }
+
+    setRows(parsed.rows);
+    setVenues(parsed.venues);
+    setSourceFileName(fileName);
+    setSourceSheetName(parsed.sourceSheet);
+    setSelectedVenueKey(parsed.venues[0]?.venueKey || "");
+    setSelectedRecipeKey("");
+    setIngredientSearch("");
+
+    return parsed;
+  };
+
+  const loadPermanentIngredientByLocationFile = async ({ silent = false } = {}) => {
+    if (!supabase) {
+      if (!silent) {
+        const text = "Supabase is not connected. Permanent Ingredient by Location file cannot load.";
+        setMessage(text);
+        window.alert(text);
+      }
+      return false;
+    }
+
+    setPermanentFileLoading(true);
+    if (!silent) setMessage("Loading permanent Ingredient by Location file...");
+
+    try {
+      const arrayBuffer = await downloadIngredientByLocationFileFromStorage({ supabase });
+      const parsed = applyIngredientByLocationArrayBuffer(
+        arrayBuffer,
+        "Permanent Ingredient by Location"
+      );
+
+      setMessage(
+        `Permanent Ingredient by Location loaded. ${parsed.venues.length} venue(s), ${parsed.rows.length} ingredient row(s).`
+      );
+
+      return true;
+    } catch (error) {
+      if (!silent) {
+        const text = error?.message || "Could not load permanent Ingredient by Location file.";
+        setMessage(text);
+        window.alert(text);
+      }
+      return false;
+    } finally {
+      setPermanentFileLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPermanentIngredientByLocationFile({ silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase]);
 
   const uploadIngredientByLocationFile = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    if (!isAdmin) {
+      const text = "Only admins can replace the permanent Ingredient by Location file.";
+      setMessage(text);
+      window.alert(text);
+      event.target.value = "";
+      return;
+    }
+
+    if (!supabase) {
+      const text = "Supabase is not connected. Cannot save the permanent Ingredient by Location file.";
+      setMessage(text);
+      window.alert(text);
+      event.target.value = "";
+      return;
+    }
+
     setLoading(true);
-    setMessage("Reading Ingredient by Location file...");
+    setMessage("Saving permanent Ingredient by Location file...");
 
     try {
+      await uploadIngredientByLocationFileToStorage({ supabase, file });
+
       const arrayBuffer = await file.arrayBuffer();
-      const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
-      const parsed = parseIngredientByLocationWorkbook(workbook);
+      const parsed = applyIngredientByLocationArrayBuffer(arrayBuffer, file.name);
 
-      if (!parsed.rows.length) {
-        throw new Error("No usable recipe ingredient rows found in the file.");
-      }
+      setMessage(
+        `Permanent Ingredient by Location file updated. ${parsed.venues.length} venue(s), ${parsed.rows.length} ingredient row(s) loaded.`
+      );
 
-      setRows(parsed.rows);
-      setVenues(parsed.venues);
-      setSourceFileName(file.name);
-      setSourceSheetName(parsed.sourceSheet);
-      setSelectedVenueKey(parsed.venues[0]?.venueKey || "");
-      setSelectedRecipeKey("");
-      setMessage(`Loaded ${parsed.venues.length} venue(s), ${parsed.rows.length} ingredient row(s).`);
-
-      logUsageEvent("allergen_file_uploaded", {
+      logUsageEvent("permanent_ingredient_by_location_updated", {
         module: "allergen",
         ship: userShip,
         fileName: file.name,
+        permanent: true,
         venues: parsed.venues.length,
         rows: parsed.rows.length,
       });
     } catch (error) {
-      const text = error?.message || "Could not read Ingredient by Location file.";
+      const text = error?.message || "Could not save permanent Ingredient by Location file.";
       setMessage(text);
       window.alert(text);
     } finally {
@@ -754,35 +837,31 @@ export default function AllergenModule({ styles, userShip, onBack, logUsageEvent
           </p>
 
           <div style={styles.infoBox}>
-  <div>
-    📄 Ingredient by Location file loads automatically for all users.
-  </div>
-  <div>
-    🔒 Only admins can replace the permanent file.
-  </div>
-</div>
+            <div>📄 Ingredient by Location file loads automatically for all users.</div>
+            <div>🔒 Only admins can replace the permanent file.</div>
+          </div>
 
-<button
-  type="button"
-  style={styles.backButton}
-  onClick={() => loadPermanentIngredientByLocationFile()}
-  disabled={loading}
->
-  🔄 Reload Permanent Ingredient File
-</button>
+          <button
+            type="button"
+            style={styles.backButton}
+            onClick={() => loadPermanentIngredientByLocationFile()}
+            disabled={loading || permanentFileLoading}
+          >
+            🔄 Reload Permanent Ingredient File
+          </button>
 
-{isAdmin && (
-  <>
-    <label style={styles.label}>Admin only: replace permanent Ingredient by Location file</label>
-    <input
-      type="file"
-      accept=".xlsx,.xls,.xlsm"
-      onChange={uploadIngredientByLocationFile}
-      style={styles.fileInput}
-      disabled={loading}
-    />
-  </>
-)}
+          {isAdmin && (
+            <>
+              <label style={styles.label}>Admin only: replace permanent Ingredient by Location file</label>
+              <input
+                type="file"
+                accept=".xlsx,.xls,.xlsm"
+                onChange={uploadIngredientByLocationFile}
+                style={styles.fileInput}
+                disabled={loading || permanentFileLoading}
+              />
+            </>
+          )}
 
           <div style={styles.infoBox}>
             <div>📄 File: <strong>{sourceFileName || "Not uploaded"}</strong></div>
@@ -790,7 +869,7 @@ export default function AllergenModule({ styles, userShip, onBack, logUsageEvent
             <div>🏢 Venues: <strong>{venues.length}</strong></div>
             <div>🧾 Ingredient rows: <strong>{rows.length}</strong></div>
             <div>🚨 Hidden warnings: <strong>{hiddenWarningRows.length}</strong></div>
-            {loading && <div>Loading...</div>}
+            {(loading || permanentFileLoading) && <div>Loading...</div>}
           </div>
 
           {message && <p style={styles.message}>{message}</p>}
@@ -836,7 +915,7 @@ export default function AllergenModule({ styles, userShip, onBack, logUsageEvent
       <section style={styles.card}>
         <h2 style={styles.productTitle}>🏢 Venues</h2>
 
-        {!venues.length && <p style={styles.emptyText}>Upload the Ingredient by Location file to begin.</p>}
+        {!venues.length && <p style={styles.emptyText}>Permanent Ingredient by Location file will load automatically. Admin can replace it if needed.</p>}
 
         <div style={localStyles.venueGrid}>
           {filteredVenues.map((venue) => (
