@@ -8419,15 +8419,36 @@ isAdmin={isAdmin}
           <label style={styles.label}>Step 1: Consumption file</label>
           <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadConsumptionFile} style={styles.fileInput} />
 
-          <label style={styles.label}>Step 2: Recipe / location file</label>
-          <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadRecipeFile} style={styles.fileInput} />
-            <button
+          <label style={styles.label}>Step 2: Permanent Ingredient by Location file</label>
+
+<div style={styles.infoBox}>
+  <div>
+    📄 Ingredient by Location file loads automatically for all users.
+  </div>
+  <div>
+    🔒 Only admins can replace the permanent file.
+  </div>
+</div>
+
+<button
   type="button"
   style={styles.backButton}
   onClick={() => loadPermanentIngredientByLocationForProductDashboard()}
 >
-  🔄 Load Permanent Ingredient by Location
+  🔄 Reload Permanent Ingredient by Location
 </button>
+
+{isAdmin && (
+  <>
+    <label style={styles.label}>Admin only: replace permanent Ingredient by Location file</label>
+    <input
+      type="file"
+      accept=".xlsx,.xls,.xlsm"
+      onChange={uploadRecipeFile}
+      style={styles.fileInput}
+    />
+  </>
+)}
 
           <label style={styles.label}>Optional: Replace template file</label>
           <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadTemplateFile} style={styles.fileInput} />
