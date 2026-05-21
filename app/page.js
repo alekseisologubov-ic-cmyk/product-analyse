@@ -3979,6 +3979,46 @@ for (let index = 0; index < items.length; index += 1) {
     });
   };
 
+  const loadPermanentIngredientByLocationForProductDashboard = async ({ silent = false } = {}) => {
+  if (!supabase) {
+    if (!silent) {
+      const text = "Supabase is not connected. Permanent Ingredient by Location file cannot load.";
+      setMessage(text);
+      window.alert(text);
+    }
+
+    return false;
+  }
+
+  try {
+    if (!silent) {
+      setMessage("Loading permanent Ingredient by Location file...");
+    }
+
+    const arrayBuffer = await downloadIngredientByLocationFileFromStorage({ supabase });
+    const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+    const rows = workbookToRows(workbook);
+
+    setRecipeRows(rows);
+    setSelectedRecipe(null);
+
+    if (!silent) {
+      setMessage(
+        `Permanent Ingredient by Location loaded. ${Math.max(rows.length - 1, 0)} recipe/location row(s).`
+      );
+    }
+
+    return true;
+  } catch (error) {
+    if (!silent) {
+      const text = error?.message || "Could not load permanent Ingredient by Location file.";
+      setMessage(text);
+      window.alert(text);
+    }
+
+    return false;
+  }
+};
   const uploadRecipeFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
