@@ -6723,19 +6723,21 @@ if (module === "allergen") {
       }
     >
       <AllergenModule
-        styles={styles}
-        userShip={userShip}
-        onBack={() => {
-          if (equipmentDepartment) {
-            setModule("equipment");
-            setEquipmentMode("");
-            return;
-          }
+  styles={styles}
+  supabase={supabase}
+  userShip={userShip}
+  isAdmin={isAdmin}
+  onBack={() => {
+    if (equipmentDepartment) {
+      setModule("equipment");
+      setEquipmentMode("");
+      return;
+    }
 
-          setModule("");
-        }}
-        logUsageEvent={logUsageEvent}
-      />
+    setModule("");
+  }}
+  logUsageEvent={logUsageEvent}
+/>
     </Suspense>
   );
 }
