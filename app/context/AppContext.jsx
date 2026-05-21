@@ -86,7 +86,7 @@ export function AppProvider({ value = {}, children }) {
 
       // Station assignment files are different per ship.
       // Only the matching ship's culinary admin can upload the crew/station file.
-      canUploadStationAssignments: Boolean(isShipCulinaryAdmin),
+      canUploadStationAssignments: Boolean(isAdmin || isShipCulinaryAdmin),
 
       // Training links are global for all ships.
       // Keep this for global admins only.
