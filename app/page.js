@@ -17,6 +17,7 @@ import {
 
 import MakeInventoryTopBar from "./components/equipment/MakeInventoryTopBar";
 import InventoryAiHelper from "./components/equipment/InventoryAiHelper";
+import EquipmentDepartmentOptions from "./components/equipment/EquipmentDepartmentOptions";
 import AdminDashboard from "./components/admin/AdminDashboard";
 import { AppProvider } from "./context/AppContext";
 
