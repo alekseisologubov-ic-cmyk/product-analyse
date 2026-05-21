@@ -4019,22 +4019,43 @@ for (let index = 0; index < items.length; index += 1) {
     return false;
   }
 };
-  const uploadRecipeFile = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const uploadRecipeFile = async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
 
-    readExcelFile(file, (workbook) => {
-      const rows = workbookToRows(workbook);
-      setRecipeRows(rows);
-      setSelectedRecipe(null);
-      setMessage("Recipe / location file loaded.");
-      logUsageEvent("product_recipe_location_file_uploaded", {
-        module: "product_dashboard",
-        fileName: file.name,
-        rowCount: Math.max(rows.length - 1, 0),
-      });
+  try {
+    if (supabase && isAdmin) {
+      setMessage("Saving permanent Ingredient by Location file...");
+      await uploadIngredientByLocationFileToStorage({ supabase, file });
+    }
+  } catch (error) {
+    const text = error?.message || "Could not save permanent Ingredient by Location file.";
+    setMessage(text);
+    window.alert(text);
+  }
+
+  readExcelFile(file, (workbook) => {
+    const rows = workbookToRows(workbook);
+
+    setRecipeRows(rows);
+    setSelectedRecipe(null);
+
+    setMessage(
+      isAdmin
+        ? "Recipe / location file loaded and saved as permanent Ingredient by Location file."
+        : "Recipe / location file loaded locally."
+    );
+
+    logUsageEvent("product_recipe_location_file_uploaded", {
+      module: "product_dashboard",
+      fileName: file.name,
+      rowCount: Math.max(rows.length - 1, 0),
+      permanent: Boolean(supabase && isAdmin),
     });
-  };
+  });
+
+  e.target.value = "";
+};
 
   const uploadTemplateFile = (e) => {
     const file = e.target.files?.[0];
