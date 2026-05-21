@@ -8988,7 +8988,14 @@ const styles = {
   fontSize: "clamp(26px, 8vw, 34px)",
   lineHeight: 1,
 },
-  viewModeBox: { display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" },
+  viewModeBox: {
+  display: "flex",
+  gap: 8,
+  marginBottom: 16,
+  flexWrap: "wrap",
+  overflowX: "auto",
+  paddingBottom: 2,
+},
   viewModeButton: { padding: "10px 14px", borderRadius: 999, border: "1px solid #ccc", background: "#fff", cursor: "pointer", fontWeight: "bold" },
   viewModeButtonActive: { background: "#111", color: "#fff", borderColor: "#111" },
   grid: {
