@@ -8996,7 +8996,16 @@ const styles = {
   overflowX: "auto",
   paddingBottom: 2,
 },
-  viewModeButton: { padding: "10px 14px", borderRadius: 999, border: "1px solid #ccc", background: "#fff", cursor: "pointer", fontWeight: "bold" },
+  viewModeButton: {
+  padding: "9px 12px",
+  borderRadius: 999,
+  border: "1px solid #ccc",
+  background: "#fff",
+  cursor: "pointer",
+  fontWeight: "bold",
+  fontSize: "clamp(12px, 3vw, 14px)",
+  whiteSpace: "nowrap",
+},
   viewModeButtonActive: { background: "#111", color: "#fff", borderColor: "#111" },
   grid: {
   display: "grid",
