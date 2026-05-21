@@ -347,6 +347,24 @@ export default function TrainingModule({ styles, onBack }) {
     canManageTraining,
     logUsageEvent,
   } = useAppContext();
+  const SHIP_LABELS = {
+  SC: "Scarlet",
+  VL: "Valiant",
+  BRL: "Brilliant",
+  RL: "Resilient",
+};
+
+const getTrainingShipLabel = (shipCode) =>
+  SHIP_LABELS[shipCode] || shipCode || "Not assigned";
+
+const canUploadStationAssignments = Boolean(isShipCulinaryAdmin);
+
+// Training links are global for all ships.
+// Keep this stricter for now.
+const canReplaceTrainingLinks = Boolean(isAdmin);
+
+// Month and reset affect the selected ship/month training run.
+const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
 
   const [monthKey, setMonthKey] = useState(todayMonthKey());
   const [assignments, setAssignments] = useState([]);
