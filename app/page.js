@@ -6984,58 +6984,31 @@ isAdmin={isAdmin}
   const hasEquipmentDepartment = Boolean(activeEquipmentDepartment);
 
   if (module === "equipment" && hasEquipmentDepartment && !equipmentMode) {
-    return (
-      <main style={styles.page}>
-        <header style={styles.header}>
-          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
-          <div style={styles.headerActions}>
-            <button
-  style={styles.backButton}
-  onClick={() => {
-    setModule("");
-    setEquipmentDepartment("");
-    setEquipmentMode("");
-    setProductMode("");
-  }}
->
-  ← Modules
-</button>
-            <div style={styles.shipBadge}>🚢 {getShipDisplayName(userShip)}</div>
-          </div>
-        </header>
-
-        <section style={styles.card}>
-          <h2 style={styles.cardTitle}>
-  {activeEquipmentDepartmentIcon}{" "}
-  {equipmentDepartment === "restaurant"
-    ? "Rest Options"
-    : `${activeEquipmentDepartmentLabel} Options`}
-</h2>
-
-          <div style={styles.moduleGrid}>
-  {equipmentDepartment === "culinary" && (
-    <button
-      style={styles.moduleCard}
-      onClick={() => {
+  return (
+    <EquipmentDepartmentOptions
+      styles={styles}
+      userShip={userShip}
+      equipmentDepartment={equipmentDepartment}
+      activeEquipmentDepartmentLabel={activeEquipmentDepartmentLabel}
+      activeEquipmentDepartmentIcon={activeEquipmentDepartmentIcon}
+      getShipDisplayName={getShipDisplayName}
+      onBackToModules={() => {
+        setModule("");
+        setEquipmentDepartment("");
+        setEquipmentMode("");
+        setProductMode("");
+      }}
+      onOpenProductDashboard={() => {
         setModule("product");
         setProductMode("dashboard");
+
         logUsageEvent("culinary_option_opened", {
           module: "product_dashboard",
           equipmentDepartment,
           ship: userShip,
         });
       }}
-    >
-      <div style={styles.moduleIcon}>📊</div>
-      <strong>Product Dashboard</strong>
-      <span>Consumption, recipes, templates and product reports</span>
-    </button>
-  )}
-
-  {(equipmentDepartment === "culinary" || equipmentDepartment === "bar") && (
-    <button
-      style={styles.moduleCard}
-      onClick={() => {
+      onOpenNextOrder={() => {
         setModule("product");
         setProductMode("nextorder");
         setNextOrderRows([]);
@@ -7047,107 +7020,61 @@ isAdmin={isAdmin}
         setNextOrderFilter("all");
         setNextOrderView("order");
         setNextOrderMessage("");
+
         logUsageEvent("department_option_opened", {
           module: "generate_next_order",
           equipmentDepartment,
           ship: userShip,
         });
       }}
-    >
-      <div style={styles.moduleIcon}>🛒</div>
-      <strong>Generate Next Order</strong>
-      <span>Upload latest order file and calculate suggested next-order quantities</span>
-    </button>
-  )}
-{equipmentDepartment === "culinary" && (
-  <button
-    style={styles.moduleCard}
-    onClick={() => {
-      setModule("training");
-      logUsageEvent("module_opened", {
-        module: "training",
-        equipmentDepartment,
-        ship: userShip,
-      });
-    }}
-  >
-    <div style={styles.moduleIcon}>🎓</div>
-    <strong>Training</strong>
-    <span>Monthly station training tracker by crew assignment and training links.</span>
-  </button>
-)}
-  {(equipmentDepartment === "culinary" || equipmentDepartment === "restaurant") && (
-  <button
-    style={styles.moduleCard}
-    onClick={() => {
-      setModule("allergen");
-      logUsageEvent("module_opened", {
-        module: "allergen",
-        equipmentDepartment,
-        ship: userShip,
-      });
-    }}
-  >
-    <div style={styles.moduleIcon}>🧬</div>
-    <strong>Allergen Matrix</strong>
-    <span>Recipe, ingredient, sub-recipe, and possible hidden allergen review by venue.</span>
-  </button>
-)}
-  <button
-    style={styles.moduleCard}
-    onClick={() => {
-      setEquipmentMode("muster");
-      logUsageEvent("equipment_option_opened", {
-        module: `equipment_${equipmentDepartment}_muster`,
-        equipmentDepartment,
-        ship: userShip,
-      });
-    }}
-  >
-    <div style={styles.moduleIcon}>📋</div>
-    <strong>Equipment Muster List</strong>
-    <span>Grouped by sheets and sub categories</span>
-  </button>
+      onOpenAllergen={() => {
+        setModule("allergen");
 
-  <button
-    style={styles.moduleCard}
-    onClick={() => {
-      setEquipmentMode("inventory");
-      logUsageEvent("equipment_option_opened", {
-        module: `equipment_${equipmentDepartment}_inventory`,
-        equipmentDepartment,
-        ship: userShip,
-      });
-    }}
-  >
-    <div style={styles.moduleIcon}>📦</div>
-    <strong>Equipment Inventory</strong>
-    <span>Inventory in use, warehouse stock and make inventory</span>
-  </button>
+        logUsageEvent("module_opened", {
+          module: "allergen",
+          equipmentDepartment,
+          ship: userShip,
+        });
+      }}
+      onOpenTraining={() => {
+        setModule("training");
 
-  {equipmentDepartment === "culinary" && (
-    <button
-      style={styles.moduleCard}
-      onClick={() => {
+        logUsageEvent("module_opened", {
+          module: "training",
+          equipmentDepartment,
+          ship: userShip,
+        });
+      }}
+      onOpenMuster={() => {
+        setEquipmentMode("muster");
+
+        logUsageEvent("equipment_option_opened", {
+          module: `equipment_${equipmentDepartment}_muster`,
+          equipmentDepartment,
+          ship: userShip,
+        });
+      }}
+      onOpenInventory={() => {
+        setEquipmentMode("inventory");
+
+        logUsageEvent("equipment_option_opened", {
+          module: `equipment_${equipmentDepartment}_inventory`,
+          equipmentDepartment,
+          ship: userShip,
+        });
+      }}
+      onOpenTemperature={() => {
         setModule("temperature");
+
         logUsageEvent("module_opened", {
           module: "temperature_check",
           equipmentDepartment,
           ship: userShip,
         });
       }}
-    >
-      <div style={styles.moduleIcon}>🌡️</div>
-      <strong>Take Temperature</strong>
-      <span>Take food temperature pictures and save by date</span>
-    </button>
-  )}
-</div>
-        </section>
-      </main>
-    );
-  }
-
+    />
+  );
+}
   if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "inventory") {
     return (
       <main style={styles.page}>
