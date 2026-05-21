@@ -1,6 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useMemo, useState } from "react";
+
+const cleanMusterSearchText = (value) =>
+  String(value || "").toLowerCase().replace(/\s+/g, " ").trim();
 
 export default function EquipmentMusterModule({
   styles,
@@ -10,11 +13,7 @@ export default function EquipmentMusterModule({
   equipmentDepartment,
   activeEquipmentDepartmentLabel,
   getShipDisplayName,
-  groupedMuster,
-  totalItems,
   musterItems,
-  musterSearch,
-  setMusterSearch,
   musterMessage,
   pictureLibraryMessage,
   pictureLibraryBusy,
@@ -26,18 +25,56 @@ export default function EquipmentMusterModule({
   getEquipmentDisplayImage,
   getEquipmentFallbackImage,
   getImageUrl,
-  selectedEquipment,
-  setSelectedEquipment,
   onBack,
 }) {
+  const [musterSearch, setMusterSearch] = useState("");
+  const [selectedEquipment, setSelectedEquipment] = useState(null);
+
   const shipDisplayName =
     typeof getShipDisplayName === "function"
       ? getShipDisplayName(userShip)
       : userShip;
 
-  const sheetCount = [...new Set((musterItems || []).map((item) => item.sheetName))].length;
-  const groupCount = Object.keys(groupedMuster || {}).length;
   const refreshShip = makeInventoryShip || userShip;
+
+  const groupedMuster = useMemo(() => {
+    const grouped = {};
+    const query = cleanMusterSearchText(musterSearch);
+
+    (musterItems || []).forEach((item) => {
+      const searchText = cleanMusterSearchText(
+        `${item.sheetName || ""} ${item.category || ""} ${item.code || ""} ${item.name || ""}`
+      );
+
+      if (query && !searchText.includes(query)) return;
+
+      const groupKey = `${item.sheetName || "Unknown Sheet"} / ${item.category || "Uncategorized"}`;
+
+      if (!grouped[groupKey]) {
+        grouped[groupKey] = [];
+      }
+
+      grouped[groupKey].push(item);
+    });
+
+    return grouped;
+  }, [musterItems, musterSearch]);
+
+  const totalItems = useMemo(
+    () =>
+      Object.values(groupedMuster).reduce(
+        (sum, items) => sum + items.length,
+        0
+      ),
+    [groupedMuster]
+  );
+
+  const sheetCount = useMemo(
+    () => [...new Set((musterItems || []).map((item) => item.sheetName))].filter(Boolean).length,
+    [musterItems]
+  );
+
+  const groupCount = Object.keys(groupedMuster || {}).length;
 
   const getDisplayImage = (item) =>
     typeof getEquipmentDisplayImage === "function"
@@ -96,7 +133,9 @@ export default function EquipmentMusterModule({
                 onClick={syncMasterInventoryPicturesFromDrive}
                 disabled={pictureLibraryBusy || masterInventoryLoading}
               >
-                {pictureLibraryBusy ? "Syncing pictures..." : "🖼️ Sync Picture Library"}
+                {pictureLibraryBusy
+                  ? "Syncing pictures..."
+                  : "🖼️ Sync Picture Library"}
               </button>
 
               {typeof uploadEquipmentPictureZipFile === "function" && (
@@ -121,9 +160,18 @@ export default function EquipmentMusterModule({
           {musterMessage && <p style={styles.message}>{musterMessage}</p>}
 
           <div style={styles.infoBox}>
-            <div>📋 Items loaded: <strong>{totalItems}</strong></div>
-            <div>📄 Sheets included: <strong>{sheetCount}</strong></div>
-            <div>🗂️ Groups: <strong>{groupCount}</strong></div>
+            <div>
+              📋 Items shown: <strong>{totalItems}</strong>
+            </div>
+            <div>
+              📋 Master items loaded: <strong>{(musterItems || []).length}</strong>
+            </div>
+            <div>
+              📄 Sheets included: <strong>{sheetCount}</strong>
+            </div>
+            <div>
+              🗂️ Groups shown: <strong>{groupCount}</strong>
+            </div>
             <div>C = Sub Category, D = Code, E = Name, H/I = Picture Link</div>
           </div>
         </div>
@@ -153,6 +201,12 @@ export default function EquipmentMusterModule({
           <p style={styles.emptyText}>Upload the muster list file to begin.</p>
         )}
 
+        {(musterItems || []).length > 0 && totalItems === 0 && (
+          <p style={styles.emptyText}>
+            No equipment matched your search.
+          </p>
+        )}
+
         {Object.entries(groupedMuster || {}).map(([category, items]) => (
           <div key={category} style={styles.equipmentCategory}>
             <h3 style={styles.sectionTitle}>🗂️ {category}</h3>
@@ -169,7 +223,7 @@ export default function EquipmentMusterModule({
 
                 return (
                   <button
-                    key={`${item.sheetName}-${item.code}-${index}`}
+                    key={`${item.sheetName || "sheet"}-${item.code || "code"}-${index}`}
                     style={styles.equipmentCard}
                     onClick={() =>
                       setSelectedEquipment({
@@ -187,11 +241,13 @@ export default function EquipmentMusterModule({
                           style={styles.equipmentImage}
                           data-fallback-src={fallbackSrc}
                           onError={(event) => {
-                            const nextSrc = event.currentTarget.dataset.fallbackSrc;
+                            const nextSrc =
+                              event.currentTarget.dataset.fallbackSrc;
 
                             if (
                               nextSrc &&
-                              event.currentTarget.dataset.usedFallback !== "true"
+                              event.currentTarget.dataset.usedFallback !==
+                                "true"
                             ) {
                               event.currentTarget.dataset.usedFallback = "true";
                               event.currentTarget.src = nextSrc;
@@ -218,9 +274,15 @@ export default function EquipmentMusterModule({
                     )}
 
                     <div style={styles.recipeName}>{item.name}</div>
-                    <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                    <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
-                    <div style={styles.recipeMeta}>Category: {item.category}</div>
+                    <div style={styles.recipeMeta}>
+                      Code: {item.code || "N/A"}
+                    </div>
+                    <div style={styles.recipeMeta}>
+                      Sheet: {item.sheetName || "N/A"}
+                    </div>
+                    <div style={styles.recipeMeta}>
+                      Category: {item.category || "N/A"}
+                    </div>
                   </button>
                 );
               })}
@@ -233,7 +295,10 @@ export default function EquipmentMusterModule({
             style={styles.modalBackdrop}
             onClick={() => setSelectedEquipment(null)}
           >
-            <div style={styles.modalCard} onClick={(event) => event.stopPropagation()}>
+            <div
+              style={styles.modalCard}
+              onClick={(event) => event.stopPropagation()}
+            >
               <button
                 style={styles.closeButton}
                 onClick={() => setSelectedEquipment(null)}
@@ -243,14 +308,24 @@ export default function EquipmentMusterModule({
 
               <h2>{selectedEquipment.name}</h2>
 
-              <p><strong>Code:</strong> {selectedEquipment.code || "N/A"}</p>
-              <p><strong>Sheet:</strong> {selectedEquipment.sheetName || "N/A"}</p>
-              <p><strong>Category:</strong> {selectedEquipment.category || "N/A"}</p>
+              <p>
+                <strong>Code:</strong> {selectedEquipment.code || "N/A"}
+              </p>
+              <p>
+                <strong>Sheet:</strong> {selectedEquipment.sheetName || "N/A"}
+              </p>
+              <p>
+                <strong>Category:</strong>{" "}
+                {selectedEquipment.category || "N/A"}
+              </p>
 
               {selectedEquipment.image || selectedEquipment.imageFallback ? (
                 <div>
                   <img
-                    src={getImageSrc(selectedEquipment.image || selectedEquipment.imageFallback)}
+                    src={getImageSrc(
+                      selectedEquipment.image ||
+                        selectedEquipment.imageFallback
+                    )}
                     alt={selectedEquipment.name}
                     style={styles.modalImage}
                     data-fallback-src={
@@ -259,7 +334,8 @@ export default function EquipmentMusterModule({
                         : ""
                     }
                     onError={(event) => {
-                      const fallbackSrc = event.currentTarget.dataset.fallbackSrc;
+                      const fallbackSrc =
+                        event.currentTarget.dataset.fallbackSrc;
 
                       if (
                         fallbackSrc &&
@@ -277,7 +353,10 @@ export default function EquipmentMusterModule({
                   />
 
                   <a
-                    href={selectedEquipment.imageFallback || selectedEquipment.image}
+                    href={
+                      selectedEquipment.imageFallback ||
+                      selectedEquipment.image
+                    }
                     target="_blank"
                     rel="noreferrer"
                     style={{ ...styles.imageLink, display: "block" }}
