@@ -6911,7 +6911,7 @@ isAdmin={isAdmin}
           <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
           <div style={styles.headerActions}>
             <button style={styles.backButton} onClick={() => setModule("")}>← Modules</button>
-            <div style={styles.shipBadge}>🚢 {userShip}</div>
+            <div style={styles.shipBadge}>🚢 {getShipDisplayName(userShip)}</div>
           </div>
         </header>
 
