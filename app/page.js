@@ -8984,7 +8984,10 @@ const styles = {
   fontSize: "clamp(12px, 3.2vw, 14px)",
   lineHeight: 1.25,
 },
-  moduleIcon: { fontSize: 34 },
+  moduleIcon: {
+  fontSize: "clamp(26px, 8vw, 34px)",
+  lineHeight: 1,
+},
   viewModeBox: { display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" },
   viewModeButton: { padding: "10px 14px", borderRadius: 999, border: "1px solid #ccc", background: "#fff", cursor: "pointer", fontWeight: "bold" },
   viewModeButtonActive: { background: "#111", color: "#fff", borderColor: "#111" },
