@@ -8991,7 +8991,12 @@ const styles = {
   viewModeBox: { display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" },
   viewModeButton: { padding: "10px 14px", borderRadius: 999, border: "1px solid #ccc", background: "#fff", cursor: "pointer", fontWeight: "bold" },
   viewModeButtonActive: { background: "#111", color: "#fff", borderColor: "#111" },
-  grid: { display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 20, marginBottom: 20 },
+  grid: {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
+  gap: "clamp(12px, 3vw, 20px)",
+  marginBottom: 16,
+},
   formRow: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 },
   card: { background: "#fff", borderRadius: 16, padding: 20, boxShadow: "0 4px 18px rgba(0,0,0,0.06)" },
   cardTitle: { marginTop: 0 },
