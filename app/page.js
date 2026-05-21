@@ -76,8 +76,6 @@ const ADMIN_EMAILS = new Set([
 
 const isAdminEmail = (value) => ADMIN_EMAILS.has(normalizeAppEmail(value));
 
-const SHIPS = ["BRL", "RL", "SC", "VL"];
-
 const SHIPS = ["SC", "VL", "BRL", "RL"];
 
 const SHIP_DISPLAY_NAMES = {
