@@ -8138,166 +8138,34 @@ isAdmin={isAdmin}
     const totalItems = Object.values(groupedMuster).reduce((sum, items) => sum + items.length, 0);
 
     return (
-      <main style={styles.page}>
-        <header style={styles.header}>
-          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
-          <div style={styles.headerActions}>
-            <button style={styles.backButton} onClick={() => setEquipmentMode("")}>← Back</button>
-            <div style={styles.shipBadge}>🚢 {getShipDisplayName(userShip)}</div>
-          </div>
-        </header>
-
-        <section style={styles.grid}>
-          <div style={styles.card}>
-            <h2 style={styles.cardTitle}>📤 Upload Equipment File</h2>
-            <label style={styles.label}>Equipment Muster List file</label>
-<input
-  type="file"
-  accept=".xlsx,.xls,.xlsm"
-  onChange={uploadMusterFile}
-  style={styles.fileInput}
-/>
-
-<button
-  style={styles.backButton}
-  onClick={() => loadMasterInventoryItems(makeInventoryShip || userShip)}
->
-  🔄 Refresh Shared Master List
-</button>
-
-{isAdmin && equipmentDepartment === "culinary" && (
-  <>
-    <button
-      style={styles.backButton}
-      onClick={syncMasterInventoryPicturesFromDrive}
-      disabled={pictureLibraryBusy || masterInventoryLoading}
-    >
-      {pictureLibraryBusy ? "Syncing pictures..." : "🖼️ Sync Picture Library"}
-    </button>
-
-    <label style={styles.label}>Upload Culinary Picture ZIP</label>
-    <input
-      type="file"
-      accept=".zip"
-      onChange={uploadEquipmentPictureZipFile}
-      style={styles.fileInput}
-      disabled={pictureLibraryBusy || masterInventoryLoading}
-    />
-
-    {pictureLibraryMessage && (
-      <p style={styles.message}>{pictureLibraryMessage}</p>
-    )}
-  </>
-)}
-{musterMessage && <p style={styles.message}>{musterMessage}</p>}
-
-            <div style={styles.infoBox}>
-              <div>📋 Items loaded: <strong>{totalItems}</strong></div>
-              <div>📄 Sheets included: <strong>{[...new Set(musterItems.map((i) => i.sheetName))].length}</strong></div>
-              <div>🗂️ Groups: <strong>{Object.keys(groupedMuster).length}</strong></div>
-              <div>C = Sub Category, D = Code, E = Name, H = Picture Link</div>
-            </div>
-          </div>
-
-          <div style={styles.card}>
-            <h2 style={styles.cardTitle}>🔍 Search Equipment</h2>
-            <input
-              placeholder="Search equipment, code, sheet or sub category..."
-              value={musterSearch}
-              onChange={(e) => setMusterSearch(e.target.value)}
-              style={styles.searchInput}
-            />
-            <p style={styles.emptyText}>Click any equipment card to open the picture and full details.</p>
-          </div>
-        </section>
-
-        <section style={styles.card}>
-          <h2 style={styles.productTitle}>📋 {activeEquipmentDepartmentLabel} Equipment Muster List</h2>
-
-          {musterItems.length === 0 && <p style={styles.emptyText}>Upload the Equipment Muster List file to begin.</p>}
-
-          {Object.entries(groupedMuster).map(([category, items]) => (
-            <div key={category} style={styles.equipmentCategory}>
-              <h3 style={styles.sectionTitle}>🗂️ {category}</h3>
-
-              <div style={styles.equipmentGrid}>
-                {items.map((item, index) => {
-  const displayImage = getEquipmentDisplayImage(item);
-  const fallbackImage = getEquipmentFallbackImage(item);
-
-  return (
-                  <button
-                    key={`${item.sheetName}-${item.code}-${index}`}
-                    style={styles.equipmentCard}
-                    onClick={() =>
-  setSelectedEquipment({
-    ...item,
-    image: displayImage,
-    imageFallback: fallbackImage,
-  })
-}
-                  >
-                    {displayImage ? (
-                      <div>
-                        <img
-                          src={getImageUrl(displayImage)}
-                          alt={item.name}
-                          style={styles.equipmentImage}
-                          onError={(e) => {
-                            e.currentTarget.style.display = "none";
-                            const link = e.currentTarget.nextElementSibling;
-                            if (link) link.style.display = "block";
-                          }}
-                        />
-                        <a href={displayImage} target="_blank" rel="noreferrer" style={styles.imageLink}>Open Picture</a>
-                      </div>
-                    ) : (
-                      <div style={styles.equipmentNoImage}>No image</div>
-                    )}
-
-                    <div style={styles.recipeName}>{item.name}</div>
-                    <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                    <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
-                    <div style={styles.recipeMeta}>Category: {item.category}</div>
-                  </button>
-                  );
-})}
-              </div>
-            </div>
-))}
-
-          {selectedEquipment && (
-            <div style={styles.modalBackdrop} onClick={() => setSelectedEquipment(null)}>
-              <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
-                <button style={styles.closeButton} onClick={() => setSelectedEquipment(null)}>✕</button>
-
-                <h2>{selectedEquipment.name}</h2>
-                <p><strong>Code:</strong> {selectedEquipment.code || "N/A"}</p>
-                <p><strong>Sheet:</strong> {selectedEquipment.sheetName || "N/A"}</p>
-                <p><strong>Category:</strong> {selectedEquipment.category || "N/A"}</p>
-
-                {selectedEquipment.image ? (
-                  <div>
-                    <img
-                      src={getImageUrl(selectedEquipment.image)}
-                      alt={selectedEquipment.name}
-                      style={styles.modalImage}
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                        const link = e.currentTarget.nextElementSibling;
-                        if (link) link.style.display = "block";
-                      }}
-                    />
-                    <a href={selectedEquipment.image} target="_blank" rel="noreferrer" style={styles.imageLink}>Open Picture</a>
-                  </div>
-                ) : (
-                  <div style={styles.equipmentNoImage}>No image</div>
-                )}
-              </div>
-            </div>
-          )}
-        </section>
-      </main>
+  <EquipmentMusterModule
+    styles={styles}
+    userShip={userShip}
+    makeInventoryShip={makeInventoryShip}
+    isAdmin={isAdmin}
+    equipmentDepartment={equipmentDepartment}
+    activeEquipmentDepartmentLabel={activeEquipmentDepartmentLabel}
+    getShipDisplayName={getShipDisplayName}
+    groupedMuster={groupedMuster}
+    totalItems={totalItems}
+    musterItems={musterItems}
+    musterSearch={musterSearch}
+    setMusterSearch={setMusterSearch}
+    musterMessage={musterMessage}
+    pictureLibraryMessage={pictureLibraryMessage}
+    pictureLibraryBusy={pictureLibraryBusy}
+    masterInventoryLoading={masterInventoryLoading}
+    uploadMusterFile={uploadMusterFile}
+    loadMasterInventoryItems={loadMasterInventoryItems}
+    syncMasterInventoryPicturesFromDrive={syncMasterInventoryPicturesFromDrive}
+    uploadEquipmentPictureZipFile={uploadEquipmentPictureZipFile}
+    getEquipmentDisplayImage={getEquipmentDisplayImage}
+    getEquipmentFallbackImage={getEquipmentFallbackImage}
+    getImageUrl={getImageUrl}
+    selectedEquipment={selectedEquipment}
+    setSelectedEquipment={setSelectedEquipment}
+    onBack={() => setEquipmentMode("")}
+  />
     );
   }
 
