@@ -753,13 +753,36 @@ export default function AllergenModule({ styles, userShip, onBack, logUsageEvent
             Upload the Ingredient by Location workbook. This screen groups recipes by venue, then shows ingredients, sub-recipes, declared allergens, and possible hidden allergens.
           </p>
 
-          <label style={styles.label}>Upload Ingredient by Location file</label>
-          <input
-            type="file"
-            accept=".xlsx,.xls,.xlsm"
-            onChange={uploadIngredientByLocationFile}
-            style={styles.fileInput}
-          />
+          <div style={styles.infoBox}>
+  <div>
+    📄 Ingredient by Location file loads automatically for all users.
+  </div>
+  <div>
+    🔒 Only admins can replace the permanent file.
+  </div>
+</div>
+
+<button
+  type="button"
+  style={styles.backButton}
+  onClick={() => loadPermanentIngredientByLocationFile()}
+  disabled={loading}
+>
+  🔄 Reload Permanent Ingredient File
+</button>
+
+{isAdmin && (
+  <>
+    <label style={styles.label}>Admin only: replace permanent Ingredient by Location file</label>
+    <input
+      type="file"
+      accept=".xlsx,.xls,.xlsm"
+      onChange={uploadIngredientByLocationFile}
+      style={styles.fileInput}
+      disabled={loading}
+    />
+  </>
+)}
 
           <div style={styles.infoBox}>
             <div>📄 File: <strong>{sourceFileName || "Not uploaded"}</strong></div>
