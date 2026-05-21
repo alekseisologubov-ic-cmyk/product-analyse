@@ -7077,60 +7077,43 @@ isAdmin={isAdmin}
   );
 }
   if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "inventory") {
-    return (
-      <main style={styles.page}>
-        <header style={styles.header}>
-          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
-          <div style={styles.headerActions}>
-            <button style={styles.backButton} onClick={() => setEquipmentMode("")}>← Back</button>
-            <div style={styles.shipBadge}>🚢 {getShipDisplayName(userShip)}</div>
-          </div>
-        </header>
+  return (
+    <EquipmentInventoryOptions
+      styles={styles}
+      userShip={userShip}
+      activeEquipmentDepartmentLabel={activeEquipmentDepartmentLabel}
+      getShipDisplayName={getShipDisplayName}
+      onBack={() => setEquipmentMode("")}
+      onOpenInUse={() => {
+        setEquipmentMode("inuse");
 
-        <section style={styles.card}>
-          <h2 style={styles.cardTitle}>📊 {activeEquipmentDepartmentLabel} Equipment Inventory</h2>
+        logUsageEvent("equipment_inventory_option_opened", {
+          module: "inventory_in_use",
+          equipmentDepartment,
+          ship: userShip,
+        });
+      }}
+      onOpenWarehouse={() => {
+        setEquipmentMode("warehouse");
 
-          <div style={styles.moduleGrid}>
-            <button
-              style={styles.moduleCard}
-              onClick={() => {
-                setEquipmentMode("inuse");
-                logUsageEvent("equipment_inventory_option_opened", { module: "inventory_in_use", ship: userShip });
-              }}
-            >
-              <div style={styles.moduleIcon}>✅</div>
-              <strong>Inventory in Use</strong>
-              <span>Compare muster list against in-use inventory</span>
-            </button>
+        logUsageEvent("equipment_inventory_option_opened", {
+          module: "inventory_warehouse",
+          equipmentDepartment,
+          ship: userShip,
+        });
+      }}
+      onOpenMakeInventory={() => {
+        setEquipmentMode("makeinventory");
 
-            <button
-              style={styles.moduleCard}
-              onClick={() => {
-                setEquipmentMode("warehouse");
-                logUsageEvent("equipment_inventory_option_opened", { module: "inventory_warehouse", ship: userShip });
-              }}
-            >
-              <div style={styles.moduleIcon}>🏬</div>
-              <strong>Inventory Warehouse</strong>
-              <span>Par, on hand, future order and suggested order</span>
-            </button>
-
-            <button
-              style={styles.moduleCard}
-              onClick={() => {
-                setEquipmentMode("makeinventory");
-                logUsageEvent("equipment_inventory_option_opened", { module: "make_inventory", ship: userShip });
-              }}
-            >
-              <div style={styles.moduleIcon}>📝</div>
-              <strong>Make Inventory</strong>
-              <span>Multi-user counts, my report and ship summary</span>
-            </button>
-          </div>
-        </section>
-      </main>
-    );
-  }
+        logUsageEvent("equipment_inventory_option_opened", {
+          module: "make_inventory",
+          equipmentDepartment,
+          ship: userShip,
+        });
+      }}
+    />
+  );
+}
 
   if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "makeinventory") {
     const filteredMakeInventoryItems = getFilteredMakeInventoryItems();
