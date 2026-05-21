@@ -8397,6 +8397,13 @@ isAdmin={isAdmin}
 
           <label style={styles.label}>Step 2: Recipe / location file</label>
           <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadRecipeFile} style={styles.fileInput} />
+            <button
+  type="button"
+  style={styles.backButton}
+  onClick={() => loadPermanentIngredientByLocationForProductDashboard()}
+>
+  🔄 Load Permanent Ingredient by Location
+</button>
 
           <label style={styles.label}>Optional: Replace template file</label>
           <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadTemplateFile} style={styles.fileInput} />
