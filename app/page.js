@@ -6538,7 +6538,11 @@ const getEquipmentFallbackImage = (item) => {
           <label style={styles.label}>🚢 Select your ship</label>
           <select value={userShip} onChange={(e) => setUserShip(e.target.value)} style={styles.select}>
             <option value="">Choose ship</option>
-            {SHIPS.map((ship) => <option key={ship} value={ship}>{ship}</option>)}
+            {SHIPS.map((ship) => (
+  <option key={ship} value={ship}>
+    {getShipDisplayName(ship)}
+  </option>
+))}
           </select>
 
           <button
