@@ -7001,7 +7001,7 @@ isAdmin={isAdmin}
 >
   ← Modules
 </button>
-            <div style={styles.shipBadge}>🚢 {userShip}</div>
+            <div style={styles.shipBadge}>🚢 {getShipDisplayName(userShip)}</div>
           </div>
         </header>
 
