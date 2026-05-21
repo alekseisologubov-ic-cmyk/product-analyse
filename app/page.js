@@ -8411,7 +8411,7 @@ isAdmin={isAdmin}
 
       <div style={styles.viewModeBox}>
         <button onClick={() => setViewMode("single")} style={{ ...styles.viewModeButton, ...(viewMode === "single" ? styles.viewModeButtonActive : {}) }}>
-          🚢 {userShip} Only
+          🚢 {getShipDisplayName(userShip)} Only
         </button>
 
         <button onClick={() => setViewMode("all")} style={{ ...styles.viewModeButton, ...(viewMode === "all" ? styles.viewModeButtonActive : {}) }}>
