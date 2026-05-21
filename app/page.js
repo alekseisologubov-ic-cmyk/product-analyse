@@ -6569,7 +6569,7 @@ const getEquipmentFallbackImage = (item) => {
       <main style={styles.page}>
         <header style={styles.header}>
           <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
-          <div style={styles.shipBadge}>🚢 {userShip}</div>
+          <div style={styles.shipBadge}>🚢 {getShipDisplayName(userShip)}</div>
         </header>
 
         <section style={styles.card}>
