@@ -8898,7 +8898,14 @@ isAdmin={isAdmin}
 }
 
 const styles = {
-  page: { minHeight: "100vh", padding: 24, background: "#f5f5f5", fontFamily: "Arial, sans-serif", color: "#111" },
+  page: {
+  minHeight: "100vh",
+  padding: "clamp(10px, 3vw, 24px)",
+  background: "#f5f5f5",
+  fontFamily: "Arial, sans-serif",
+  color: "#111",
+  boxSizing: "border-box",
+},
   welcomePage: { minHeight: "100vh", padding: 24, background: "radial-gradient(circle at top left, #ffffff 0%, #f7f7f7 32%, #ececec 100%)", fontFamily: "Arial, sans-serif", color: "#111", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" },
   welcomeHero: { width: "100%", maxWidth: 980, margin: "0 auto" },
   welcomeGlowCard: { position: "relative", padding: "34px 28px", background: "rgba(255,255,255,0.94)", borderRadius: 28, border: "1px solid rgba(0,0,0,0.08)", boxShadow: "0 18px 50px rgba(0,0,0,0.18)", display: "grid", gap: 18, textAlign: "center", overflow: "hidden", animation: "vvGlow 4s ease-in-out infinite" },
