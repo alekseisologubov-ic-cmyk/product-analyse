@@ -7004,7 +7004,12 @@ isAdmin={isAdmin}
         </header>
 
         <section style={styles.card}>
-          <h2 style={styles.cardTitle}>{activeEquipmentDepartmentIcon} {activeEquipmentDepartmentLabel} Equipment Options</h2>
+          <h2 style={styles.cardTitle}>
+  {activeEquipmentDepartmentIcon}{" "}
+  {equipmentDepartment === "restaurant"
+    ? "Rest Options"
+    : `${activeEquipmentDepartmentLabel} Options`}
+</h2>
 
           <div style={styles.moduleGrid}>
   {equipmentDepartment === "culinary" && (
