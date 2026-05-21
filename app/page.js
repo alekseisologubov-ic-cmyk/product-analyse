@@ -78,13 +78,14 @@ const isAdminEmail = (value) => ADMIN_EMAILS.has(normalizeAppEmail(value));
 
 const SHIPS = ["BRL", "RL", "SC", "VL"];
 
-const SHIP_DISPLAY_NAMES = {
-  BRL: "Brilliant Lady",
-  RL: "Resilient Lady",
-  SC: "Scarlet Lady",
-  VL: "Valiant Lady",
-};
+const SHIPS = ["SC", "VL", "BRL", "RL"];
 
+const SHIP_DISPLAY_NAMES = {
+  SC: "Scarlet",
+  VL: "Valiant",
+  BRL: "Brilliant",
+  RL: "Resilient",
+};
 const normalizeShipCode = (value) => {
   const text = cleanText(value).replace(/RESILIANT/g, "RESILIENT");
 
