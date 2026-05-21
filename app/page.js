@@ -4013,6 +4013,10 @@ for (let index = 0; index < items.length; index += 1) {
     return false;
   }
 };
+  useEffect(() => {
+  loadPermanentIngredientByLocationForProductDashboard({ silent: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
   const uploadRecipeFile = async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
