@@ -9119,7 +9119,11 @@ const styles = {
   costLineShipName: { color: "#555", fontSize: 10, fontWeight: "bold" },
   costLinePriceNote: { color: "#2e7d32", fontSize: 11, fontWeight: "bold", lineHeight: 1.1 },
   equipmentCategory: { marginBottom: 24 },
-  equipmentGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 },
+  equipmentGrid: {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))",
+  gap: "clamp(8px, 2.5vw, 14px)",
+},
   equipmentCard: { border: "1px solid #ddd", borderRadius: 14, padding: 14, background: "#fafafa", display: "grid", gap: 8, cursor: "pointer", textAlign: "left" },
     inventoryItemCard: {
     border: "1px solid #ddd",
