@@ -8134,41 +8134,31 @@ isAdmin={isAdmin}
   }
 
   if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "muster") {
-    const groupedMuster = parseMusterItems();
-    const totalItems = Object.values(groupedMuster).reduce((sum, items) => sum + items.length, 0);
-
-    return (
-  <EquipmentMusterModule
-    styles={styles}
-    userShip={userShip}
-    makeInventoryShip={makeInventoryShip}
-    isAdmin={isAdmin}
-    equipmentDepartment={equipmentDepartment}
-    activeEquipmentDepartmentLabel={activeEquipmentDepartmentLabel}
-    getShipDisplayName={getShipDisplayName}
-    groupedMuster={groupedMuster}
-    totalItems={totalItems}
-    musterItems={musterItems}
-    musterSearch={musterSearch}
-    setMusterSearch={setMusterSearch}
-    musterMessage={musterMessage}
-    pictureLibraryMessage={pictureLibraryMessage}
-    pictureLibraryBusy={pictureLibraryBusy}
-    masterInventoryLoading={masterInventoryLoading}
-    uploadMusterFile={uploadMusterFile}
-    loadMasterInventoryItems={loadMasterInventoryItems}
-    syncMasterInventoryPicturesFromDrive={syncMasterInventoryPicturesFromDrive}
-    uploadEquipmentPictureZipFile={uploadEquipmentPictureZipFile}
-    getEquipmentDisplayImage={getEquipmentDisplayImage}
-    getEquipmentFallbackImage={getEquipmentFallbackImage}
-    getImageUrl={getImageUrl}
-    selectedEquipment={selectedEquipment}
-    setSelectedEquipment={setSelectedEquipment}
-    onBack={() => setEquipmentMode("")}
-  />
-    );
-  }
-
+  return (
+    <EquipmentMusterModule
+      styles={styles}
+      userShip={userShip}
+      makeInventoryShip={makeInventoryShip}
+      isAdmin={isAdmin}
+      equipmentDepartment={equipmentDepartment}
+      activeEquipmentDepartmentLabel={activeEquipmentDepartmentLabel}
+      getShipDisplayName={getShipDisplayName}
+      musterItems={musterItems}
+      musterMessage={musterMessage}
+      pictureLibraryMessage={pictureLibraryMessage}
+      pictureLibraryBusy={pictureLibraryBusy}
+      masterInventoryLoading={masterInventoryLoading}
+      uploadMusterFile={uploadMusterFile}
+      loadMasterInventoryItems={loadMasterInventoryItems}
+      syncMasterInventoryPicturesFromDrive={syncMasterInventoryPicturesFromDrive}
+      uploadEquipmentPictureZipFile={uploadEquipmentPictureZipFile}
+      getEquipmentDisplayImage={getEquipmentDisplayImage}
+      getEquipmentFallbackImage={getEquipmentFallbackImage}
+      getImageUrl={getImageUrl}
+      onBack={() => setEquipmentMode("")}
+    />
+  );
+}
   return (
     <main style={styles.page}>
       <header style={styles.header}>
