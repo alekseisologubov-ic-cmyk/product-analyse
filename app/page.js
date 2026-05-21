@@ -8,6 +8,19 @@ import {
   downloadInventoryPdfReport,
   downloadInventoryExcelReportUsingTemplate,
 } from "./lib/inventoryReportDownloads";
+import {
+  downloadInventoryPdfReport,
+  downloadInventoryExcelReportUsingTemplate,
+} from "./lib/inventoryReportDownloads";
+
+import {
+  downloadIngredientByLocationFileFromStorage,
+  uploadIngredientByLocationFileToStorage,
+} from "./lib/permanentFiles";
+
+import MakeInventoryTopBar from "./components/equipment/MakeInventoryTopBar";
+import InventoryAiHelper from "./components/equipment/InventoryAiHelper";
+import AdminDashboard from "./components/admin/AdminDashboard";
 import MakeInventoryTopBar from "./components/equipment/MakeInventoryTopBar";
 import InventoryAiHelper from "./components/equipment/InventoryAiHelper";
 import AdminDashboard from "./components/admin/AdminDashboard";
