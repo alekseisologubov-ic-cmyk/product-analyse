@@ -8947,7 +8947,10 @@ const styles = {
   boxShadow: "0 4px 18px rgba(0,0,0,0.06)",
   marginBottom: 16,
 },
-  headerLogo: { height: 54, objectFit: "contain" },
+  headerLogo: {
+  height: "clamp(38px, 10vw, 54px)",
+  objectFit: "contain",
+},
   headerActions: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" },
   backButton: { padding: "10px 14px", borderRadius: 999, border: "1px solid #ccc", background: "#fff", cursor: "pointer", fontWeight: "bold" },
   checkboxRow: { display: "flex", alignItems: "center", gap: 10, fontWeight: "bold", marginTop: 4 },
