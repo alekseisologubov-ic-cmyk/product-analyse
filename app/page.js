@@ -8963,7 +8963,11 @@ const styles = {
   select: { padding: 10, borderRadius: 8, border: "1px solid #ccc", width: "100%" },
   primaryButton: { marginTop: 10, padding: 12, borderRadius: 10, border: 0, background: "#111", color: "#fff", fontWeight: "bold", cursor: "pointer" },
   shipBadge: { padding: "10px 14px", borderRadius: 999, background: "#111", color: "#fff", fontWeight: "bold" },
-  moduleGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 },
+  moduleGrid: {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 145px), 1fr))",
+  gap: "clamp(8px, 2.5vw, 16px)",
+},
   moduleCard: { border: "1px solid #ddd", background: "#fafafa", borderRadius: 16, padding: 20, cursor: "pointer", textAlign: "left", display: "grid", gap: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.04)" },
   moduleIcon: { fontSize: 34 },
   viewModeBox: { display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" },
