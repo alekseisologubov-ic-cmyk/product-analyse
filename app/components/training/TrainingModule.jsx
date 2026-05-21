@@ -4,6 +4,15 @@ import React, { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { useAppContext } from "../../context/AppContext";
 
+const TRAINING_LINK_SCOPE = "GLOBAL";
+
+const SHIP_LABELS = {
+  SC: "Scarlet",
+  VL: "Valiant",
+  BRL: "Brilliant",
+  RL: "Resilient",
+};
+
 const cleanText = (value) =>
   String(value || "")
     .toUpperCase()
@@ -12,7 +21,18 @@ const cleanText = (value) =>
 
 const safeText = (value) => String(value || "").replace(/\s+/g, " ").trim();
 
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
 const todayMonthKey = () => new Date().toISOString().slice(0, 7);
+
+const getTrainingShipLabel = (shipCode) =>
+  SHIP_LABELS[shipCode] || shipCode || "Not assigned";
 
 const stationNameFromHeader = (value) =>
   safeText(value)
@@ -20,31 +40,23 @@ const stationNameFromHeader = (value) =>
     .replace(/\s+/g, " ")
     .trim();
 
-const TRAINING_LINK_SCOPE = "GLOBAL";
-
 const getCrewIdentity = ({ crewKey, employeeNumber, crewName }) =>
   cleanText(crewKey || employeeNumber || crewName || "");
 
-const getCompletionKey = ({ ship, monthKey, crewKey, employeeNumber, crewName, trainingName }) =>
+const getCompletionKey = ({
+  ship,
+  monthKey,
+  crewKey,
+  employeeNumber,
+  crewName,
+  trainingName,
+}) =>
   [
     cleanText(ship),
     cleanText(monthKey),
     getCrewIdentity({ crewKey, employeeNumber, crewName }),
     cleanText(trainingName),
   ].join("|");
-
-const normalizeTrainingEmail = (value) => String(value || "").trim().toLowerCase();
-
-const getTrainingAdminShipFromEmail = (email) => {
-  const localPart = normalizeTrainingEmail(email).split("@")[0] || "";
-
-  if (localPart === "val.cul.admin" || localPart === "vl.cul.admin" || localPart === "valiant.cul.admin") return "VL";
-  if (localPart === "scarlet.cul.admin" || localPart === "sc.cul.admin" || localPart === "scl.cul.admin") return "SC";
-  if (localPart === "resilient.cul.admin" || localPart === "rl.cul.admin" || localPart === "res.cul.admin") return "RL";
-  if (localPart === "brilliant.cul.admin" || localPart === "brl.cul.admin") return "BRL";
-
-  return "";
-};
 
 const formatDateTime = (value) => {
   if (!value) return "N/A";
@@ -83,11 +95,12 @@ const parseStationAssignmentWorkbook = (workbook) => {
 
   const looksLikeStationText = (value) => {
     const text = cleanText(value);
+    const raw = String(value || "");
 
     if (!text) return false;
 
     return (
-      /\s-\s*\d+\s*$/.test(String(value || "")) ||
+      /\s-\s*\d+\s*$/.test(raw) ||
       text.includes("CULINARY") ||
       text.includes("GALLEY") ||
       text.includes("KITCHEN") ||
@@ -106,7 +119,10 @@ const parseStationAssignmentWorkbook = (workbook) => {
       text.includes("GUNBAE") ||
       text.includes("DOCK") ||
       text.includes("SOCIAL") ||
-      text.includes("PIZZA")
+      text.includes("PIZZA") ||
+      text.includes("MANOR") ||
+      text.includes("TEST KITCHEN") ||
+      text.includes("SUN CLUB")
     );
   };
 
@@ -139,7 +155,11 @@ const parseStationAssignmentWorkbook = (workbook) => {
     const assignments = [];
     let currentStation = "";
 
-    for (let rowNumber = range.s.r + 1; rowNumber <= range.e.r + 1; rowNumber += 1) {
+    for (
+      let rowNumber = range.s.r + 1;
+      rowNumber <= range.e.r + 1;
+      rowNumber += 1
+    ) {
       const columnB = readCell(worksheet, rowNumber, 1); // B - station header or position
       const columnD = readCell(worksheet, rowNumber, 3); // D - crew name
       const columnF = readCell(worksheet, rowNumber, 5); // F - actual position
@@ -194,7 +214,11 @@ const parseStationAssignmentWorkbook = (workbook) => {
   sheetNamesToCheck.forEach((sheetName) => {
     parseSheet(sheetName).forEach((item) => {
       const personKey = cleanText(item.employeeNumber || item.crewName);
-      const uniqueKey = [cleanText(item.station), cleanText(item.position), personKey].join("|");
+      const uniqueKey = [
+        cleanText(item.station),
+        cleanText(item.position),
+        personKey,
+      ].join("|");
 
       if (!personKey || seen.has(uniqueKey)) return;
 
@@ -236,11 +260,7 @@ const parseTrainingLinksWorkbook = (workbook) => {
 
     const cell = worksheet[address];
 
-    return (
-      safeText(cell?.l?.Target) ||
-      safeText(cell?.l?.target) ||
-      safeText(cell?.v)
-    );
+    return safeText(cell?.l?.Target) || safeText(cell?.l?.target) || safeText(cell?.v);
   };
 
   const links = [];
@@ -293,13 +313,16 @@ const printRows = ({ title, rows, columns }) => {
     return;
   }
 
-  const headerHtml = columns.map((column) => `<th>${column.label}</th>`).join("");
+  const headerHtml = columns
+    .map((column) => `<th>${escapeHtml(column.label)}</th>`)
+    .join("");
+
   const rowsHtml = rows
     .map(
       (row) =>
         "<tr>" +
         columns
-          .map((column) => `<td>${String(row[column.key] ?? "")}</td>`)
+          .map((column) => `<td>${escapeHtml(row[column.key] ?? "")}</td>`)
           .join("") +
         "</tr>"
     )
@@ -308,7 +331,7 @@ const printRows = ({ title, rows, columns }) => {
   const html = `
     <html>
       <head>
-        <title>${title}</title>
+        <title>${escapeHtml(title)}</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 24px; }
           h1 { margin-bottom: 4px; }
@@ -318,7 +341,7 @@ const printRows = ({ title, rows, columns }) => {
         </style>
       </head>
       <body>
-        <h1>${title}</h1>
+        <h1>${escapeHtml(title)}</h1>
         <table>
           <thead><tr>${headerHtml}</tr></thead>
           <tbody>${rowsHtml}</tbody>
@@ -340,31 +363,20 @@ export default function TrainingModule({ styles, onBack }) {
   const {
     supabase,
     userShip,
+    shipDisplayName,
     userEmail,
     isAdmin,
     culinaryAdminShip,
-    isShipCulinaryAdmin,
-    canManageTraining,
+    culinaryAdminShipDisplayName,
+    canUploadStationAssignments,
+    canReplaceTrainingLinks,
+    canManageTrainingMonth,
     logUsageEvent,
   } = useAppContext();
-  const SHIP_LABELS = {
-  SC: "Scarlet",
-  VL: "Valiant",
-  BRL: "Brilliant",
-  RL: "Resilient",
-};
 
-const getTrainingShipLabel = (shipCode) =>
-  SHIP_LABELS[shipCode] || shipCode || "Not assigned";
-
-const canUploadStationAssignments = Boolean(isShipCulinaryAdmin);
-
-// Training links are global for all ships.
-// Keep this stricter for now.
-const canReplaceTrainingLinks = Boolean(isAdmin);
-
-// Month and reset affect the selected ship/month training run.
-const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
+  const currentShipLabel = shipDisplayName || getTrainingShipLabel(userShip);
+  const adminShipLabel =
+    culinaryAdminShipDisplayName || getTrainingShipLabel(culinaryAdminShip);
 
   const [monthKey, setMonthKey] = useState(todayMonthKey());
   const [assignments, setAssignments] = useState([]);
@@ -384,9 +396,6 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
   const [reportMode, setReportMode] = useState("station");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-
-  const trainingAdminShip = culinaryAdminShip || getTrainingAdminShipFromEmail(userEmail);
-  const canManageTrainingData = Boolean(canManageTraining);
 
   const completionMap = useMemo(() => {
     const map = new Map();
@@ -419,7 +428,11 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
     return Array.from(grouped.entries())
       .map(([station, crew]) => ({
         station,
-        crew: crew.sort((a, b) => a.position.localeCompare(b.position) || a.crewName.localeCompare(b.crewName)),
+        crew: crew.sort(
+          (a, b) =>
+            a.position.localeCompare(b.position) ||
+            a.crewName.localeCompare(b.crewName)
+        ),
       }))
       .filter((group) => {
         const query = stationSearch.toLowerCase().trim();
@@ -448,7 +461,11 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
           .toLowerCase()
           .includes(query);
       })
-      .sort((a, b) => a.position.localeCompare(b.position) || a.crewName.localeCompare(b.crewName));
+      .sort(
+        (a, b) =>
+          a.position.localeCompare(b.position) ||
+          a.crewName.localeCompare(b.crewName)
+      );
   }, [assignments, selectedStation, crewSearch]);
 
   const assignmentByCrewKey = useMemo(() => {
@@ -489,7 +506,11 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
           .toLowerCase()
           .includes(query);
       })
-      .sort((a, b) => a.position.localeCompare(b.position) || a.crewName.localeCompare(b.crewName));
+      .sort(
+        (a, b) =>
+          a.position.localeCompare(b.position) ||
+          a.crewName.localeCompare(b.crewName)
+      );
   }, [assignments, selectedStation, trainingLaunchCrewSearch]);
 
   const filteredTrainingLinks = useMemo(() => {
@@ -605,9 +626,11 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
           Month: item.month_key || monthKey,
           Station: currentAssignment?.station || item.station || "",
           Name: currentAssignment?.crewName || item.crew_name || "",
-          EmployeeNumber: currentAssignment?.employeeNumber || item.employee_number || "",
+          EmployeeNumber:
+            currentAssignment?.employeeNumber || item.employee_number || "",
           Position: currentAssignment?.position || item.position || "",
-          ActualPosition: currentAssignment?.actualPosition || item.actual_position || "",
+          ActualPosition:
+            currentAssignment?.actualPosition || item.actual_position || "",
           Training: item.training_name || "",
           CompletedAt: formatDateTime(item.completed_at),
           CompletedBy: item.completed_by || "",
@@ -744,7 +767,8 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
           { key: "Status", label: "Status" },
         ];
 
-  const visibleReportRows = reportMode === "summary" ? completionSummaryRows : notYetCompletedRows;
+  const visibleReportRows =
+    reportMode === "summary" ? completionSummaryRows : notYetCompletedRows;
 
   const loadTrainingData = async () => {
     if (!supabase || !userShip) return;
@@ -822,6 +846,12 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
   }, [userShip, monthKey]);
 
   const replaceStationAssignments = async (rows, fileName) => {
+    if (!canUploadStationAssignments) {
+      throw new Error(
+        "Only this ship's Culinary admin can replace station assignments."
+      );
+    }
+
     if (!supabase) {
       setAssignments(rows);
       setMessage("Supabase is not connected. Station assignments loaded locally only.");
@@ -886,6 +916,10 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
   };
 
   const replaceTrainingLinks = async (rows, fileName) => {
+    if (!canReplaceTrainingLinks) {
+      throw new Error("Only global admins can replace the training links list.");
+    }
+
     if (!supabase) {
       setTrainingLinks(rows);
       setMessage("Supabase is not connected. Training links loaded locally only.");
@@ -942,8 +976,14 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
   };
 
   const uploadStationAssignmentFile = async (event) => {
-    if (!canManageTrainingData) {
-      window.alert("Only this ship's Culinary admin can upload station assignments.");
+    if (!canUploadStationAssignments) {
+      const text =
+        culinaryAdminShip && culinaryAdminShip !== userShip
+          ? `This email is Culinary admin for ${adminShipLabel} only. Current selected ship is ${currentShipLabel}.`
+          : "Only this ship's Culinary admin can upload the station assignment file.";
+
+      setMessage(text);
+      window.alert(text);
       event.target.value = "";
       return;
     }
@@ -955,7 +995,11 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
       setMessage("Reading station assignment file...");
 
       const arrayBuffer = await file.arrayBuffer();
-      const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+      const workbook = XLSX.read(arrayBuffer, {
+        type: "array",
+        cellDates: true,
+      });
+
       const rows = parseStationAssignmentWorkbook(workbook);
 
       if (!rows.length) {
@@ -976,8 +1020,10 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
   };
 
   const uploadTrainingLinksFile = async (event) => {
-    if (!canManageTrainingData) {
-      window.alert("Only this ship's Culinary admin can update the global training links list.");
+    if (!canReplaceTrainingLinks) {
+      const text = "Only global admins can replace the permanent training links list.";
+      setMessage(text);
+      window.alert(text);
       event.target.value = "";
       return;
     }
@@ -989,11 +1035,17 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
       setMessage("Reading training links file...");
 
       const arrayBuffer = await file.arrayBuffer();
-      const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+      const workbook = XLSX.read(arrayBuffer, {
+        type: "array",
+        cellDates: true,
+      });
+
       const rows = parseTrainingLinksWorkbook(workbook);
 
       if (!rows.length) {
-        throw new Error("No training links found. Expected training name in column B and link in column C, or hyperlink in column B.");
+        throw new Error(
+          "No training links found. Expected training name in column B and link in column C, or hyperlink in column B."
+        );
       }
 
       await replaceTrainingLinks(rows, file.name);
@@ -1095,8 +1147,8 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
   };
 
   const resetMonthlyCompletions = async () => {
-    if (!canManageTrainingData) {
-      window.alert("Only Culinary admins can reset monthly completions.");
+    if (!canManageTrainingMonth) {
+      window.alert("Only Culinary admins can reset monthly training completions.");
       return;
     }
 
@@ -1106,7 +1158,7 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
     }
 
     const confirmed = window.confirm(
-      `Reset all training completions for ${userShip} / ${monthKey}? This cannot be undone.`
+      `Reset all training completions for ${currentShipLabel} / ${monthKey}? This cannot be undone.`
     );
 
     if (!confirmed) return;
@@ -1123,7 +1175,7 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
       if (error) throw error;
 
       setCompletions([]);
-      setMessage(`Training completions reset for ${userShip} / ${monthKey}.`);
+      setMessage(`Training completions reset for ${currentShipLabel} / ${monthKey}.`);
     } catch (error) {
       setMessage(error?.message || "Could not reset completions.");
       window.alert(error?.message || "Could not reset completions.");
@@ -1151,27 +1203,36 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
             ← Modules
           </button>
 
-          <div style={styles.shipBadge}>🎓 {userShip || "Ship"}</div>
+          <div style={styles.shipBadge}>🎓 {currentShipLabel || "Ship"}</div>
         </div>
       </header>
 
       <div style={styles.viewModeBox}>
         <button
-          style={{ ...styles.viewModeButton, ...(reportMode === "station" ? styles.viewModeButtonActive : {}) }}
+          style={{
+            ...styles.viewModeButton,
+            ...(reportMode === "station" ? styles.viewModeButtonActive : {}),
+          }}
           onClick={() => setReportMode("station")}
         >
           📍 Station Training
         </button>
 
         <button
-          style={{ ...styles.viewModeButton, ...(reportMode === "summary" ? styles.viewModeButtonActive : {}) }}
+          style={{
+            ...styles.viewModeButton,
+            ...(reportMode === "summary" ? styles.viewModeButtonActive : {}),
+          }}
           onClick={() => setReportMode("summary")}
         >
           ✅ Summary Report ({completionSummaryRows.length})
         </button>
 
         <button
-          style={{ ...styles.viewModeButton, ...(reportMode === "notCompleted" ? styles.viewModeButtonActive : {}) }}
+          style={{
+            ...styles.viewModeButton,
+            ...(reportMode === "notCompleted" ? styles.viewModeButtonActive : {}),
+          }}
           onClick={() => setReportMode("notCompleted")}
         >
           ⏳ Not Yet Completed ({notYetCompletedRows.length})
@@ -1186,7 +1247,7 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
           <input
             type="month"
             value={monthKey}
-            disabled={!canManageTrainingData}
+            disabled={!canManageTrainingMonth}
             onChange={(event) => {
               setMonthKey(event.target.value);
               setSelectedTraining(null);
@@ -1197,23 +1258,31 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
             style={styles.searchInput}
           />
 
-          {!canManageTrainingData && (
+          {!canManageTrainingMonth && (
             <div style={styles.recipeMeta}>
               Month changes are available only for Culinary admins.
             </div>
           )}
 
-          {canManageTrainingData ? (
+          {canUploadStationAssignments && (
             <>
-              <label style={styles.label}>Upload station assignment file</label>
+              <label style={styles.label}>
+                Upload station assignment file for {currentShipLabel}
+              </label>
               <input
                 type="file"
                 accept=".xlsx,.xls,.xlsm"
                 onChange={uploadStationAssignmentFile}
                 style={styles.fileInput}
               />
+            </>
+          )}
 
-              <label style={styles.label}>Upload training links file</label>
+          {canReplaceTrainingLinks && (
+            <>
+              <label style={styles.label}>
+                Admin only: replace global training links file
+              </label>
               <input
                 type="file"
                 accept=".xlsx,.xls,.xlsm"
@@ -1221,33 +1290,46 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
                 style={styles.fileInput}
               />
             </>
-          ) : (
+          )}
+
+          {!canUploadStationAssignments && (
             <div style={styles.infoBox}>
-              <div>🔒 Crew users can complete training and view reports.</div>
-              <div>📤 Uploads are available only for Culinary admins.</div>
+              <div>🔒 Station assignment upload is ship-specific.</div>
+              <div>
+                Your Culinary admin ship: <strong>{adminShipLabel}</strong>
+              </div>
+              <div>
+                Current selected ship: <strong>{currentShipLabel}</strong>
+              </div>
             </div>
           )}
 
           <div style={styles.infoBox}>
-            <div>🚢 Ship: <strong>{userShip || "Not selected"}</strong></div>
+            <div>🚢 Ship: <strong>{currentShipLabel || "Not selected"}</strong></div>
             <div>📅 Month: <strong>{monthKey}</strong></div>
             <div>📍 Stations: <strong>{stationGroups.length}</strong></div>
             <div>👥 Crew assignments: <strong>{assignments.length}</strong></div>
             <div>📚 Training links: <strong>{trainingLinks.length}</strong></div>
             <div>✅ Completion records: <strong>{completions.length}</strong></div>
             <div>
-              🔐 Training admin:
+              🔐 Station assignment upload:
               <strong>
-                {canManageTrainingData
-                  ? isAdmin
-                    ? " Global admin"
-                    : ` ${trainingAdminShip || culinaryAdminShip} Culinary admin`
-                  : " No"}
+                {canUploadStationAssignments
+                  ? " Allowed for this ship"
+                  : " Not allowed for this ship"}
               </strong>
             </div>
-            {trainingAdminShip && !isShipCulinaryAdmin && !isAdmin && (
-              <div style={{ color: "#8a5a00" }}>
-                This email is Culinary admin for {trainingAdminShip}, not {userShip}.
+            <div>
+              🔗 Global training links upload:
+              <strong>{canReplaceTrainingLinks ? " Allowed" : " Not allowed"}</strong>
+            </div>
+            <div>
+              👤 Culinary admin ship:
+              <strong> {adminShipLabel}</strong>
+            </div>
+            {isAdmin && (
+              <div>
+                🛡️ Global admin: <strong>Yes</strong>
               </div>
             )}
             {loading && <div>Loading / saving...</div>}
@@ -1260,8 +1342,12 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
               🔄 Refresh
             </button>
 
-            {canManageTrainingData && (
-              <button style={styles.deleteButton} onClick={resetMonthlyCompletions} disabled={loading}>
+            {canManageTrainingMonth && (
+              <button
+                style={styles.deleteButton}
+                onClick={resetMonthlyCompletions}
+                disabled={loading}
+              >
                 🧹 Reset Month
               </button>
             )}
@@ -1293,7 +1379,9 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
                   key={group.station}
                   style={{
                     ...localStyles.stationCard,
-                    ...(selectedStation === group.station ? localStyles.stationCardActive : {}),
+                    ...(selectedStation === group.station
+                      ? localStyles.stationCardActive
+                      : {}),
                   }}
                   onClick={() => {
                     setReportMode("station");
@@ -1303,9 +1391,16 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
                 >
                   <strong>{group.station}</strong>
                   <span>{group.crew.length} crew member(s)</span>
-                  <span>{progress.completed} / {progress.total} monthly completions</span>
+                  <span>
+                    {progress.completed} / {progress.total} monthly completions
+                  </span>
                   <div style={localStyles.progressOuter}>
-                    <div style={{ ...localStyles.progressInner, width: `${progress.percent}%` }} />
+                    <div
+                      style={{
+                        ...localStyles.progressInner,
+                        width: `${progress.percent}%`,
+                      }}
+                    />
                   </div>
                   <span>{progress.percent}%</span>
                 </button>
@@ -1320,7 +1415,9 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
           <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 16 }}>
             <div>
               <h2 style={styles.productTitle}>
-                {reportMode === "summary" ? "✅ Training Summary Report" : "⏳ Not Yet Completed"}
+                {reportMode === "summary"
+                  ? "✅ Training Summary Report"
+                  : "⏳ Not Yet Completed"}
               </h2>
               <p style={{ ...styles.emptyText, margin: 0 }}>
                 {reportMode === "summary"
@@ -1329,9 +1426,7 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
               </p>
             </div>
 
-            <div style={styles.shipBadge}>
-              {visibleReportRows.length} row(s)
-            </div>
+            <div style={styles.shipBadge}>{visibleReportRows.length} row(s)</div>
           </div>
 
           <section style={styles.grid}>
@@ -1344,7 +1439,9 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
               >
                 <option value="ALL">All Stations</option>
                 {allStationOptions.map((station) => (
-                  <option key={station} value={station}>{station}</option>
+                  <option key={station} value={station}>
+                    {station}
+                  </option>
                 ))}
               </select>
             </div>
@@ -1358,7 +1455,9 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
               >
                 <option value="ALL">All Trainings</option>
                 {allTrainingOptions.map((training) => (
-                  <option key={training} value={training}>{training}</option>
+                  <option key={training} value={training}>
+                    {training}
+                  </option>
                 ))}
               </select>
             </div>
@@ -1376,7 +1475,10 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
               style={styles.backButton}
               onClick={() =>
                 printRows({
-                  title: reportMode === "summary" ? "Training Summary Report" : "Training Not Yet Completed",
+                  title:
+                    reportMode === "summary"
+                      ? "Training Summary Report"
+                      : "Training Not Yet Completed",
                   rows: visibleReportRows,
                   columns: reportColumns,
                 })
@@ -1415,11 +1517,15 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
                 key={`${reportMode}-${row.Number}-${row.Station}-${row.Name}-${row.Training}`}
                 style={{
                   ...styles.equipmentCard,
-                  ...(reportMode === "summary" ? styles.countedCard : styles.zeroCountCard),
+                  ...(reportMode === "summary"
+                    ? styles.countedCard
+                    : styles.zeroCountCard),
                 }}
               >
                 <div style={styles.recipeName}>{row.Name}</div>
-                <div style={styles.recipeMeta}>Employee #: {row.EmployeeNumber || "N/A"}</div>
+                <div style={styles.recipeMeta}>
+                  Employee #: {row.EmployeeNumber || "N/A"}
+                </div>
                 <div style={styles.recipeMeta}>Station: {row.Station || "N/A"}</div>
                 <div style={styles.recipeMeta}>Position: {row.Position || "N/A"}</div>
                 <div style={styles.recipeMeta}>Training: {row.Training || "N/A"}</div>
@@ -1462,13 +1568,16 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
 
           {!trainingLinks.length && (
             <p style={styles.emptyText}>
-              Upload the training links file. Training name is read from column B and link from column C.
+              Training links are not loaded yet. Global admins can upload the training links file.
             </p>
           )}
 
           <div style={localStyles.trainingGrid}>
             {filteredTrainingLinks.map((training) => {
-              const progress = getTrainingProgressForStation(selectedStation, training.trainingName);
+              const progress = getTrainingProgressForStation(
+                selectedStation,
+                training.trainingName
+              );
 
               return (
                 <button
@@ -1494,9 +1603,16 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
                 >
                   <strong>{training.trainingName}</strong>
                   {training.note && <span>{training.note}</span>}
-                  <span>{progress.completed} / {progress.total} complete</span>
+                  <span>
+                    {progress.completed} / {progress.total} complete
+                  </span>
                   <div style={localStyles.progressOuter}>
-                    <div style={{ ...localStyles.progressInner, width: `${progress.percent}%` }} />
+                    <div
+                      style={{
+                        ...localStyles.progressInner,
+                        width: `${progress.percent}%`,
+                      }}
+                    />
                   </div>
                 </button>
               );
@@ -1624,7 +1740,8 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
                 }
                 onClick={() => markTrainingComplete(trainingLaunchCrew, trainingLaunchModal)}
               >
-                {trainingLaunchCrew && isCrewTrainingComplete(trainingLaunchCrew, trainingLaunchModal)
+                {trainingLaunchCrew &&
+                isCrewTrainingComplete(trainingLaunchCrew, trainingLaunchModal)
                   ? "Already Done"
                   : "Mark Done"}
               </button>
@@ -1686,10 +1803,16 @@ const canManageTrainingMonth = Boolean(isAdmin || isShipCulinaryAdmin);
                   }}
                 >
                   <div style={styles.recipeName}>{person.crewName}</div>
-                  <div style={styles.recipeMeta}>Employee #: {person.employeeNumber || "N/A"}</div>
+                  <div style={styles.recipeMeta}>
+                    Employee #: {person.employeeNumber || "N/A"}
+                  </div>
                   <div style={styles.recipeMeta}>Position: {person.position || "N/A"}</div>
-                  <div style={styles.recipeMeta}>Actual Position: {person.actualPosition || "N/A"}</div>
-                  <div style={styles.recipeMeta}>Nationality: {person.nationality || "N/A"}</div>
+                  <div style={styles.recipeMeta}>
+                    Actual Position: {person.actualPosition || "N/A"}
+                  </div>
+                  <div style={styles.recipeMeta}>
+                    Nationality: {person.nationality || "N/A"}
+                  </div>
                   <div style={styles.recipeMeta}>Cabin: {person.cabinNo || "N/A"}</div>
 
                   {complete ? (
