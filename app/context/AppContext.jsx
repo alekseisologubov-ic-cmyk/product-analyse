@@ -7,25 +7,39 @@ const AppContext = createContext(null);
 export const normalizeContextEmail = (value) =>
   String(value || "").trim().toLowerCase();
 
+export const SHIP_LABELS = {
+  SC: "Scarlet",
+  VL: "Valiant",
+  BRL: "Brilliant",
+  RL: "Resilient",
+};
+
+export const getContextShipDisplayName = (shipCode) =>
+  SHIP_LABELS[shipCode] || shipCode || "";
+
 export const getCulinaryAdminShipFromEmail = (value) => {
   const email = normalizeContextEmail(value);
   const localPart = email.split("@")[0] || "";
 
   const adminShipMap = {
-    "val.cul.admin": "VL",
-    "vl.cul.admin": "VL",
-    "valiant.cul.admin": "VL",
-
+    // Scarlet
+    "scarlet.cul.admin": "SC",
     "sc.cul.admin": "SC",
     "scl.cul.admin": "SC",
-    "scarlet.cul.admin": "SC",
 
-    "rl.cul.admin": "RL",
-    "res.cul.admin": "RL",
-    "resilient.cul.admin": "RL",
+    // Valiant
+    "valiant.cul.admin": "VL",
+    "val.cul.admin": "VL",
+    "vl.cul.admin": "VL",
 
-    "brl.cul.admin": "BRL",
+    // Brilliant
     "brilliant.cul.admin": "BRL",
+    "brl.cul.admin": "BRL",
+
+    // Resilient
+    "resilient.cul.admin": "RL",
+    "res.cul.admin": "RL",
+    "rl.cul.admin": "RL",
   };
 
   return adminShipMap[localPart] || "";
@@ -43,18 +57,44 @@ export function AppProvider({ value = {}, children }) {
   const contextValue = useMemo(() => {
     const normalizedUserEmail = normalizeContextEmail(userEmail);
     const culinaryAdminShip = getCulinaryAdminShipFromEmail(normalizedUserEmail);
+
     const isShipCulinaryAdmin =
       Boolean(culinaryAdminShip) && culinaryAdminShip === userShip;
 
+    const canManageTraining = Boolean(isAdmin || isShipCulinaryAdmin);
+
     return {
       supabase,
+
       userShip,
+      shipDisplayName: getContextShipDisplayName(userShip),
+
       userEmail: normalizedUserEmail,
       normalizedUserEmail,
+
       isAdmin,
+
       culinaryAdminShip,
+      culinaryAdminShipDisplayName: getContextShipDisplayName(culinaryAdminShip),
+
       isShipCulinaryAdmin,
-      canManageTraining: Boolean(isAdmin || isShipCulinaryAdmin),
+
+      // General training access.
+      // Global admins can manage all training.
+      // Ship culinary admins can manage training only for their own ship.
+      canManageTraining,
+
+      // Station assignment files are different per ship.
+      // Only the matching ship's culinary admin can upload the crew/station file.
+      canUploadStationAssignments: Boolean(isShipCulinaryAdmin),
+
+      // Training links are global for all ships.
+      // Keep this for global admins only.
+      canReplaceTrainingLinks: Boolean(isAdmin),
+
+      // Month/reset affects the selected ship/month training run.
+      canManageTrainingMonth: Boolean(isAdmin || isShipCulinaryAdmin),
+
       logUsageEvent,
     };
   }, [supabase, userShip, userEmail, isAdmin, logUsageEvent]);
@@ -72,13 +112,25 @@ export function useAppContext() {
   if (!context) {
     return {
       supabase: null,
+
       userShip: "",
+      shipDisplayName: "",
+
       userEmail: "",
       normalizedUserEmail: "",
+
       isAdmin: false,
+
       culinaryAdminShip: "",
+      culinaryAdminShipDisplayName: "",
+
       isShipCulinaryAdmin: false,
+
       canManageTraining: false,
+      canUploadStationAssignments: false,
+      canReplaceTrainingLinks: false,
+      canManageTrainingMonth: false,
+
       logUsageEvent: () => {},
     };
   }
