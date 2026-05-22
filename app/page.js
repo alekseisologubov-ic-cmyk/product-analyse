@@ -7495,6 +7495,14 @@ isAdmin={isAdmin}
     >
       {pictureLibraryBusy ? "Syncing pictures..." : "🖼️ Sync Picture Library"}
     </button>
+<label style={styles.label}>Admin: write Drive picture links into column H</label>
+<input
+  type="file"
+  accept=".xlsx,.xls,.xlsm"
+  onChange={downloadMasterWithDrivePictureLinksInColumnH}
+  style={styles.fileInput}
+  disabled={pictureLibraryBusy || masterInventoryLoading}
+/>
 
     {pictureLibraryMessage && (
       <p style={styles.message}>{pictureLibraryMessage}</p>
