@@ -3361,14 +3361,28 @@ for (let index = 0; index < items.length; index += 1) {
     }
   };
 
-  const editInventoryItem = (item) => {
-    setCurrentInventoryItem({
-      code: item.code,
-      name: item.name,
-      category: item.category,
-      sheetName: item.sheetName,
-      image: item.image,
-    });
+ const editInventoryItem = (item) => {
+  const masterMatch =
+    makeInventoryItems.find(
+      (masterItem) =>
+        getInventoryProductGroupKey(masterItem) ===
+        getInventoryProductGroupKey(item)
+    ) ||
+    musterItems.find(
+      (masterItem) =>
+        getInventoryProductGroupKey(masterItem) ===
+        getInventoryProductGroupKey(item)
+    ) ||
+    item;
+
+  setCurrentInventoryItem({
+    code: item.code,
+    name: item.name,
+    category: item.category,
+    sheetName: item.sheetName,
+    image: getEquipmentDisplayImage(masterMatch) || item.image || "",
+    imageFallback: getEquipmentFallbackImage(masterMatch),
+  });
 
     setInventoryQty(String(item.qty ?? ""));
     setEditingInventoryId(item.id || null);
