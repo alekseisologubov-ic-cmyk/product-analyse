@@ -4759,6 +4759,73 @@ const getEquipmentFallbackImage = (item) => {
     event.target.value = "";
   }
 };
+  const writeDrivePictureLinksToGoogleSheetColumnH = async () => {
+  if (!isAdmin) {
+    const text = "Only admin can write Drive picture links to the Google Sheet.";
+    setPictureLibraryMessage(text);
+    window.alert(text);
+    return;
+  }
+
+  if (pictureLibraryBusy) return;
+
+  const adminCode = window.prompt("Enter admin upload code:");
+
+  if (!adminCode) {
+    setPictureLibraryMessage("Google Sheet picture link update cancelled.");
+    return;
+  }
+
+  const confirmed = window.confirm(
+    "This will match picture filenames by product code and write the matched picture links into column H of the Google Sheet. Continue?"
+  );
+
+  if (!confirmed) return;
+
+  setPictureLibraryBusy(true);
+  setPictureLibraryMessage("Writing Drive picture links to Google Sheet column H...");
+
+  try {
+    const response = await fetch("/api/admin/write-picture-links-to-sheet", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        userEmail: normalizeAppEmail(userEmail),
+        adminCode,
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(data?.error || "Could not write picture links to Google Sheet.");
+    }
+
+    setPictureLibraryMessage(
+      `Google Sheet updated. ${data.matchedRows || 0} row(s) matched and written to column H. ` +
+        `${data.unmatchedRows || 0} row(s) had no matching picture. ` +
+        `${data.imageFileCount || 0} image file(s) checked.`
+    );
+
+    logUsageEvent("equipment_picture_links_written_to_google_sheet", {
+      module: "equipment_picture_links",
+      equipmentDepartment,
+      ship: makeInventoryShip || userShip,
+      matchedRows: data.matchedRows || 0,
+      unmatchedRows: data.unmatchedRows || 0,
+      imageFileCount: data.imageFileCount || 0,
+      sheetTitle: data.sheetTitle || "",
+    });
+  } catch (error) {
+    const text = error?.message || "Could not write picture links to Google Sheet.";
+    setPictureLibraryMessage(text);
+    window.alert(text);
+  } finally {
+    setPictureLibraryBusy(false);
+  }
+};
   const uploadMakeInventoryFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
