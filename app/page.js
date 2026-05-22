@@ -7495,6 +7495,14 @@ isAdmin={isAdmin}
     >
       {pictureLibraryBusy ? "Syncing pictures..." : "🖼️ Sync Picture Library"}
     </button>
+      <button
+  type="button"
+  style={styles.backButton}
+  onClick={writeDrivePictureLinksToGoogleSheetColumnH}
+  disabled={pictureLibraryBusy || masterInventoryLoading}
+>
+  🔗 Write Drive Links to Sheet Column H
+</button>
 <label style={styles.label}>Admin: write Drive picture links into column H</label>
 <input
   type="file"
