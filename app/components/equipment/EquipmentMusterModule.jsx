@@ -172,7 +172,7 @@ export default function EquipmentMusterModule({
             <div>
               🗂️ Groups shown: <strong>{groupCount}</strong>
             </div>
-            <div>C = Sub Category, D = Code, E = Name, I = Product Picture</div>
+            <div>C = Sub Category, D = Code, E = Name, I = Product Picture, H = backup only</div>
           </div>
         </div>
 
