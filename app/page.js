@@ -4445,20 +4445,22 @@ const getEquipmentPictureFromLibrary = (item) => {
 };
 
 const getEquipmentDisplayImage = (item) =>
-  getEquipmentPictureFromLibrary(item) ||
-  item?.imageFallback ||
   item?.image ||
+  item?.imageFallback ||
+  getEquipmentPictureFromLibrary(item) ||
   "";
 
 const getEquipmentFallbackImage = (item) => {
+  const mainImage = item?.image || "";
+  const fallbackImage = item?.imageFallback || "";
   const driveImage = getEquipmentPictureFromLibrary(item);
 
-  if (item?.imageFallback && item.imageFallback !== driveImage) {
-    return item.imageFallback;
+  if (fallbackImage && fallbackImage !== mainImage) {
+    return fallbackImage;
   }
 
-  if (item?.image && item.image !== driveImage) {
-    return item.image;
+  if (driveImage && driveImage !== mainImage) {
+    return driveImage;
   }
 
   return "";
