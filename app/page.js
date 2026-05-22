@@ -7758,32 +7758,59 @@ setCurrentInventoryItem({
 
               <div style={styles.grid}>
                 <div>
-                  {currentInventoryItem.image ? (
-                    <div>
-                      <img
-                        src={getImageUrl(currentInventoryItem.image)}
-                        alt={currentInventoryItem.name}
-                        style={styles.modalImage}
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
-                          const link = e.currentTarget.nextElementSibling;
-                          if (link) link.style.display = "block";
-                        }}
-                      />
+  {currentInventoryDisplayImage ? (
+    <div>
+      <div style={styles.modalPictureFrame}>
+        <img
+          src={getImageUrl(currentInventoryDisplayImage, "w720")}
+          alt={currentInventoryItem.name}
+          style={styles.modalPreviewImage}
+          data-fallback-src={
+            currentInventoryFallbackImage &&
+            currentInventoryFallbackImage !== currentInventoryDisplayImage
+              ? getImageUrl(currentInventoryFallbackImage, "w720")
+              : ""
+          }
+          onError={(e) => {
+            const fallbackSrc = e.currentTarget.dataset.fallbackSrc;
 
-                      <a
-                        href={currentInventoryItem.image}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={styles.imageLink}
-                      >
-                        Open Picture
-                      </a>
-                    </div>
-                  ) : (
-                    <div style={styles.equipmentNoImage}>No image</div>
-                  )}
-                </div>
+            if (
+              fallbackSrc &&
+              e.currentTarget.dataset.usedFallback !== "true"
+            ) {
+              e.currentTarget.dataset.usedFallback = "true";
+              e.currentTarget.src = fallbackSrc;
+              return;
+            }
+
+            e.currentTarget.style.display = "none";
+            const fallback = e.currentTarget.nextElementSibling;
+            if (fallback) fallback.style.display = "flex";
+          }}
+        />
+
+        <div style={{ ...styles.modalNoImage, display: "none" }}>
+          Picture could not be loaded
+        </div>
+      </div>
+
+      <a
+        href={currentInventoryOpenImage}
+        target="_blank"
+        rel="noreferrer"
+        style={{
+          ...styles.imageButton,
+          display: "block",
+          textDecoration: "none",
+        }}
+      >
+        Open Picture
+      </a>
+    </div>
+  ) : (
+    <div style={styles.modalNoImage}>No image</div>
+  )}
+</div>
 
                 <div>
                   <h3 style={{ marginTop: 0 }}>{currentInventoryItem.name}</h3>
