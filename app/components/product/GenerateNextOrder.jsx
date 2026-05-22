@@ -240,6 +240,117 @@ const getConsumptionIncreaseMetrics = ({ workbookRows, row, targetSailors }) => 
   };
 };
 
+const CONSUMPTION_INCREASE_CATEGORY_LABELS = {
+  MEAT_FISH: "Meat & Fish",
+  DAIRY: "Dairy Products",
+  DRY_STORES: "Dry Products",
+  OTHER: "Other Products",
+};
+
+const CONSUMPTION_INCREASE_CATEGORY_RANK = {
+  MEAT_FISH: 0,
+  DAIRY: 1,
+  DRY_STORES: 2,
+  OTHER: 3,
+};
+
+const isOrderCategoryHeaderText = (value) => {
+  const text = cleanText(value);
+
+  if (!text) return false;
+
+  return (
+    /^\d{1,3}\s*-/.test(text) ||
+    text.includes("BEEF") ||
+    text.includes("VEAL") ||
+    text.includes("PORK") ||
+    text.includes("LAMB") ||
+    text.includes("POULT") ||
+    text.includes("FISH") ||
+    text.includes("SEAFOOD") ||
+    text.includes("DAIRY") ||
+    text.includes("MILK") ||
+    text.includes("CHEESE") ||
+    text.includes("DRY") ||
+    text.includes("GROCERY") ||
+    text.includes("STORE") ||
+    text.includes("SPICE") ||
+    text.includes("CEREAL") ||
+    text.includes("PASTA") ||
+    text.includes("RICE")
+  );
+};
+
+const getConsumptionIncreaseCategoryGroup = ({ product, category, subCategory }) => {
+  const text = cleanText([category, subCategory, product].filter(Boolean).join(" "));
+
+  // Priority 1: show meat and fish first because these are the most important
+  // high-risk/high-value items for this report.
+  if (
+    /\b(BEEF|VEAL|PORK|LAMB|POULT|POULTRY|CHICKEN|TURKEY|DUCK|KOSH|GAME|MEAT|MEATS|HAM|BACON|SAUSAGE|SAUSAGES|PROC\.? MEATS?|PROCESSED MEATS?|FISH|SEAFOOD|CAVIAR|SALMON|TUNA|COD|HALIBUT|MAHI|SNAPPER|BASS|SOLE|GROUPER|SHRIMP|PRAWN|CRAB|LOBSTER|SCALLOP|MUSSEL|OYSTER|CLAM|SQUID|OCTOPUS)\b/.test(text)
+  ) {
+    return "MEAT_FISH";
+  }
+
+  // Priority 2: dairy/egg products.
+  if (
+    /\b(DAIRY|MILK|CREAM|CHEESE|BUTTER|MARGARINE|YOGURT|YOGHURT|ICE CREAM|EGG|EGGS|MASCARPONE|RICOTTA|MOZZARELLA|PARMESAN|CHEDDAR|FETA|BRIE|GOAT CHEESE|FINE CHEESE)\b/.test(text)
+  ) {
+    return "DAIRY";
+  }
+
+  // Priority 3: dry products / grocery / pantry items.
+  if (
+    /\b(DRY|GROCERY|DRY STORE|DRY STORES|BAKERY|COOKIE|COOKIES|BISCUIT|BISCUITS|MIX|MIXES|PASTA|RICE|FLOUR|SUGAR|SPICE|SPICES|HERB|HERBS|OIL|VINEGAR|SAUCE|SAUCES|CONDIMENT|CONDIMENTS|CANNED|TINNED|BEAN|BEANS|LENTIL|LENTILS|CEREAL|CEREALS|OAT|OATS|NUT|NUTS|SEED|SEEDS|CHOCOLATE|CRACKER|CRACKERS|BREAD|JELLO|JAM|JAMS|SYRUP|COFFEE|TEA|HOT CHOCOLATE|SNACK|SNACKS|SWEETS|PICKLE|PICKLES|OLIVE|OLIVES|ONION|ONIONS|SHORTENING|SALT|PEPPER)\b/.test(text)
+  ) {
+    return "DRY_STORES";
+  }
+
+  return "OTHER";
+};
+
+const getConsumptionIncreaseCategoryLabel = (categoryGroup) =>
+  CONSUMPTION_INCREASE_CATEGORY_LABELS[categoryGroup] ||
+  CONSUMPTION_INCREASE_CATEGORY_LABELS.OTHER;
+
+const compareConsumptionIncreaseRows = (percentKey) => (a, b) => {
+  const rankDiff =
+    (CONSUMPTION_INCREASE_CATEGORY_RANK[a.consumptionIncreaseCategoryGroup] ?? 99) -
+    (CONSUMPTION_INCREASE_CATEGORY_RANK[b.consumptionIncreaseCategoryGroup] ?? 99);
+
+  if (rankDiff !== 0) return rankDiff;
+
+  const percentDiff = Number(b[percentKey] || 0) - Number(a[percentKey] || 0);
+  if (percentDiff !== 0) return percentDiff;
+
+  return String(a.product || "").localeCompare(String(b.product || ""));
+};
+
+const groupConsumptionIncreaseRowsForDisplay = (rows) => {
+  const categoryOrder = ["Meat & Fish", "Dairy Products", "Dry Products", "Other Products"];
+  const grouped = new Map();
+
+  (rows || []).forEach((row, index) => {
+    const category = row.consumptionIncreaseCategoryLabel || "Other";
+
+    if (!grouped.has(category)) {
+      grouped.set(category, []);
+    }
+
+    grouped.get(category).push({
+      row,
+      visibleIndex: index + 1,
+    });
+  });
+
+  return categoryOrder
+    .filter((category) => grouped.has(category))
+    .map((category) => ({
+      category,
+      rows: grouped.get(category) || [],
+    }));
+};
+
 
 const productNamesMatch = (left, right) => {
   const a = compactText(left);
@@ -523,6 +634,8 @@ const parseOrderFile = async (file) => {
 
   const orderRows = [];
   const orderByCode = {};
+  let currentCategory = "";
+  let currentSubCategory = "";
 
   const productRows = rows.slice(9);
 
@@ -536,9 +649,31 @@ const parseOrderFile = async (file) => {
     const code = String(row[0] || "").trim();
     const product = String(row[1] || "").replace(/\s+/g, " ").trim();
     const unit = String(row[2] || "").trim() || "N/A";
+    const codeText = cleanText(code);
 
-    if (!product) continue;
+    if (!product) {
+      if (isOrderCategoryHeaderText(code)) {
+        if (/^\d{3}\s*-/.test(codeText)) {
+          currentCategory = code;
+          currentSubCategory = "";
+        } else {
+          currentSubCategory = code;
+        }
+      }
+
+      continue;
+    }
+
     if (cleanText(product).includes("PRODUCT")) continue;
+
+    const consumptionIncreaseCategoryGroup = getConsumptionIncreaseCategoryGroup({
+      product,
+      category: currentCategory,
+      subCategory: currentSubCategory,
+    });
+    const consumptionIncreaseCategoryLabel = getConsumptionIncreaseCategoryLabel(
+      consumptionIncreaseCategoryGroup
+    );
 
     const stock = toNumber(row[3]);
     const futureOrders = sumRowRange(row, 5, 13);
@@ -621,6 +756,10 @@ const parseOrderFile = async (file) => {
       code,
       product,
       unit,
+      category: currentCategory,
+      subCategory: currentSubCategory,
+      consumptionIncreaseCategoryGroup,
+      consumptionIncreaseCategoryLabel,
       stock,
       futureOrders,
       parLevel,
@@ -1214,6 +1353,9 @@ export default function GenerateNextOrder({
           row.product,
           row.code,
           row.unit,
+          row.consumptionIncreaseCategoryLabel,
+          row.category,
+          row.subCategory,
           String(row.excelRow),
           String(row.latestOneVoyageDaily),
           String(row.previousFiveVoyageDailyAverage),
@@ -1223,11 +1365,7 @@ export default function GenerateNextOrder({
           .toLowerCase()
           .includes(query);
       })
-      .sort(
-        (a, b) =>
-          Number(b.oneVoyageIncreasePercent || 0) -
-          Number(a.oneVoyageIncreasePercent || 0)
-      );
+      .sort(compareConsumptionIncreaseRows("oneVoyageIncreasePercent"));
   }, [nextOrderRows, nextOrderSearch]);
 
   const twoVoyageConsumptionIncreaseRows = useMemo(() => {
@@ -1242,6 +1380,9 @@ export default function GenerateNextOrder({
           row.product,
           row.code,
           row.unit,
+          row.consumptionIncreaseCategoryLabel,
+          row.category,
+          row.subCategory,
           String(row.excelRow),
           String(row.latestTwoVoyageDailyAverage),
           String(row.previousFourVoyageDailyAverage),
@@ -1251,11 +1392,7 @@ export default function GenerateNextOrder({
           .toLowerCase()
           .includes(query);
       })
-      .sort(
-        (a, b) =>
-          Number(b.twoVoyageIncreasePercent || 0) -
-          Number(a.twoVoyageIncreasePercent || 0)
-      );
+      .sort(compareConsumptionIncreaseRows("twoVoyageIncreasePercent"));
   }, [nextOrderRows, nextOrderSearch]);
 
   const filteredFmlNotUsedRows = useMemo(() => {
@@ -1324,6 +1461,9 @@ export default function GenerateNextOrder({
     rows.map((row, index) => ({
       Number: index + 1,
       Mode: modeLabel,
+      CategoryGroup: row.consumptionIncreaseCategoryLabel || "Other",
+      Category: row.category || "",
+      SubCategory: row.subCategory || "",
       ExcelRow: row.excelRow,
       Code: row.code,
       Product: row.product,
@@ -1422,6 +1562,12 @@ export default function GenerateNextOrder({
   const visibleFmlOrderedNotFmlRows = filteredFmlOrderedNotFmlRows.slice(0, reportDisplayLimit);
   const visibleOneVoyageConsumptionIncreaseRows = oneVoyageConsumptionIncreaseRows.slice(0, reportDisplayLimit);
   const visibleTwoVoyageConsumptionIncreaseRows = twoVoyageConsumptionIncreaseRows.slice(0, reportDisplayLimit);
+  const visibleOneVoyageConsumptionIncreaseGroups = groupConsumptionIncreaseRowsForDisplay(
+    visibleOneVoyageConsumptionIncreaseRows
+  );
+  const visibleTwoVoyageConsumptionIncreaseGroups = groupConsumptionIncreaseRowsForDisplay(
+    visibleTwoVoyageConsumptionIncreaseRows
+  );
 
   const hasMoreNextOrderRows = filteredNextOrderRows.length > visibleNextOrderRows.length;
   const hasMoreOrderedVsSuggestedRows = orderedVsSuggestedRows.length > visibleOrderedVsSuggestedRows.length;
@@ -1694,6 +1840,7 @@ export default function GenerateNextOrder({
                 <div>📘 Source: <strong>AJ:AO historical consumption columns</strong></div>
                 <div>📊 Logic: <strong>Latest voyage AO vs average of previous voyages AJ:AN</strong></div>
                 <div>⚠️ Shows items with normalized daily consumption increase of <strong>25% or more</strong>.</div>
+                <div>🗂️ Sorted by: <strong>Meat & Fish → Dairy Products → Dry Products → Other Products</strong>.</div>
               </div>
 
               <div style={styles.headerActions}>
@@ -1704,6 +1851,7 @@ export default function GenerateNextOrder({
                       { key: "Number", label: "#" },
                       { key: "ExcelRow", label: "Row" },
                       { key: "Code", label: "Code" },
+                      { key: "CategoryGroup", label: "Category" },
                       { key: "Product", label: "Product" },
                       { key: "UM", label: "U/M" },
                       { key: "LatestOneVoyageDaily", label: "Latest Daily" },
@@ -1745,6 +1893,7 @@ export default function GenerateNextOrder({
                 <div>📘 Source: <strong>AJ:AO historical consumption columns</strong></div>
                 <div>📊 Logic: <strong>Latest two voyages AN:AO vs average of previous voyages AJ:AM</strong></div>
                 <div>⚠️ Shows items with normalized daily consumption increase of <strong>25% or more</strong>.</div>
+                <div>🗂️ Sorted by: <strong>Meat & Fish → Dairy Products → Dry Products → Other Products</strong>.</div>
               </div>
 
               <div style={styles.headerActions}>
@@ -1755,6 +1904,7 @@ export default function GenerateNextOrder({
                       { key: "Number", label: "#" },
                       { key: "ExcelRow", label: "Row" },
                       { key: "Code", label: "Code" },
+                      { key: "CategoryGroup", label: "Category" },
                       { key: "Product", label: "Product" },
                       { key: "UM", label: "U/M" },
                       { key: "LatestTwoVoyageDailyAverage", label: "Latest 2 Avg" },
@@ -2119,44 +2269,55 @@ export default function GenerateNextOrder({
             </p>
           )}
 
-          <div style={localStyles.compactGrid}>
-            {visibleOneVoyageConsumptionIncreaseRows.map((row, index) => (
-              <div
-                key={row.excelRow + "-" + row.product + "-increase1"}
-                style={{ ...localStyles.orderedVsSuggestedCard, ...localStyles.orderedVsSuggestedRed }}
-              >
-                <div style={localStyles.cardTopLine}>
-                  <span>#{index + 1}</span>
-                  <span>Row {row.excelRow}</span>
-                </div>
+          {visibleOneVoyageConsumptionIncreaseGroups.map((group) => (
+            <div key={group.category} style={localStyles.categorySection}>
+              <h3 style={localStyles.categorySectionTitle}>
+                {group.category} ({group.rows.length})
+              </h3>
 
-                <div style={localStyles.productName}>{row.product}</div>
-                <div style={styles.recipeMeta}>Code: {row.code || "N/A"}</div>
-                <div style={styles.recipeMeta}>U/M: {row.unit || "N/A"}</div>
+              <div style={localStyles.compactGrid}>
+                {group.rows.map(({ row, visibleIndex }) => (
+                  <div
+                    key={row.excelRow + "-" + row.product + "-increase1"}
+                    style={{ ...localStyles.orderedVsSuggestedCard, ...localStyles.orderedVsSuggestedRed }}
+                  >
+                    <div style={localStyles.cardTopLine}>
+                      <span>#{visibleIndex}</span>
+                      <span>Row {row.excelRow}</span>
+                    </div>
 
-                <div style={localStyles.metricGrid}>
-                  <div style={localStyles.metricBox}>
-                    <span>Latest {row.latestOneVoyageColumn}</span>
-                    <strong>{formatQty(row.latestOneVoyageDaily)}</strong>
+                    <div style={localStyles.productName}>{row.product}</div>
+                    <div style={styles.recipeMeta}>Code: {row.code || "N/A"}</div>
+                    <div style={styles.recipeMeta}>U/M: {row.unit || "N/A"}</div>
+                    <div style={localStyles.categoryBadge}>
+                      {row.consumptionIncreaseCategoryLabel || "Other"}
+                    </div>
+
+                    <div style={localStyles.metricGrid}>
+                      <div style={localStyles.metricBox}>
+                        <span>Latest {row.latestOneVoyageColumn}</span>
+                        <strong>{formatQty(row.latestOneVoyageDaily)}</strong>
+                      </div>
+
+                      <div style={localStyles.metricBox}>
+                        <span>Prev Avg</span>
+                        <strong>{formatQty(row.previousFiveVoyageDailyAverage)}</strong>
+                      </div>
+
+                      <div style={localStyles.metricBoxBad}>
+                        <span>Increase</span>
+                        <strong>{formatQty(row.oneVoyageIncreasePercent)}%</strong>
+                      </div>
+                    </div>
+
+                    <div style={localStyles.comparisonBadgeRed}>
+                      Latest voyage consumption increased by {formatQty(row.oneVoyageIncreasePercent)}%
+                    </div>
                   </div>
-
-                  <div style={localStyles.metricBox}>
-                    <span>Prev Avg</span>
-                    <strong>{formatQty(row.previousFiveVoyageDailyAverage)}</strong>
-                  </div>
-
-                  <div style={localStyles.metricBoxBad}>
-                    <span>Increase</span>
-                    <strong>{formatQty(row.oneVoyageIncreasePercent)}%</strong>
-                  </div>
-                </div>
-
-                <div style={localStyles.comparisonBadgeRed}>
-                  Latest voyage consumption increased by {formatQty(row.oneVoyageIncreasePercent)}%
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
 
           {hasMoreOneVoyageConsumptionIncreaseRows && (
             <button
@@ -2179,44 +2340,55 @@ export default function GenerateNextOrder({
             </p>
           )}
 
-          <div style={localStyles.compactGrid}>
-            {visibleTwoVoyageConsumptionIncreaseRows.map((row, index) => (
-              <div
-                key={row.excelRow + "-" + row.product + "-increase2"}
-                style={{ ...localStyles.orderedVsSuggestedCard, ...localStyles.orderedVsSuggestedRed }}
-              >
-                <div style={localStyles.cardTopLine}>
-                  <span>#{index + 1}</span>
-                  <span>Row {row.excelRow}</span>
-                </div>
+          {visibleTwoVoyageConsumptionIncreaseGroups.map((group) => (
+            <div key={group.category} style={localStyles.categorySection}>
+              <h3 style={localStyles.categorySectionTitle}>
+                {group.category} ({group.rows.length})
+              </h3>
 
-                <div style={localStyles.productName}>{row.product}</div>
-                <div style={styles.recipeMeta}>Code: {row.code || "N/A"}</div>
-                <div style={styles.recipeMeta}>U/M: {row.unit || "N/A"}</div>
+              <div style={localStyles.compactGrid}>
+                {group.rows.map(({ row, visibleIndex }) => (
+                  <div
+                    key={row.excelRow + "-" + row.product + "-increase2"}
+                    style={{ ...localStyles.orderedVsSuggestedCard, ...localStyles.orderedVsSuggestedRed }}
+                  >
+                    <div style={localStyles.cardTopLine}>
+                      <span>#{visibleIndex}</span>
+                      <span>Row {row.excelRow}</span>
+                    </div>
 
-                <div style={localStyles.metricGrid}>
-                  <div style={localStyles.metricBox}>
-                    <span>Latest {row.latestTwoVoyageColumns}</span>
-                    <strong>{formatQty(row.latestTwoVoyageDailyAverage)}</strong>
+                    <div style={localStyles.productName}>{row.product}</div>
+                    <div style={styles.recipeMeta}>Code: {row.code || "N/A"}</div>
+                    <div style={styles.recipeMeta}>U/M: {row.unit || "N/A"}</div>
+                    <div style={localStyles.categoryBadge}>
+                      {row.consumptionIncreaseCategoryLabel || "Other"}
+                    </div>
+
+                    <div style={localStyles.metricGrid}>
+                      <div style={localStyles.metricBox}>
+                        <span>Latest {row.latestTwoVoyageColumns}</span>
+                        <strong>{formatQty(row.latestTwoVoyageDailyAverage)}</strong>
+                      </div>
+
+                      <div style={localStyles.metricBox}>
+                        <span>Prev Avg</span>
+                        <strong>{formatQty(row.previousFourVoyageDailyAverage)}</strong>
+                      </div>
+
+                      <div style={localStyles.metricBoxBad}>
+                        <span>Increase</span>
+                        <strong>{formatQty(row.twoVoyageIncreasePercent)}%</strong>
+                      </div>
+                    </div>
+
+                    <div style={localStyles.comparisonBadgeRed}>
+                      Latest 2 voyages consumption increased by {formatQty(row.twoVoyageIncreasePercent)}%
+                    </div>
                   </div>
-
-                  <div style={localStyles.metricBox}>
-                    <span>Prev Avg</span>
-                    <strong>{formatQty(row.previousFourVoyageDailyAverage)}</strong>
-                  </div>
-
-                  <div style={localStyles.metricBoxBad}>
-                    <span>Increase</span>
-                    <strong>{formatQty(row.twoVoyageIncreasePercent)}%</strong>
-                  </div>
-                </div>
-
-                <div style={localStyles.comparisonBadgeRed}>
-                  Latest 2 voyages consumption increased by {formatQty(row.twoVoyageIncreasePercent)}%
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
 
           {hasMoreTwoVoyageConsumptionIncreaseRows && (
             <button
@@ -2582,6 +2754,35 @@ const localStyles = {
     borderRadius: 7,
     background: "#fff4d6",
     color: "#8a5a00",
+    fontWeight: "bold",
+    textAlign: "center",
+    fontSize: 9.5,
+    lineHeight: 1.1,
+  },
+
+  categorySection: {
+    display: "grid",
+    gap: 8,
+    marginTop: 14,
+  },
+
+  categorySectionTitle: {
+    margin: "6px 0 2px",
+    padding: "8px 10px",
+    borderRadius: 10,
+    background: "#f7f7f7",
+    border: "1px solid #ddd",
+    color: "#333",
+    fontSize: 13,
+    fontWeight: "bold",
+  },
+
+  categoryBadge: {
+    padding: "5px 6px",
+    borderRadius: 999,
+    background: "#f2f2f2",
+    color: "#333",
+    border: "1px solid #ddd",
     fontWeight: "bold",
     textAlign: "center",
     fontSize: 9.5,
