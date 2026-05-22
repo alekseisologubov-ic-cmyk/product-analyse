@@ -7436,9 +7436,13 @@ isAdmin={isAdmin}
         return;
       }
 
-      setCurrentInventoryItem({
+      const displayImage = getEquipmentDisplayImage(item);
+const fallbackImage = getEquipmentFallbackImage(item);
+
+setCurrentInventoryItem({
   ...item,
-  image: getEquipmentDisplayImage(item),
+  image: displayImage,
+  imageFallback: fallbackImage,
   itemKey,
 });
 
