@@ -4563,6 +4563,202 @@ const getEquipmentFallbackImage = (item) => {
       setPictureLibraryBusy(false);
     }
   };
+  const downloadMasterWithDrivePictureLinksInColumnH = async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  if (!isAdmin) {
+    const text = "Only admin can create the master file with Drive picture links.";
+    setPictureLibraryMessage(text);
+    window.alert(text);
+    event.target.value = "";
+    return;
+  }
+
+  if (equipmentDepartment !== "culinary") {
+    const text = "This tool is for Culinary master inventory pictures.";
+    setPictureLibraryMessage(text);
+    window.alert(text);
+    event.target.value = "";
+    return;
+  }
+
+  setPictureLibraryBusy(true);
+  setPictureLibraryMessage("Loading Drive picture library and matching links to column H...");
+
+  try {
+    const response = await fetch("/api/drive-picture-library");
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data?.error || "Could not load Drive picture library.");
+    }
+
+    const pictureByNumber = new Map();
+
+    (data.files || []).forEach((driveFile) => {
+      (driveFile.numbers || []).forEach((number) => {
+        if (!pictureByNumber.has(number)) {
+          pictureByNumber.set(number, driveFile);
+        }
+      });
+    });
+
+    if (!pictureByNumber.size) {
+      throw new Error("No picture files with equipment codes were found in the Drive folder.");
+    }
+
+    const arrayBuffer = await file.arrayBuffer();
+    const isXlsm = /\.xlsm$/i.test(file.name);
+
+    const workbook = XLSX.read(arrayBuffer, {
+      type: "array",
+      cellDates: true,
+      bookVBA: isXlsm,
+    });
+
+    const getDrivePictureUrl = (driveFile) =>
+      driveFile?.thumbnailUrl ||
+      driveFile?.imageUrl ||
+      driveFile?.webViewLink ||
+      "";
+
+    const findHeaderInfo = (rows) => {
+      let headerRowIndex = 0;
+      let codeIndex = 3; // D
+      let nameIndex = 4; // E
+
+      rows.slice(0, 20).some((row, rowIndex) => {
+        const cleanRow = row.map((cell) => cleanText(cell));
+
+        const foundCodeIndex = cleanRow.findIndex(
+          (cell) => cell === "CODE" || cell.includes("APOLLO") || cell.includes("VV CODE")
+        );
+
+        const foundNameIndex = cleanRow.findIndex(
+          (cell) =>
+            cell.includes("FINAL DESCRIPTION") ||
+            cell.includes("DESCRIPTION") ||
+            cell.includes("ITEM NAME") ||
+            cell === "NAME"
+        );
+
+        if (foundCodeIndex >= 0 && foundNameIndex >= 0) {
+          headerRowIndex = rowIndex;
+          codeIndex = foundCodeIndex;
+          nameIndex = foundNameIndex;
+          return true;
+        }
+
+        return false;
+      });
+
+      return { headerRowIndex, codeIndex, nameIndex };
+    };
+
+    const ensureColumnHInRange = (worksheet) => {
+      const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1:H1");
+
+      if (range.e.c < 7) {
+        range.e.c = 7;
+        worksheet["!ref"] = XLSX.utils.encode_range(range);
+      }
+    };
+
+    let matchedRows = 0;
+    let unmatchedRows = 0;
+
+    workbook.SheetNames.forEach((sheetName) => {
+      const worksheet = workbook.Sheets[sheetName];
+      if (!worksheet || !worksheet["!ref"]) return;
+
+      const rows = XLSX.utils.sheet_to_json(worksheet, {
+        header: 1,
+        defval: "",
+      });
+
+      if (!rows.length) return;
+
+      const { headerRowIndex, codeIndex, nameIndex } = findHeaderInfo(rows);
+
+      // H header
+      worksheet[XLSX.utils.encode_cell({ r: headerRowIndex, c: 7 })] = {
+        t: "s",
+        v: "Picture Link",
+      };
+
+      ensureColumnHInRange(worksheet);
+
+      rows.slice(headerRowIndex + 1).forEach((row, index) => {
+        const rowIndex = headerRowIndex + 1 + index;
+        const excelRow = rowIndex + 1;
+
+        const code = String(row[codeIndex] || "").trim();
+        const name = String(row[nameIndex] || "").trim();
+
+        if (!code && !name) return;
+        if (cleanText(code) === "CODE") return;
+        if (cleanText(name).includes("FINAL DESCRIPTION")) return;
+
+        const codeKey = normalizeEquipmentPictureCode(code);
+
+        if (!codeKey) {
+          unmatchedRows += 1;
+          return;
+        }
+
+        const driveFile = pictureByNumber.get(codeKey);
+        const pictureUrl = getDrivePictureUrl(driveFile);
+
+        if (!pictureUrl) {
+          unmatchedRows += 1;
+          return;
+        }
+
+        const cellAddress = `H${excelRow}`;
+
+        worksheet[cellAddress] = {
+          t: "s",
+          v: pictureUrl,
+          l: {
+            Target: pictureUrl,
+            Tooltip: "Open equipment picture",
+          },
+        };
+
+        matchedRows += 1;
+      });
+    });
+
+    const baseName = file.name.replace(/\.(xlsx|xlsm|xls)$/i, "");
+    const outputName = `${baseName}-picture-links-column-H.${isXlsm ? "xlsm" : "xlsx"}`;
+
+    XLSX.writeFile(workbook, outputName, {
+      bookType: isXlsm ? "xlsm" : "xlsx",
+      bookVBA: isXlsm,
+    });
+
+    setPictureLibraryMessage(
+      `Picture links written to column H. Matched ${matchedRows} item(s). ${unmatchedRows} item(s) had no picture match. Downloaded: ${outputName}`
+    );
+
+    logUsageEvent("equipment_picture_links_written_to_column_h", {
+      module: "equipment_picture_links",
+      equipmentDepartment,
+      fileName: file.name,
+      matchedRows,
+      unmatchedRows,
+      driveFiles: data.count || 0,
+    });
+  } catch (error) {
+    const text = error?.message || "Could not write picture links to column H.";
+    setPictureLibraryMessage(text);
+    window.alert(text);
+  } finally {
+    setPictureLibraryBusy(false);
+    event.target.value = "";
+  }
+};
   const uploadMakeInventoryFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
