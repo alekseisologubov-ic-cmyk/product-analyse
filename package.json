@@ -10,13 +10,14 @@
   "dependencies": {
     "@supabase/supabase-js": "latest",
     "@vercel/speed-insights": "latest",
+    "exceljs": "^4.4.0",
+    "file-saver": "^2.0.5",
+    "googleapis": "latest",
+    "jspdf": "^2.5.2",
     "jszip": "latest",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "xlsx": "^0.18.5",
-    "exceljs": "^4.4.0",
-    "file-saver": "^2.0.5",
-    "jspdf": "^2.5.2"
+    "xlsx": "^0.18.5"
   }
 }
