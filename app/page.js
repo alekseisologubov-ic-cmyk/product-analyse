@@ -7419,6 +7419,16 @@ isAdmin={isAdmin}
         item,
       ])
     );
+    const currentInventoryDisplayImage = currentInventoryItem
+  ? getEquipmentDisplayImage(currentInventoryItem)
+  : "";
+
+const currentInventoryFallbackImage = currentInventoryItem
+  ? getEquipmentFallbackImage(currentInventoryItem)
+  : "";
+
+const currentInventoryOpenImage =
+  currentInventoryDisplayImage || currentInventoryFallbackImage || "";
 
         const selectInventoryItemForCounting = (item) => {
       const itemKey = getInventoryItemKey(item);
