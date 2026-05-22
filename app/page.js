@@ -1616,30 +1616,37 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
       if (cleanText(name).includes("FINAL DESCRIPTION")) return;
       if (cleanText(code) === "CODE" || cleanText(code).includes("APOLLO")) return;
 
-      // Column I = index 8
-      const imageFromColumnI = String(row[8] || "").trim();
+      // Column I = index 8.
+// This is now the PRIMARY product picture column.
+const imageFromColumnI = String(row[8] || "").trim();
+const embeddedImageFromColumnI = imageMap[`I${sourceRow}`] || "";
 
-      // Existing detected image/photo column, usually H
-      const imageFromDetectedPhotoColumn = String(row[indexes.imageIndex] || "").trim();
+// Column H = index 7.
+// Use only as fallback/backup.
+const imageFromColumnH = String(row[7] || "").trim();
+const embeddedImageFromColumnH = imageMap[`H${sourceRow}`] || "";
 
-      // Embedded image from column I
-      const embeddedImageFromColumnI = imageMap[`I${sourceRow}`] || "";
+// Existing detected image/photo column, usually H.
+// Keep it only as an extra fallback.
+const imageFromDetectedPhotoColumn = String(row[indexes.imageIndex] || "").trim();
 
-      const detectedImageColumnLetter =
-        typeof indexes.imageIndex === "number"
-          ? columnNumberToLetters(indexes.imageIndex)
-          : "";
+const detectedImageColumnLetter =
+  typeof indexes.imageIndex === "number"
+    ? columnNumberToLetters(indexes.imageIndex)
+    : "";
 
-      const embeddedImageFromDetectedPhotoColumn =
-        detectedImageColumnLetter
-          ? imageMap[`${detectedImageColumnLetter}${sourceRow}`] || ""
-          : "";
+const embeddedImageFromDetectedPhotoColumn =
+  detectedImageColumnLetter
+    ? imageMap[`${detectedImageColumnLetter}${sourceRow}`] || ""
+    : "";
 
-      const imageCandidates = [
-  imageFromColumnI,
+const imageCandidates = [
   embeddedImageFromColumnI,
-  imageFromDetectedPhotoColumn,
+  imageFromColumnI,
+  embeddedImageFromColumnH,
+  imageFromColumnH,
   embeddedImageFromDetectedPhotoColumn,
+  imageFromDetectedPhotoColumn,
 ]
   .map((value) => String(value || "").trim())
   .filter((value) => isUsableImageValue(value));
