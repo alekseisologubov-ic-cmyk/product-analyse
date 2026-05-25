@@ -306,7 +306,9 @@ const isSubRecipeRow = (item) => {
   const assignedType = cleanText(item?.assignedType);
   const hasProductRelation = cleanText(item?.hasProductRelation);
   const recipeIsBasic = cleanText(item?.recipeIsBasic);
-  const nameText = cleanText(`${item?.ingredientName || ""} ${item?.assigned || ""}`);
+  const nameText = cleanText(
+    `${item?.ingredientName || ""} ${item?.assigned || ""}`
+  );
 
   if (assignedType === "R" || assignedType.includes("RECIPE")) {
     return true;
@@ -323,6 +325,21 @@ const isSubRecipeRow = (item) => {
   return (
     looksLikeRecipeName &&
     (hasProductRelation === "N" || recipeIsBasic === "Y")
+  );
+};
+
+const isOnboardRecipeName = (...values) => {
+  const text = cleanText(values.filter(Boolean).join(" "));
+
+  if (!text) return false;
+
+  return (
+    text.includes(" - VV") ||
+    text.includes("(BR)") ||
+    text.includes("(SC)") ||
+    text.includes("(VL)") ||
+    text.includes("(RL)") ||
+    text.includes(" RECIPE")
   );
 };
 
@@ -994,8 +1011,26 @@ const parseIngredientByLocationWorkbook = (workbook) => {
     if (!venueName || !recipeName || !ingredientName) return;
 
     const assigned = safeText(get(indexes.assigned));
+    const assignedType = safeText(get(indexes.assignedType));
+    const recipeIsBasic = safeText(get(indexes.recipeIsBasic));
+    const hasProductRelation = safeText(get(indexes.hasProductRelation));
+    const ingredientCode = normalizeCode(get(indexes.ingredientCode));
+
     const ingredientAllergens = splitAllergens(get(indexes.ingredientAllergens));
     const recipeDeclaredAllergens = splitAllergens(get(indexes.recipeAllergens));
+
+    const currentLineIsSubRecipe = isSubRecipeRow({
+      ingredientName,
+      assigned,
+      assignedType,
+      recipeIsBasic,
+      hasProductRelation,
+    });
+
+    const onboardRecipeLine =
+      currentLineIsSubRecipe || isOnboardRecipeName(ingredientName, assigned);
+
+    const hasRealItemCode = Boolean(ingredientCode) && !onboardRecipeLine;
 
     const nameDetectedRealAllergens = keywordAllergensForText(
       ingredientName,
@@ -1014,8 +1049,14 @@ const parseIngredientByLocationWorkbook = (workbook) => {
       assigned
     );
 
+    // Prepared/pre-made red warning only applies to real item-code/product lines.
+    // Onboard sub-recipes like "(BR) - 2019 - VV" are made onboard and should not
+    // receive the supplier-label warning just because their name contains words
+    // like puree, sauce, paste, etc.
     const processedItem =
       !skipPossibleAllergens &&
+      hasRealItemCode &&
+      !onboardRecipeLine &&
       (isProcessedOrPreparedItem(ingredientName) ||
         isProcessedOrPreparedItem(assigned));
 
@@ -1074,16 +1115,16 @@ const parseIngredientByLocationWorkbook = (workbook) => {
       menuName,
       category: safeText(get(indexes.category)),
       subCategory: safeText(get(indexes.subCategory)),
-      ingredientCode: normalizeCode(get(indexes.ingredientCode)),
+      ingredientCode,
       ingredientName,
       assigned,
-      assignedType: safeText(get(indexes.assignedType)),
+      assignedType,
       recipeCode: normalizeCode(get(indexes.recipeCode)),
       recipeName,
       specialInstructions: safeText(get(indexes.specialInstructions)),
       specialInstructions2: safeText(get(indexes.specialInstructions2)),
-      recipeIsBasic: safeText(get(indexes.recipeIsBasic)),
-      hasProductRelation: safeText(get(indexes.hasProductRelation)),
+      recipeIsBasic,
+      hasProductRelation,
       ingredientAllergens,
       recipeAllergens: recipeDeclaredAllergens,
       recipeDeclaredAllergens,
@@ -1095,6 +1136,7 @@ const parseIngredientByLocationWorkbook = (workbook) => {
       plainRawIngredient,
       skipPossibleAllergens,
       processedItem,
+      onboardRecipeLine,
       gfClaim,
     });
   });
@@ -1701,6 +1743,7 @@ export default function AllergenModule({
       IgnoredBasic: row.ignoredBasic ? "Yes" : "No",
       PlainRawIngredient: row.plainRawIngredient ? "Yes" : "No",
       PossibleAllergensSkipped: row.skipPossibleAllergens ? "Yes" : "No",
+      OnboardRecipeLine: row.onboardRecipeLine ? "Yes" : "No",
       SourceRow: row.sourceRow,
     }));
 
@@ -1742,6 +1785,7 @@ export default function AllergenModule({
           ignoredBasic: false,
           plainRawIngredient: false,
           possibleAllergensSkipped: false,
+          onboardRecipeLine: false,
         });
       }
 
@@ -1779,6 +1823,8 @@ export default function AllergenModule({
         product.plainRawIngredient || row.plainRawIngredient;
       product.possibleAllergensSkipped =
         product.possibleAllergensSkipped || row.skipPossibleAllergens;
+      product.onboardRecipeLine =
+        product.onboardRecipeLine || row.onboardRecipeLine;
     });
 
     return [...productMap.values()]
@@ -1817,6 +1863,7 @@ export default function AllergenModule({
           PossibleAllergensSkipped: product.possibleAllergensSkipped
             ? "Yes"
             : "No",
+          OnboardRecipeLine: product.onboardRecipeLine ? "Yes" : "No",
         };
       })
       .sort(
@@ -1935,10 +1982,11 @@ export default function AllergenModule({
             dioxide and sulphites, lupin, and molluscs. Ingredient cards show
             allergens that belong to that ingredient. Recipe-level allergens are
             shown in recipe summaries but are not copied to every ingredient.
-            Fresh herbs, raw produce, water, salt, sugar, and pepper do not
-            receive possible hidden allergen warnings. Always verify against
-            official recipe cards and supplier specifications before answering a
-            Sailor allergy request.
+            Onboard sub-recipes such as items ending with “(BR) - 2019 - VV” are
+            treated as made onboard, so they do not receive the red supplier-label
+            warning just because they contain words like puree, sauce, or paste.
+            Always verify against official recipe cards and supplier
+            specifications before answering a Sailor allergy request.
           </div>
 
           <button
@@ -2243,6 +2291,12 @@ export default function AllergenModule({
                       </div>
                     )}
 
+                    {item.onboardRecipeLine && (
+                      <div style={styles.statusNeutral}>
+                        Onboard recipe item
+                      </div>
+                    )}
+
                     <div>
                       <strong>Declared / real:</strong>
                       <AllergenBadges allergens={item.explicitAllergens} />
@@ -2411,6 +2465,12 @@ export default function AllergenModule({
                           {subItem.plainRawIngredient && !subItem.ignoredBasic && (
                             <div style={styles.statusNeutral}>
                               Fresh/raw item — possible allergens skipped
+                            </div>
+                          )}
+
+                          {subItem.onboardRecipeLine && (
+                            <div style={styles.statusNeutral}>
+                              Onboard recipe item
                             </div>
                           )}
 
