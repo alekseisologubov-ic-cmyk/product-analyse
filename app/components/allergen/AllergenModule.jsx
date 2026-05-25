@@ -31,6 +31,12 @@ const normalizeCode = (value) => {
   return text.replace(/\.0+$/, "");
 };
 
+const extractCodesFromText = (value) =>
+  String(value || "")
+    .match(/\b\d{3,}\b/g)
+    ?.map((item) => normalizeCode(item))
+    .filter(Boolean) || [];
+
 const getVenueIcon = (venue) => {
   const text = cleanText(venue);
 
@@ -275,6 +281,11 @@ const shouldSkipPossibleAllergensForIngredient = (...values) => {
     isPlainFreshHerbOrRawProduce(...values)
   );
 };
+
+const isSubRecipeRow = (item) =>
+  item?.assignedType === "R" ||
+  item?.hasProductRelation === "N" ||
+  item?.recipeIsBasic === "Y";
 
 const ALLERGEN_DISPLAY = {
   "Cereals containing gluten": { icon: "🌾", color: "#8a5a00" },
@@ -605,7 +616,14 @@ const KEYWORD_RULES = [
   },
   {
     allergen: "Sesame seeds",
-    words: ["sesame", "sesame seed", "sesame seeds", "tahini", "benne", "gingelly"],
+    words: [
+      "sesame",
+      "sesame seed",
+      "sesame seeds",
+      "tahini",
+      "benne",
+      "gingelly",
+    ],
   },
   {
     allergen: "Sulphur dioxide and sulphites",
@@ -782,7 +800,6 @@ const keywordAllergensForText = (...values) => {
     }
   });
 
-  // False-positive prevention.
   if (
     textHasWordOrPhrase(text, "eggplant") ||
     textHasWordOrPhrase(text, "aubergine")
@@ -794,7 +811,6 @@ const keywordAllergensForText = (...values) => {
     found.delete("Sesame seeds");
   }
 
-  // Non-wheat flours should not become cereals containing gluten by keyword.
   if (
     textHasWordOrPhrase(text, "rice flour") ||
     textHasWordOrPhrase(text, "corn flour") ||
@@ -806,6 +822,17 @@ const keywordAllergensForText = (...values) => {
     textHasWordOrPhrase(text, "coconut flour")
   ) {
     found.delete("Cereals containing gluten");
+  }
+
+  if (
+    textHasWordOrPhrase(text, "cream of tartar") ||
+    textHasWordOrPhrase(text, "coconut milk") ||
+    textHasWordOrPhrase(text, "almond milk") ||
+    textHasWordOrPhrase(text, "soy milk") ||
+    textHasWordOrPhrase(text, "soya milk") ||
+    textHasWordOrPhrase(text, "oat milk")
+  ) {
+    found.delete("Milk");
   }
 
   return sortAllergens([...found]);
@@ -852,11 +879,8 @@ const getHeaderIndexes = (headers) => {
     menuName: findExact(["MenuName", "Menu Name"], 3),
     category: findExact(["Category"], 4),
     subCategory: findExact(["SubCategory", "Sub Category"], 5),
-
-    // These must match the actual ingredient/product columns.
     ingredientCode: ingredientCodeIndex,
     ingredientName: ingredientNameIndex,
-
     assigned: findExact(["Assigned"], 12),
     assignedType: findExact(["AssignedType", "Assigned Type"], 13),
     recipeCode: findExact(["RecipeCode", "Recipe Code"], 15),
@@ -934,8 +958,6 @@ const parseIngredientByLocationWorkbook = (workbook) => {
     const ingredientAllergens = splitAllergens(get(indexes.ingredientAllergens));
     const recipeDeclaredAllergens = splitAllergens(get(indexes.recipeAllergens));
 
-    // Ingredient cards should show only allergens that belong to this ingredient.
-    // Recipe-level allergens are kept for recipe/venue summary only.
     const nameDetectedRealAllergens = keywordAllergensForText(
       ingredientName,
       assigned
@@ -1086,11 +1108,7 @@ const parseIngredientByLocationWorkbook = (workbook) => {
     recipe.rows.push(row);
     recipe.gfClaim = recipe.gfClaim || row.gfClaim;
 
-    if (
-      row.assignedType === "R" ||
-      row.hasProductRelation === "N" ||
-      row.recipeIsBasic === "Y"
-    ) {
+    if (isSubRecipeRow(row)) {
       recipe.subRecipes.push(row);
     } else {
       recipe.ingredients.push(row);
@@ -1098,7 +1116,6 @@ const parseIngredientByLocationWorkbook = (workbook) => {
 
     if (!row.ignoredBasic) venue.ingredientCount += 1;
 
-    // Ingredient-level real allergens.
     row.explicitAllergens.forEach((allergen) => {
       if (VALID_ALLERGENS.has(allergen)) {
         venue.allergens.add(allergen);
@@ -1106,8 +1123,6 @@ const parseIngredientByLocationWorkbook = (workbook) => {
       }
     });
 
-    // Recipe-level declared allergens belong to recipe/venue summaries only.
-    // They should not be copied onto every ingredient card.
     (row.recipeDeclaredAllergens || []).forEach((allergen) => {
       if (VALID_ALLERGENS.has(allergen)) {
         venue.allergens.add(allergen);
@@ -1239,6 +1254,7 @@ export default function AllergenModule({
   const [venues, setVenues] = useState([]);
   const [selectedVenueKey, setSelectedVenueKey] = useState("");
   const [selectedRecipeKey, setSelectedRecipeKey] = useState("");
+  const [selectedSubRecipeLine, setSelectedSubRecipeLine] = useState(null);
   const [venueSearch, setVenueSearch] = useState("");
   const [recipeSearch, setRecipeSearch] = useState("");
   const [ingredientSearch, setIngredientSearch] = useState("");
@@ -1268,6 +1284,7 @@ export default function AllergenModule({
     setSourceSheetName(parsed.sourceSheet);
     setSelectedVenueKey(parsed.venues[0]?.venueKey || "");
     setSelectedRecipeKey("");
+    setSelectedSubRecipeLine(null);
     setIngredientSearch("");
 
     return parsed;
@@ -1475,6 +1492,92 @@ export default function AllergenModule({
     });
   }, [selectedRecipe, ingredientSearch]);
 
+  const getSubRecipeRowsForLine = (subRecipeLine) => {
+    if (!subRecipeLine) return [];
+
+    const candidateNameKeys = [
+      subRecipeLine.ingredientName,
+      subRecipeLine.assigned,
+    ]
+      .map((value) => normalizeIngredientTextForMatch(value))
+      .filter(Boolean);
+
+    const candidateNameSet = new Set(candidateNameKeys);
+
+    const candidateCodes = [
+      subRecipeLine.ingredientCode,
+      subRecipeLine.assigned,
+      ...extractCodesFromText(subRecipeLine.ingredientName),
+      ...extractCodesFromText(subRecipeLine.assigned),
+    ]
+      .map((value) => normalizeCode(value))
+      .filter(Boolean);
+
+    const uniqueCandidateCodes = [...new Set(candidateCodes)];
+    const currentVenueKey = cleanText(subRecipeLine.restaurantName);
+
+    const rowMatchesSubRecipe = (row, sameVenueOnly = true) => {
+      if (!row || row.sourceRow === subRecipeLine.sourceRow) return false;
+
+      if (sameVenueOnly && cleanText(row.restaurantName) !== currentVenueKey) {
+        return false;
+      }
+
+      const rowRecipeNameKey = normalizeIngredientTextForMatch(row.recipeName);
+      const rowMenuNameKey = normalizeIngredientTextForMatch(row.menuName);
+      const rowRecipeCode = normalizeCode(row.recipeCode);
+
+      const nameMatches =
+        candidateNameSet.has(rowRecipeNameKey) ||
+        candidateNameSet.has(rowMenuNameKey);
+
+      const codeMatches =
+        uniqueCandidateCodes.length > 0 &&
+        uniqueCandidateCodes.includes(rowRecipeCode);
+
+      return nameMatches || codeMatches;
+    };
+
+    const sameVenueRows = rows
+      .filter((row) => rowMatchesSubRecipe(row, true))
+      .sort((a, b) => Number(a.sourceRow || 0) - Number(b.sourceRow || 0));
+
+    if (sameVenueRows.length) {
+      return sameVenueRows;
+    }
+
+    return rows
+      .filter((row) => rowMatchesSubRecipe(row, false))
+      .sort((a, b) => Number(a.sourceRow || 0) - Number(b.sourceRow || 0));
+  };
+
+  const selectedSubRecipeRows = useMemo(
+    () => getSubRecipeRowsForLine(selectedSubRecipeLine),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, selectedSubRecipeLine]
+  );
+
+  const selectedSubRecipeAllergens = useMemo(() => {
+    const found = [];
+
+    selectedSubRecipeRows.forEach((row) => {
+      found.push(...row.explicitAllergens);
+      found.push(...(row.recipeDeclaredAllergens || []));
+    });
+
+    return sortAllergens(found);
+  }, [selectedSubRecipeRows]);
+
+  const selectedSubRecipePossibleHidden = useMemo(() => {
+    const found = [];
+
+    selectedSubRecipeRows.forEach((row) => {
+      found.push(...row.possibleHiddenAllergens);
+    });
+
+    return sortAllergens(found);
+  }, [selectedSubRecipeRows]);
+
   const hiddenWarningRows = useMemo(
     () => rows.filter((row) => row.hiddenWarnings.length > 0),
     [rows]
@@ -1490,7 +1593,7 @@ export default function AllergenModule({
       RecipeName: row.recipeName,
       IngredientCode: row.ingredientCode,
       IngredientName: row.ingredientName,
-      Type: row.assignedType === "R" ? "Sub Recipe" : "Ingredient",
+      Type: isSubRecipeRow(row) ? "Sub Recipe" : "Ingredient",
       Category: row.category,
       SubCategory: row.subCategory,
       IngredientDeclaredAllergens: row.ingredientAllergens.join(", "),
@@ -1533,7 +1636,7 @@ export default function AllergenModule({
           Venue: venue,
           ProductCode: productCode,
           ProductName: productName,
-          ProductType: row.assignedType === "R" ? "Sub Recipe" : "Ingredient",
+          ProductType: isSubRecipeRow(row) ? "Sub Recipe" : "Ingredient",
           realAllergens: new Set(),
           possibleHiddenAllergens: new Set(),
           recipeDeclaredAllergens: new Set(),
@@ -1603,18 +1706,14 @@ export default function AllergenModule({
           ProductCode: product.ProductCode,
           ProductName: product.ProductName,
           ProductType: product.ProductType,
-
           ProductAllergensToReview: productAllergensToReview.join(", "),
           RealDeclaredOrDetectedAllergens: realAllergens.join(", "),
           PossibleHiddenAllergens: possibleHiddenAllergens.join(", "),
-
           RecipeLevelDeclaredAllergensForReference:
             recipeDeclaredAllergens.join(", "),
-
           RecipesUsingProduct: [...product.recipes].sort().join(" | "),
           Menus: [...product.menus].sort().join(" | "),
           SourceRows: [...product.sourceRows].sort((a, b) => a - b).join(", "),
-
           IgnoredBasic: product.ignoredBasic ? "Yes" : "No",
           FreshRawItemPossibleAllergensSkipped: product.plainRawIngredient
             ? "Yes"
@@ -1825,6 +1924,7 @@ export default function AllergenModule({
               onClick={() => {
                 setSelectedVenueKey(venue.venueKey);
                 setSelectedRecipeKey("");
+                setSelectedSubRecipeLine(null);
                 setIngredientSearch("");
               }}
             >
@@ -1882,6 +1982,7 @@ export default function AllergenModule({
                 }}
                 onClick={() => {
                   setSelectedRecipeKey(recipe.recipeKey);
+                  setSelectedSubRecipeLine(null);
                   setIngredientSearch("");
                 }}
               >
@@ -1915,6 +2016,7 @@ export default function AllergenModule({
           style={styles.modalBackdrop}
           onClick={() => {
             setSelectedRecipeKey("");
+            setSelectedSubRecipeLine(null);
             setIngredientSearch("");
           }}
         >
@@ -1927,6 +2029,7 @@ export default function AllergenModule({
               style={styles.closeButton}
               onClick={() => {
                 setSelectedRecipeKey("");
+                setSelectedSubRecipeLine(null);
                 setIngredientSearch("");
               }}
             >
@@ -1996,8 +2099,18 @@ export default function AllergenModule({
                   )}
 
                   <div style={localStyles.typePill}>
-                    {item.assignedType === "R" ? "Sub Recipe" : "Ingredient"}
+                    {isSubRecipeRow(item) ? "Sub Recipe" : "Ingredient"}
                   </div>
+
+                  {isSubRecipeRow(item) && (
+                    <button
+                      type="button"
+                      style={localStyles.subRecipeButton}
+                      onClick={() => setSelectedSubRecipeLine(item)}
+                    >
+                      🔎 Open Sub Recipe Ingredients
+                    </button>
+                  )}
 
                   {item.ignoredBasic && (
                     <div style={styles.statusNeutral}>Ignored basic item</div>
@@ -2032,6 +2145,157 @@ export default function AllergenModule({
                 </div>
               ))}
             </div>
+
+            {selectedSubRecipeLine && (
+              <div
+                style={localStyles.subRecipeModalBackdrop}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setSelectedSubRecipeLine(null);
+                }}
+              >
+                <div
+                  style={localStyles.subRecipeModalCard}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    style={styles.closeButton}
+                    onClick={() => setSelectedSubRecipeLine(null)}
+                  >
+                    ✕
+                  </button>
+
+                  <div style={localStyles.modalHeader}>
+                    <div>
+                      <h2 style={{ ...styles.productTitle, marginBottom: 4 }}>
+                        🧾 {selectedSubRecipeLine.ingredientName}
+                      </h2>
+
+                      <p style={{ ...styles.emptyText, margin: 0 }}>
+                        Sub recipe opened from{" "}
+                        <strong>{selectedRecipe.recipeName}</strong>
+                      </p>
+
+                      <div style={localStyles.subRecipeInfoLine}>
+                        Product code:{" "}
+                        <strong>
+                          {selectedSubRecipeLine.ingredientCode || "N/A"}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div style={styles.statusNeutral}>
+                      {selectedSubRecipeRows.length} row(s)
+                    </div>
+                  </div>
+
+                  <section style={localStyles.modalSummaryGrid}>
+                    <div style={styles.infoBox}>
+                      <strong>Sub recipe allergens</strong>
+                      <AllergenBadges allergens={selectedSubRecipeAllergens} />
+                    </div>
+
+                    <div style={styles.infoBox}>
+                      <strong>Possible hidden allergens</strong>
+                      <AllergenBadges
+                        allergens={selectedSubRecipePossibleHidden}
+                        possible
+                      />
+                    </div>
+                  </section>
+
+                  {!selectedSubRecipeRows.length && (
+                    <div style={styles.warningText}>
+                      No ingredient rows were found for this sub recipe in the
+                      Ingredient by Location file. Check that the sub recipe name
+                      or code matches the recipe name/code in the file.
+                    </div>
+                  )}
+
+                  <div style={localStyles.ingredientGrid}>
+                    {selectedSubRecipeRows.map((subItem) => (
+                      <div
+                        key={`${subItem.sourceRow}-${subItem.ingredientCode}-${subItem.ingredientName}`}
+                        style={{
+                          ...localStyles.ingredientCard,
+                          ...(subItem.hiddenWarnings.length > 0
+                            ? localStyles.ingredientCardWarning
+                            : {}),
+                          ...(subItem.possibleHiddenAllergens.length > 0 &&
+                          !subItem.hiddenWarnings.length
+                            ? localStyles.ingredientCardPossible
+                            : {}),
+                        }}
+                      >
+                        <div style={localStyles.ingredientTitle}>
+                          {subItem.ingredientName}
+                        </div>
+
+                        {subItem.assigned &&
+                          subItem.assigned !== subItem.ingredientName && (
+                            <div style={localStyles.compactMeta}>
+                              Product / Assigned: {subItem.assigned}
+                            </div>
+                          )}
+
+                        <div style={localStyles.typePill}>
+                          {isSubRecipeRow(subItem)
+                            ? "Nested Sub Recipe"
+                            : "Ingredient"}
+                        </div>
+
+                        {isSubRecipeRow(subItem) && (
+                          <button
+                            type="button"
+                            style={localStyles.subRecipeButton}
+                            onClick={() => setSelectedSubRecipeLine(subItem)}
+                          >
+                            🔎 Open Nested Sub Recipe
+                          </button>
+                        )}
+
+                        {subItem.ignoredBasic && (
+                          <div style={styles.statusNeutral}>
+                            Ignored basic item
+                          </div>
+                        )}
+
+                        {subItem.plainRawIngredient && !subItem.ignoredBasic && (
+                          <div style={styles.statusNeutral}>
+                            Fresh/raw item — possible allergens skipped
+                          </div>
+                        )}
+
+                        <div>
+                          <strong>Declared / real:</strong>
+                          <AllergenBadges allergens={subItem.explicitAllergens} />
+                        </div>
+
+                        {subItem.possibleHiddenAllergens.length > 0 && (
+                          <div>
+                            <strong>Possible hidden:</strong>
+                            <AllergenBadges
+                              allergens={subItem.possibleHiddenAllergens}
+                              possible
+                            />
+                          </div>
+                        )}
+
+                        {subItem.hiddenWarnings.map((warning, index) => (
+                          <div
+                            key={`${warning}-${index}`}
+                            style={styles.statusBad}
+                          >
+                            ⚠️ {warning}
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2198,5 +2462,46 @@ const localStyles = {
     color: "#555",
     fontSize: 11,
     fontWeight: "bold",
+  },
+
+  subRecipeButton: {
+    border: "1px solid #111",
+    borderRadius: 999,
+    background: "#111",
+    color: "#fff",
+    padding: "7px 9px",
+    fontSize: 11,
+    fontWeight: "bold",
+    cursor: "pointer",
+    marginTop: 4,
+  },
+
+  subRecipeModalBackdrop: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.62)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10050,
+    padding: 18,
+  },
+
+  subRecipeModalCard: {
+    background: "#fff",
+    borderRadius: 18,
+    padding: 20,
+    maxWidth: 1080,
+    width: "96%",
+    maxHeight: "88vh",
+    overflowY: "auto",
+    position: "relative",
+    boxShadow: "0 24px 70px rgba(0,0,0,0.35)",
+  },
+
+  subRecipeInfoLine: {
+    marginTop: 6,
+    color: "#555",
+    fontSize: 13,
   },
 };
