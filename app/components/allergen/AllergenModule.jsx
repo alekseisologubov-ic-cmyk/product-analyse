@@ -105,6 +105,35 @@ const textHasWordOrPhrase = (text, word) => {
   ).test(source);
 };
 
+const ALLERGEN_ORDER = [
+  "Cereals containing gluten",
+  "Crustaceans",
+  "Eggs",
+  "Fish",
+  "Peanuts",
+  "Soybeans",
+  "Milk",
+  "Tree Nuts",
+  "Celery",
+  "Mustard",
+  "Sesame seeds",
+  "Sulphur dioxide and sulphites",
+  "Lupin",
+  "Molluscs",
+];
+
+const VALID_ALLERGENS = new Set(ALLERGEN_ORDER);
+
+const sortAllergens = (allergens = []) => {
+  const unique = [...new Set(allergens)].filter((item) =>
+    VALID_ALLERGENS.has(item)
+  );
+
+  return unique.sort(
+    (a, b) => ALLERGEN_ORDER.indexOf(a) - ALLERGEN_ORDER.indexOf(b)
+  );
+};
+
 const IGNORED_BASIC_INGREDIENTS = [
   "WATER",
   "ICE",
@@ -166,7 +195,6 @@ const FRESH_HERB_OR_RAW_PRODUCE_WORDS = [
   "AUBERGINE",
   "POTATO",
   "MUSHROOM",
-  "CELERY",
   "APPLE",
   "ORANGE",
   "LEMON",
@@ -242,24 +270,27 @@ const shouldSkipPossibleAllergensForIngredient = (...values) => {
 
   if (!text.trim()) return false;
 
-  return isIgnoredBasicIngredient(text) || isPlainFreshHerbOrRawProduce(...values);
+  return (
+    isIgnoredBasicIngredient(text) ||
+    isPlainFreshHerbOrRawProduce(...values)
+  );
 };
 
 const ALLERGEN_DISPLAY = {
-  "Gluten / Wheat": { icon: "🌾", color: "#8a5a00" },
-  Milk: { icon: "🥛", color: "#0057b8" },
+  "Cereals containing gluten": { icon: "🌾", color: "#8a5a00" },
+  Crustaceans: { icon: "🦐", color: "#b00020" },
   Eggs: { icon: "🥚", color: "#7a4f00" },
-  Peanuts: { icon: "🥜", color: "#b00020" },
-  "Tree Nuts": { icon: "🌰", color: "#6b3f1d" },
-  Soy: { icon: "🫘", color: "#2e7d32" },
-  Sesame: { icon: "⚪", color: "#6a4a00" },
   Fish: { icon: "🐟", color: "#005f73" },
-  "Crustacean Shellfish": { icon: "🦐", color: "#b00020" },
-  Molluscs: { icon: "🦪", color: "#005f73" },
-  Mustard: { icon: "🟡", color: "#8a5a00" },
+  Peanuts: { icon: "🥜", color: "#b00020" },
+  Soybeans: { icon: "🫘", color: "#2e7d32" },
+  Milk: { icon: "🥛", color: "#0057b8" },
+  "Tree Nuts": { icon: "🌰", color: "#6b3f1d" },
   Celery: { icon: "🥬", color: "#2e7d32" },
+  Mustard: { icon: "🟡", color: "#8a5a00" },
+  "Sesame seeds": { icon: "⚪", color: "#6a4a00" },
+  "Sulphur dioxide and sulphites": { icon: "⚠️", color: "#8a5a00" },
   Lupin: { icon: "🌱", color: "#2e7d32" },
-  Sulphites: { icon: "⚠️", color: "#8a5a00" },
+  Molluscs: { icon: "🦪", color: "#005f73" },
 };
 
 const normalizeAllergenName = (value) => {
@@ -288,46 +319,107 @@ const normalizeAllergenName = (value) => {
   if (
     text.includes("GLUTEN") ||
     text.includes("WHEAT") ||
+    text.includes("SPELT") ||
+    text.includes("KHORASAN") ||
+    text.includes("KAMUT") ||
     text.includes("BARLEY") ||
     text.includes("RYE") ||
-    text.includes("OATS")
+    text.includes("OAT")
   ) {
-    return "Gluten / Wheat";
+    return "Cereals containing gluten";
   }
-
-  if (text.includes("MILK") || text.includes("LACTOSE") || text.includes("DAIRY")) {
-    return "Milk";
-  }
-
-  if (text.includes("EGG")) return "Eggs";
-  if (text.includes("PEANUT")) return "Peanuts";
-
-  if (
-    text.includes("TREE NUT") ||
-    text.includes("NUTS") ||
-    text.includes("ALMOND") ||
-    text.includes("CASHEW") ||
-    text.includes("WALNUT") ||
-    text.includes("PECAN") ||
-    text.includes("PISTACHIO") ||
-    text.includes("HAZELNUT") ||
-    text.includes("MACADAMIA")
-  ) {
-    return "Tree Nuts";
-  }
-
-  if (text.includes("SOY")) return "Soy";
-  if (text.includes("SESAME") || text.includes("TAHINI")) return "Sesame";
 
   if (
     text.includes("CRUSTACEAN") ||
     text.includes("SHRIMP") ||
     text.includes("PRAWN") ||
     text.includes("CRAB") ||
-    text.includes("LOBSTER")
+    text.includes("LOBSTER") ||
+    text.includes("CRAYFISH") ||
+    text.includes("SCAMPI")
   ) {
-    return "Crustacean Shellfish";
+    return "Crustaceans";
   }
+
+  if (text.includes("EGG")) return "Eggs";
+
+  if (
+    text.includes("FISH") ||
+    text.includes("ANCHOV") ||
+    text.includes("SALMON") ||
+    text.includes("TUNA") ||
+    text.includes("COD") ||
+    text.includes("SARDINE") ||
+    text.includes("MACKEREL") ||
+    text.includes("TROUT")
+  ) {
+    return "Fish";
+  }
+
+  if (text.includes("PEANUT")) return "Peanuts";
+
+  if (
+    text.includes("SOY") ||
+    text.includes("SOYA") ||
+    text.includes("SOYBEAN") ||
+    text.includes("TOFU") ||
+    text.includes("EDAMAME") ||
+    text.includes("MISO") ||
+    text.includes("TAMARI")
+  ) {
+    return "Soybeans";
+  }
+
+  if (
+    text.includes("MILK") ||
+    text.includes("LACTOSE") ||
+    text.includes("DAIRY") ||
+    text.includes("CREAM") ||
+    text.includes("BUTTER") ||
+    text.includes("CHEESE") ||
+    text.includes("YOGURT") ||
+    text.includes("YOGHURT") ||
+    text.includes("WHEY") ||
+    text.includes("CASEIN")
+  ) {
+    return "Milk";
+  }
+
+  if (
+    text.includes("TREE NUT") ||
+    text.includes("ALMOND") ||
+    text.includes("HAZELNUT") ||
+    text.includes("WALNUT") ||
+    text.includes("CASHEW") ||
+    text.includes("PECAN") ||
+    text.includes("BRAZIL NUT") ||
+    text.includes("PISTACHIO") ||
+    text.includes("MACADAMIA") ||
+    text.includes("QUEENSLAND NUT") ||
+    text === "NUT" ||
+    text === "NUTS"
+  ) {
+    return "Tree Nuts";
+  }
+
+  if (text.includes("CELERY") || text.includes("CELERIAC")) return "Celery";
+  if (text.includes("MUSTARD") || text.includes("DIJON")) return "Mustard";
+
+  if (text.includes("SESAME") || text.includes("TAHINI")) {
+    return "Sesame seeds";
+  }
+
+  if (
+    text.includes("SULPH") ||
+    text.includes("SULF") ||
+    text.includes("METABISULFITE") ||
+    text.includes("SULFUR DIOXIDE") ||
+    text.includes("SULPHUR DIOXIDE")
+  ) {
+    return "Sulphur dioxide and sulphites";
+  }
+
+  if (text.includes("LUPIN") || text.includes("LUPINE")) return "Lupin";
 
   if (
     text.includes("MOLLUSC") ||
@@ -337,34 +429,15 @@ const normalizeAllergenName = (value) => {
     text.includes("OYSTER") ||
     text.includes("SCALLOP") ||
     text.includes("SQUID") ||
-    text.includes("OCTOPUS")
+    text.includes("OCTOPUS") ||
+    text.includes("CALAMARI") ||
+    text.includes("SNAIL") ||
+    text.includes("ESCARGOT")
   ) {
     return "Molluscs";
   }
 
-  if (
-    text.includes("FISH") ||
-    text.includes("ANCHOV") ||
-    text.includes("SALMON") ||
-    text.includes("TUNA") ||
-    text.includes("COD")
-  ) {
-    return "Fish";
-  }
-
-  if (text.includes("MUSTARD")) return "Mustard";
-  if (text.includes("CELERY") || text.includes("CELERIAC")) return "Celery";
-  if (text.includes("LUPIN")) return "Lupin";
-
-  if (
-    text.includes("SULPH") ||
-    text.includes("SULF") ||
-    text.includes("METABISULFITE")
-  ) {
-    return "Sulphites";
-  }
-
-  return safeText(value);
+  return "";
 };
 
 const splitAllergens = (...values) => {
@@ -378,12 +451,12 @@ const splitAllergens = (...values) => {
       .forEach((item) => found.add(item));
   });
 
-  return [...found].sort();
+  return sortAllergens([...found]);
 };
 
 const KEYWORD_RULES = [
   {
-    allergen: "Gluten / Wheat",
+    allergen: "Cereals containing gluten",
     words: [
       "wheat",
       "wheat flour",
@@ -391,9 +464,14 @@ const KEYWORD_RULES = [
       "ap flour",
       "bread flour",
       "cake flour",
+      "spelt",
+      "khorasan",
+      "kamut",
       "semolina",
       "barley",
       "rye",
+      "oat",
+      "oats",
       "malt",
       "panko",
       "breadcrumb",
@@ -419,6 +497,66 @@ const KEYWORD_RULES = [
     ],
   },
   {
+    allergen: "Crustaceans",
+    words: [
+      "shrimp",
+      "prawn",
+      "prawns",
+      "crab",
+      "lobster",
+      "crayfish",
+      "scampi",
+    ],
+  },
+  {
+    allergen: "Eggs",
+    words: [
+      "egg",
+      "eggs",
+      "mayonnaise",
+      "mayo",
+      "aioli",
+      "meringue",
+      "custard",
+      "hollandaise",
+    ],
+  },
+  {
+    allergen: "Fish",
+    words: [
+      "fish",
+      "anchovy",
+      "anchovies",
+      "fish sauce",
+      "salmon",
+      "tuna",
+      "cod",
+      "sardine",
+      "mackerel",
+      "trout",
+      "worcestershire",
+    ],
+  },
+  {
+    allergen: "Peanuts",
+    words: ["peanut", "peanuts", "peanut butter", "peanutbutter", "satay"],
+  },
+  {
+    allergen: "Soybeans",
+    words: [
+      "soy",
+      "soya",
+      "soybean",
+      "soybeans",
+      "tofu",
+      "edamame",
+      "miso",
+      "tamari",
+      "soy sauce",
+      "yuba",
+    ],
+  },
+  {
     allergen: "Milk",
     words: [
       "milk",
@@ -439,33 +577,17 @@ const KEYWORD_RULES = [
     ],
   },
   {
-    allergen: "Eggs",
-    words: [
-      "egg",
-      "eggs",
-      "mayonnaise",
-      "mayo",
-      "aioli",
-      "meringue",
-      "custard",
-      "hollandaise",
-    ],
-  },
-  {
-    allergen: "Peanuts",
-    words: ["peanut", "peanuts", "peanut butter", "peanutbutter", "satay"],
-  },
-  {
     allergen: "Tree Nuts",
     words: [
       "almond",
-      "walnut",
-      "pecan",
-      "cashew",
       "hazelnut",
+      "walnut",
+      "cashew",
+      "pecan",
+      "brazil nut",
       "pistachio",
       "macadamia",
-      "brazil nut",
+      "queensland nut",
       "pine nut",
       "marzipan",
       "praline",
@@ -474,31 +596,32 @@ const KEYWORD_RULES = [
     ],
   },
   {
-    allergen: "Soy",
-    words: ["soy", "soya", "tofu", "edamame", "miso", "tamari", "soy sauce", "yuba"],
+    allergen: "Celery",
+    words: ["celery", "celeriac"],
   },
   {
-    allergen: "Sesame",
-    words: ["sesame", "tahini", "benne", "gingelly"],
+    allergen: "Mustard",
+    words: ["mustard", "dijon"],
   },
   {
-    allergen: "Fish",
+    allergen: "Sesame seeds",
+    words: ["sesame", "sesame seed", "sesame seeds", "tahini", "benne", "gingelly"],
+  },
+  {
+    allergen: "Sulphur dioxide and sulphites",
     words: [
-      "fish",
-      "anchovy",
-      "anchovies",
-      "fish sauce",
-      "salmon",
-      "tuna",
-      "cod",
-      "sardine",
-      "mackerel",
-      "trout",
+      "sulphite",
+      "sulphites",
+      "sulfite",
+      "sulfites",
+      "metabisulfite",
+      "sulfur dioxide",
+      "sulphur dioxide",
     ],
   },
   {
-    allergen: "Crustacean Shellfish",
-    words: ["shrimp", "prawn", "prawns", "crab", "lobster", "crayfish"],
+    allergen: "Lupin",
+    words: ["lupin", "lupine"],
   },
   {
     allergen: "Molluscs",
@@ -514,30 +637,8 @@ const KEYWORD_RULES = [
       "squid",
       "octopus",
       "calamari",
-    ],
-  },
-  {
-    allergen: "Mustard",
-    words: ["mustard", "dijon"],
-  },
-  {
-    allergen: "Celery",
-    words: ["celery", "celeriac"],
-  },
-  {
-    allergen: "Lupin",
-    words: ["lupin", "lupine"],
-  },
-  {
-    allergen: "Sulphites",
-    words: [
-      "sulphite",
-      "sulphites",
-      "sulfite",
-      "sulfites",
-      "metabisulfite",
-      "sulfur dioxide",
-      "sulphur dioxide",
+      "snail",
+      "escargot",
     ],
   },
 ];
@@ -580,7 +681,7 @@ const isProcessedOrPreparedItem = (value) => {
 const PREMADE_COMMON_ALLERGEN_RULES = [
   {
     words: ["soy sauce", "teriyaki", "hoisin"],
-    allergens: ["Soy", "Gluten / Wheat"],
+    allergens: ["Soybeans", "Cereals containing gluten"],
   },
   {
     words: ["fish sauce"],
@@ -588,7 +689,7 @@ const PREMADE_COMMON_ALLERGEN_RULES = [
   },
   {
     words: ["oyster sauce"],
-    allergens: ["Molluscs", "Soy"],
+    allergens: ["Molluscs", "Soybeans"],
   },
   {
     words: ["worcestershire"],
@@ -605,7 +706,7 @@ const PREMADE_COMMON_ALLERGEN_RULES = [
       "donut",
       "doughnut",
     ],
-    allergens: ["Gluten / Wheat", "Milk", "Eggs"],
+    allergens: ["Cereals containing gluten", "Milk", "Eggs"],
   },
   {
     words: [
@@ -618,7 +719,7 @@ const PREMADE_COMMON_ALLERGEN_RULES = [
       "pie shell",
       "cracker",
     ],
-    allergens: ["Gluten / Wheat"],
+    allergens: ["Cereals containing gluten"],
   },
   {
     words: ["milk chocolate", "white chocolate"],
@@ -638,7 +739,7 @@ const PREMADE_COMMON_ALLERGEN_RULES = [
   },
   {
     words: ["granola", "muesli"],
-    allergens: ["Gluten / Wheat", "Tree Nuts"],
+    allergens: ["Cereals containing gluten", "Tree Nuts"],
   },
 ];
 
@@ -655,11 +756,13 @@ const getPreparedCommonAllergens = (...values) => {
     const matched = rule.words.some((word) => textHasWordOrPhrase(text, word));
 
     if (matched) {
-      rule.allergens.forEach((allergen) => found.add(allergen));
+      rule.allergens.forEach((allergen) => {
+        if (VALID_ALLERGENS.has(allergen)) found.add(allergen);
+      });
     }
   });
 
-  return [...found].sort();
+  return sortAllergens([...found]);
 };
 
 const keywordAllergensForText = (...values) => {
@@ -674,19 +777,24 @@ const keywordAllergensForText = (...values) => {
   KEYWORD_RULES.forEach((rule) => {
     const matched = rule.words.some((word) => textHasWordOrPhrase(text, word));
 
-    if (matched) found.add(rule.allergen);
+    if (matched && VALID_ALLERGENS.has(rule.allergen)) {
+      found.add(rule.allergen);
+    }
   });
 
   // False-positive prevention.
-  if (textHasWordOrPhrase(text, "eggplant") || textHasWordOrPhrase(text, "aubergine")) {
+  if (
+    textHasWordOrPhrase(text, "eggplant") ||
+    textHasWordOrPhrase(text, "aubergine")
+  ) {
     found.delete("Eggs");
   }
 
   if (textHasWordOrPhrase(text, "seedless")) {
-    found.delete("Sesame");
+    found.delete("Sesame seeds");
   }
 
-  // Non-wheat flours should not become gluten/wheat by keyword.
+  // Non-wheat flours should not become cereals containing gluten by keyword.
   if (
     textHasWordOrPhrase(text, "rice flour") ||
     textHasWordOrPhrase(text, "corn flour") ||
@@ -697,14 +805,15 @@ const keywordAllergensForText = (...values) => {
     textHasWordOrPhrase(text, "almond flour") ||
     textHasWordOrPhrase(text, "coconut flour")
   ) {
-    found.delete("Gluten / Wheat");
+    found.delete("Cereals containing gluten");
   }
 
-  return [...found].sort();
+  return sortAllergens([...found]);
 };
 
 const looksGlutenFreeClaim = (...values) => {
   const text = values.map((value) => cleanText(value)).join(" ");
+
   return (
     /\bGF\b/.test(text) ||
     text.includes("GLUTEN FREE") ||
@@ -752,11 +861,23 @@ const getHeaderIndexes = (headers) => {
     assignedType: findExact(["AssignedType", "Assigned Type"], 13),
     recipeCode: findExact(["RecipeCode", "Recipe Code"], 15),
     recipeName: findExact(["RecipeName", "Recipe Name"], 16),
-    specialInstructions: findExact(["SpecialInstructions", "Special Instructions"], 17),
-    specialInstructions2: findExact(["SpecialInstructions2", "Special Instructions 2"], 18),
+    specialInstructions: findExact(
+      ["SpecialInstructions", "Special Instructions"],
+      17
+    ),
+    specialInstructions2: findExact(
+      ["SpecialInstructions2", "Special Instructions 2"],
+      18
+    ),
     recipeIsBasic: findExact(["RecipeIsBasic", "Recipe Is Basic"], 19),
-    hasProductRelation: findExact(["HasProductRelation", "Has Product Relation"], 20),
-    ingredientAllergens: findExact(["IngredientAllergens", "Ingredient Allergens"], 21),
+    hasProductRelation: findExact(
+      ["HasProductRelation", "Has Product Relation"],
+      20
+    ),
+    ingredientAllergens: findExact(
+      ["IngredientAllergens", "Ingredient Allergens"],
+      21
+    ),
     recipeAllergens: findExact(["RecipeAllergens", "Recipe Allergens"], 22),
   };
 };
@@ -813,10 +934,8 @@ const parseIngredientByLocationWorkbook = (workbook) => {
     const ingredientAllergens = splitAllergens(get(indexes.ingredientAllergens));
     const recipeDeclaredAllergens = splitAllergens(get(indexes.recipeAllergens));
 
-    // Important:
     // Ingredient cards should show only allergens that belong to this ingredient.
-    // Do NOT merge recipeDeclaredAllergens into every ingredient line.
-    // Example: a recipe may contain gluten from bread, but parsley/mint must not show gluten.
+    // Recipe-level allergens are kept for recipe/venue summary only.
     const nameDetectedRealAllergens = keywordAllergensForText(
       ingredientName,
       assigned
@@ -843,22 +962,21 @@ const parseIngredientByLocationWorkbook = (workbook) => {
       ? getPreparedCommonAllergens(ingredientName, assigned)
       : [];
 
-    // Real allergens shown on the ingredient card.
-    // These come from IngredientAllergens and clear ingredient-name detection.
     const explicitAllergens = ignoredBasic
       ? []
-      : [...new Set([...ingredientAllergens, ...nameDetectedRealAllergens])].sort();
+      : sortAllergens([...ingredientAllergens, ...nameDetectedRealAllergens]);
 
     const detectedAllergens = ignoredBasic
       ? []
-      : [...new Set(nameDetectedRealAllergens)].sort();
+      : sortAllergens(nameDetectedRealAllergens);
 
-    // Fresh herbs, raw produce, water, salt, sugar, pepper do not receive possible hidden allergens.
     const possibleHiddenAllergens =
       ignoredBasic || skipPossibleAllergens
         ? []
-        : preparedCommonAllergens.filter(
-            (allergen) => !explicitAllergens.includes(allergen)
+        : sortAllergens(
+            preparedCommonAllergens.filter(
+              (allergen) => !explicitAllergens.includes(allergen)
+            )
           );
 
     const gfClaim = looksGlutenFreeClaim(
@@ -868,12 +986,15 @@ const parseIngredientByLocationWorkbook = (workbook) => {
       get(indexes.specialInstructions2)
     );
 
-    const hasIngredientGluten = explicitAllergens.includes("Gluten / Wheat");
+    const hasIngredientGluten = explicitAllergens.includes(
+      "Cereals containing gluten"
+    );
+
     const hiddenWarnings = [];
 
     if (!ignoredBasic && !skipPossibleAllergens && gfClaim && hasIngredientGluten) {
       hiddenWarnings.push(
-        "Ingredient gluten check: recipe/menu says GF or gluten free, but this ingredient shows gluten/wheat."
+        "Ingredient gluten check: recipe/menu says GF or gluten free, but this ingredient shows cereals containing gluten."
       );
     }
 
@@ -979,20 +1100,26 @@ const parseIngredientByLocationWorkbook = (workbook) => {
 
     // Ingredient-level real allergens.
     row.explicitAllergens.forEach((allergen) => {
-      venue.allergens.add(allergen);
-      recipe.allergens.add(allergen);
+      if (VALID_ALLERGENS.has(allergen)) {
+        venue.allergens.add(allergen);
+        recipe.allergens.add(allergen);
+      }
     });
 
     // Recipe-level declared allergens belong to recipe/venue summaries only.
     // They should not be copied onto every ingredient card.
     (row.recipeDeclaredAllergens || []).forEach((allergen) => {
-      venue.allergens.add(allergen);
-      recipe.allergens.add(allergen);
+      if (VALID_ALLERGENS.has(allergen)) {
+        venue.allergens.add(allergen);
+        recipe.allergens.add(allergen);
+      }
     });
 
     row.possibleHiddenAllergens.forEach((allergen) => {
-      venue.possibleHidden.add(allergen);
-      recipe.possibleHidden.add(allergen);
+      if (VALID_ALLERGENS.has(allergen)) {
+        venue.possibleHidden.add(allergen);
+        recipe.possibleHidden.add(allergen);
+      }
     });
 
     row.hiddenWarnings.forEach((warning) => {
@@ -1009,13 +1136,13 @@ const parseIngredientByLocationWorkbook = (workbook) => {
   const venues = [...venueMap.values()]
     .map((venue) => ({
       ...venue,
-      allergens: [...venue.allergens].sort(),
-      possibleHidden: [...venue.possibleHidden].sort(),
+      allergens: sortAllergens([...venue.allergens]),
+      possibleHidden: sortAllergens([...venue.possibleHidden]),
       recipes: [...venue.recipesMap.values()]
         .map((recipe) => ({
           ...recipe,
-          allergens: [...recipe.allergens].sort(),
-          possibleHidden: [...recipe.possibleHidden].sort(),
+          allergens: sortAllergens([...recipe.allergens]),
+          possibleHidden: sortAllergens([...recipe.possibleHidden]),
           ingredients: recipe.ingredients.sort((a, b) =>
             a.ingredientName.localeCompare(b.ingredientName)
           ),
@@ -1057,13 +1184,15 @@ const allergenBadgeStyle = (allergen, possible = false) => {
 };
 
 const AllergenBadges = ({ allergens = [], possible = false }) => {
-  if (!allergens.length) {
+  const visibleAllergens = sortAllergens(allergens);
+
+  if (!visibleAllergens.length) {
     return <span style={{ color: "#777", fontSize: 13 }}>None found</span>;
   }
 
   return (
     <div>
-      {allergens.map((allergen) => {
+      {visibleAllergens.map((allergen) => {
         const icon = ALLERGEN_DISPLAY[allergen]?.icon || "⚠️";
 
         return (
@@ -1269,7 +1398,7 @@ export default function AllergenModule({
       row.possibleHiddenAllergens.forEach((item) => set.add(item));
     });
 
-    return [...set].sort();
+    return sortAllergens([...set]);
   }, [rows]);
 
   const selectedVenue = useMemo(
@@ -1383,6 +1512,146 @@ export default function AllergenModule({
     );
   };
 
+  const getProductAllergenReportRows = () => {
+    const productMap = new Map();
+
+    rows.forEach((row) => {
+      const venue = row.restaurantName || "Unknown Venue";
+      const productCode = row.ingredientCode || "";
+      const productName = row.ingredientName || "";
+
+      if (!productName) return;
+
+      const productKey = [
+        cleanText(venue),
+        normalizeCode(productCode) || cleanText(productName),
+        cleanText(productName),
+      ].join("|");
+
+      if (!productMap.has(productKey)) {
+        productMap.set(productKey, {
+          Venue: venue,
+          ProductCode: productCode,
+          ProductName: productName,
+          ProductType: row.assignedType === "R" ? "Sub Recipe" : "Ingredient",
+          realAllergens: new Set(),
+          possibleHiddenAllergens: new Set(),
+          recipeDeclaredAllergens: new Set(),
+          recipes: new Set(),
+          menus: new Set(),
+          sourceRows: new Set(),
+          ignoredBasic: false,
+          plainRawIngredient: false,
+          possibleAllergensSkipped: false,
+        });
+      }
+
+      const product = productMap.get(productKey);
+
+      row.explicitAllergens.forEach((allergen) => {
+        if (VALID_ALLERGENS.has(allergen)) {
+          product.realAllergens.add(allergen);
+        }
+      });
+
+      row.possibleHiddenAllergens.forEach((allergen) => {
+        if (VALID_ALLERGENS.has(allergen)) {
+          product.possibleHiddenAllergens.add(allergen);
+        }
+      });
+
+      (row.recipeDeclaredAllergens || []).forEach((allergen) => {
+        if (VALID_ALLERGENS.has(allergen)) {
+          product.recipeDeclaredAllergens.add(allergen);
+        }
+      });
+
+      if (row.recipeCode || row.recipeName) {
+        product.recipes.add(
+          `${row.recipeCode || "N/A"} - ${row.recipeName || "Unnamed Recipe"}`
+        );
+      }
+
+      if (row.menuName) product.menus.add(row.menuName);
+      if (row.sourceRow) product.sourceRows.add(row.sourceRow);
+
+      product.ignoredBasic = product.ignoredBasic || row.ignoredBasic;
+      product.plainRawIngredient =
+        product.plainRawIngredient || row.plainRawIngredient;
+      product.possibleAllergensSkipped =
+        product.possibleAllergensSkipped || row.skipPossibleAllergens;
+    });
+
+    return [...productMap.values()]
+      .map((product, index) => {
+        const realAllergens = sortAllergens([...product.realAllergens]);
+        const possibleHiddenAllergens = sortAllergens([
+          ...product.possibleHiddenAllergens,
+        ]);
+        const recipeDeclaredAllergens = sortAllergens([
+          ...product.recipeDeclaredAllergens,
+        ]);
+
+        const productAllergensToReview = sortAllergens([
+          ...realAllergens,
+          ...possibleHiddenAllergens,
+        ]);
+
+        return {
+          Number: index + 1,
+          Venue: product.Venue,
+          ProductCode: product.ProductCode,
+          ProductName: product.ProductName,
+          ProductType: product.ProductType,
+
+          ProductAllergensToReview: productAllergensToReview.join(", "),
+          RealDeclaredOrDetectedAllergens: realAllergens.join(", "),
+          PossibleHiddenAllergens: possibleHiddenAllergens.join(", "),
+
+          RecipeLevelDeclaredAllergensForReference:
+            recipeDeclaredAllergens.join(", "),
+
+          RecipesUsingProduct: [...product.recipes].sort().join(" | "),
+          Menus: [...product.menus].sort().join(" | "),
+          SourceRows: [...product.sourceRows].sort((a, b) => a - b).join(", "),
+
+          IgnoredBasic: product.ignoredBasic ? "Yes" : "No",
+          FreshRawItemPossibleAllergensSkipped: product.plainRawIngredient
+            ? "Yes"
+            : "No",
+          PossibleAllergensSkipped: product.possibleAllergensSkipped
+            ? "Yes"
+            : "No",
+        };
+      })
+      .sort(
+        (a, b) =>
+          a.Venue.localeCompare(b.Venue) ||
+          a.ProductName.localeCompare(b.ProductName)
+      );
+  };
+
+  const exportProductAllergenReport = () => {
+    const reportRows = getProductAllergenReportRows();
+
+    if (!reportRows.length) {
+      window.alert("No product allergen rows to export.");
+      return;
+    }
+
+    exportRowsToExcel(
+      reportRows,
+      "Product Allergens",
+      `product-allergens-by-location-${userShip || "ship"}.xlsx`
+    );
+
+    logUsageEvent("product_allergen_report_exported", {
+      module: "allergen",
+      ship: userShip,
+      rows: reportRows.length,
+    });
+  };
+
   return (
     <main style={styles.page}>
       <header style={styles.header}>
@@ -1465,12 +1734,16 @@ export default function AllergenModule({
           {message && <p style={styles.message}>{message}</p>}
 
           <div style={styles.warningText}>
-            This is a support tool only. Ingredient cards now show only allergens
-            that belong to that ingredient. Recipe-level allergens are shown in
-            recipe summaries but are not copied to every ingredient. Fresh herbs,
-            raw produce, water, salt, sugar, and pepper do not receive possible
-            hidden allergen warnings. Always verify against official recipe cards
-            and supplier specifications before answering a Sailor allergy request.
+            This support tool lists only the 14 required allergen groups:
+            cereals containing gluten, crustaceans, eggs, fish, peanuts,
+            soybeans, milk, tree nuts, celery, mustard, sesame seeds, sulphur
+            dioxide and sulphites, lupin, and molluscs. Ingredient cards show
+            allergens that belong to that ingredient. Recipe-level allergens are
+            shown in recipe summaries but are not copied to every ingredient.
+            Fresh herbs, raw produce, water, salt, sugar, and pepper do not
+            receive possible hidden allergen warnings. Always verify against
+            official recipe cards and supplier specifications before answering a
+            Sailor allergy request.
           </div>
 
           <button
@@ -1479,6 +1752,14 @@ export default function AllergenModule({
             disabled={!rows.length}
           >
             📥 Export Full Allergen Matrix
+          </button>
+
+          <button
+            style={styles.primaryButton}
+            onClick={exportProductAllergenReport}
+            disabled={!rows.length}
+          >
+            📥 Export Product Allergen Report
           </button>
         </div>
 
@@ -1675,7 +1956,10 @@ export default function AllergenModule({
 
               <div style={styles.infoBox}>
                 <strong>Possible hidden allergens</strong>
-                <AllergenBadges allergens={selectedRecipe.possibleHidden} possible />
+                <AllergenBadges
+                  allergens={selectedRecipe.possibleHidden}
+                  possible
+                />
               </div>
             </section>
 
