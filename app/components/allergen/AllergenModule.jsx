@@ -15,6 +15,14 @@ const cleanText = (value) =>
 
 const safeText = (value) => String(value || "").replace(/\s+/g, " ").trim();
 
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
 const normalizeCode = (value) => {
   const text = String(value ?? "").trim();
   if (!text) return "";
@@ -1049,10 +1057,6 @@ const parseIngredientByLocationWorkbook = (workbook) => {
       assigned
     );
 
-    // Prepared/pre-made red warning only applies to real item-code/product lines.
-    // Onboard sub-recipes like "(BR) - 2019 - VV" are made onboard and should not
-    // receive the supplier-label warning just because their name contains words
-    // like puree, sauce, paste, etc.
     const processedItem =
       !skipPossibleAllergens &&
       hasRealItemCode &&
@@ -1336,6 +1340,11 @@ export default function AllergenModule({
   const [selectedVenueKey, setSelectedVenueKey] = useState("");
   const [selectedRecipeKey, setSelectedRecipeKey] = useState("");
   const [selectedSubRecipeLine, setSelectedSubRecipeLine] = useState(null);
+
+  const [posterBuilderOpen, setPosterBuilderOpen] = useState(false);
+  const [posterSearch, setPosterSearch] = useState("");
+  const [selectedPosterRecipeKeys, setSelectedPosterRecipeKeys] = useState([]);
+
   const [venueSearch, setVenueSearch] = useState("");
   const [recipeSearch, setRecipeSearch] = useState("");
   const [ingredientSearch, setIngredientSearch] = useState("");
@@ -1366,6 +1375,9 @@ export default function AllergenModule({
     setSelectedVenueKey(parsed.venues[0]?.venueKey || "");
     setSelectedRecipeKey("");
     setSelectedSubRecipeLine(null);
+    setPosterBuilderOpen(false);
+    setPosterSearch("");
+    setSelectedPosterRecipeKeys([]);
     setIngredientSearch("");
 
     return parsed;
@@ -1721,6 +1733,518 @@ export default function AllergenModule({
     [rows]
   );
 
+  const posterRecipeOptions = useMemo(() => {
+    if (!selectedVenue) return [];
+
+    const query = posterSearch.toLowerCase().trim();
+
+    return selectedVenue.recipes.filter((recipe) => {
+      if (!query) return true;
+
+      return [
+        recipe.recipeCode,
+        recipe.recipeName,
+        recipe.menuCode,
+        recipe.menuName,
+        recipe.allergens.join(" "),
+        recipe.possibleHidden.join(" "),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [selectedVenue, posterSearch]);
+
+  const selectedPosterRecipes = useMemo(() => {
+    if (!selectedVenue) return [];
+
+    const selectedSet = new Set(selectedPosterRecipeKeys);
+
+    return selectedVenue.recipes.filter((recipe) =>
+      selectedSet.has(recipe.recipeKey)
+    );
+  }, [selectedVenue, selectedPosterRecipeKeys]);
+
+  const togglePosterRecipe = (recipeKey) => {
+    setSelectedPosterRecipeKeys((current) =>
+      current.includes(recipeKey)
+        ? current.filter((key) => key !== recipeKey)
+        : [...current, recipeKey]
+    );
+  };
+
+  const selectAllPosterRecipesShown = () => {
+    setSelectedPosterRecipeKeys((current) => [
+      ...new Set([
+        ...current,
+        ...posterRecipeOptions.map((recipe) => recipe.recipeKey),
+      ]),
+    ]);
+  };
+
+  const clearPosterRecipes = () => {
+    setSelectedPosterRecipeKeys([]);
+  };
+
+  const getRecipePosterIngredients = (recipe) => {
+    const combined = [...(recipe.ingredients || []), ...(recipe.subRecipes || [])];
+
+    return combined
+      .filter((item) => !item.ignoredBasic)
+      .map((item) => item.ingredientName)
+      .filter(Boolean)
+      .slice(0, 10);
+  };
+
+  const getPosterBadgeHtml = (allergen, possible = false) => {
+    const config = ALLERGEN_DISPLAY[allergen] || {
+      icon: "⚠️",
+      color: "#555",
+    };
+
+    const background = possible ? "#fff0f0" : "#ffffff";
+    const borderColor = possible ? "#b00020" : config.color;
+    const textColor = possible ? "#b00020" : config.color;
+
+    return `
+      <span
+        class="poster-badge"
+        style="
+          border-color: ${escapeHtml(borderColor)};
+          color: ${escapeHtml(textColor)};
+          background: ${background};
+        "
+      >
+        <span>${escapeHtml(config.icon || "⚠️")}</span>
+        <span>${possible ? "Possible " : ""}${escapeHtml(allergen)}</span>
+      </span>
+    `;
+  };
+
+  const printAllergenPoster = () => {
+    if (!selectedVenue) {
+      window.alert("Choose a venue first.");
+      return;
+    }
+
+    if (!selectedPosterRecipes.length) {
+      window.alert("Choose at least one recipe for the poster.");
+      return;
+    }
+
+    const allPosterAllergens = sortAllergens(
+      selectedPosterRecipes.flatMap((recipe) => [
+        ...(recipe.allergens || []),
+        ...(recipe.possibleHidden || []),
+      ])
+    );
+
+    const legendHtml = ALLERGEN_ORDER.map((allergen) => {
+      const active = allPosterAllergens.includes(allergen);
+      const config = ALLERGEN_DISPLAY[allergen] || {
+        icon: "⚠️",
+        color: "#555",
+      };
+
+      return `
+        <div class="legend-pill ${active ? "legend-active" : ""}">
+          <span>${escapeHtml(config.icon || "⚠️")}</span>
+          <span>${escapeHtml(allergen)}</span>
+        </div>
+      `;
+    }).join("");
+
+    const recipeCardsHtml = selectedPosterRecipes
+      .map((recipe, index) => {
+        const realAllergens = sortAllergens(recipe.allergens || []);
+        const possibleHidden = sortAllergens(recipe.possibleHidden || []);
+        const ingredients = getRecipePosterIngredients(recipe);
+
+        const realHtml = realAllergens.length
+          ? realAllergens.map((allergen) => getPosterBadgeHtml(allergen)).join("")
+          : `<span class="poster-none">No declared allergens found</span>`;
+
+        const possibleHtml = possibleHidden.length
+          ? `
+            <div class="possible-row">
+              <div class="poster-section-label">Possible hidden / check label</div>
+              <div>${possibleHidden
+                .map((allergen) => getPosterBadgeHtml(allergen, true))
+                .join("")}</div>
+            </div>
+          `
+          : "";
+
+        const ingredientsHtml = ingredients.length
+          ? ingredients
+              .map((ingredient) => `<li>${escapeHtml(ingredient)}</li>`)
+              .join("")
+          : `<li>No ingredient detail found</li>`;
+
+        return `
+          <article class="recipe-poster-card">
+            <div class="recipe-number">${index + 1}</div>
+
+            <div class="recipe-card-header">
+              <h2>${escapeHtml(recipe.recipeName || "Unnamed Recipe")}</h2>
+              <div class="recipe-meta">
+                Recipe ${escapeHtml(recipe.recipeCode || "N/A")}
+                ${recipe.menuName ? ` • ${escapeHtml(recipe.menuName)}` : ""}
+              </div>
+            </div>
+
+            <div class="poster-section-label">Allergens</div>
+            <div class="badge-wrap">${realHtml}</div>
+
+            ${possibleHtml}
+
+            <div class="ingredients-box">
+              <div class="poster-section-label">Key ingredients / sub-recipes</div>
+              <ul>${ingredientsHtml}</ul>
+            </div>
+          </article>
+        `;
+      })
+      .join("");
+
+    const html = `
+      <html>
+        <head>
+          <title>Allergen Poster - ${escapeHtml(selectedVenue.restaurantName)}</title>
+          <style>
+            @page {
+              size: A4 landscape;
+              margin: 10mm;
+            }
+
+            * {
+              box-sizing: border-box;
+            }
+
+            body {
+              margin: 0;
+              padding: 0;
+              font-family: Arial, sans-serif;
+              color: #111;
+              background: #f3f4f6;
+            }
+
+            .poster-page {
+              min-height: 100vh;
+              padding: 22px;
+              background:
+                radial-gradient(circle at top left, rgba(224,0,0,0.12), transparent 28%),
+                linear-gradient(135deg, #ffffff 0%, #f7f7f7 48%, #ececec 100%);
+            }
+
+            .poster-header {
+              display: grid;
+              grid-template-columns: 1fr auto;
+              gap: 20px;
+              align-items: center;
+              padding: 22px 24px;
+              border-radius: 24px;
+              background: #111;
+              color: #fff;
+              box-shadow: 0 12px 34px rgba(0,0,0,0.18);
+            }
+
+            .poster-header h1 {
+              margin: 0;
+              font-size: 34px;
+              line-height: 1.05;
+              letter-spacing: -0.8px;
+            }
+
+            .poster-subtitle {
+              margin-top: 8px;
+              font-size: 15px;
+              opacity: 0.86;
+            }
+
+            .poster-count {
+              padding: 14px 18px;
+              border-radius: 18px;
+              background: #fff;
+              color: #111;
+              font-weight: 900;
+              text-align: center;
+              min-width: 150px;
+            }
+
+            .poster-count strong {
+              display: block;
+              font-size: 32px;
+              line-height: 1;
+            }
+
+            .legend {
+              margin-top: 16px;
+              padding: 14px;
+              border-radius: 20px;
+              background: rgba(255,255,255,0.9);
+              display: flex;
+              flex-wrap: wrap;
+              gap: 7px;
+              border: 1px solid rgba(0,0,0,0.08);
+            }
+
+            .legend-pill {
+              display: inline-flex;
+              align-items: center;
+              gap: 5px;
+              padding: 6px 9px;
+              border-radius: 999px;
+              background: #f2f2f2;
+              color: #777;
+              font-size: 11px;
+              font-weight: 800;
+              opacity: 0.45;
+            }
+
+            .legend-active {
+              background: #111;
+              color: #fff;
+              opacity: 1;
+            }
+
+            .recipe-grid {
+              margin-top: 18px;
+              display: grid;
+              grid-template-columns: repeat(3, minmax(0, 1fr));
+              gap: 14px;
+            }
+
+            .recipe-poster-card {
+              position: relative;
+              break-inside: avoid;
+              min-height: 260px;
+              padding: 18px;
+              border-radius: 22px;
+              background: #fff;
+              border: 1px solid rgba(0,0,0,0.08);
+              box-shadow: 0 10px 26px rgba(0,0,0,0.10);
+              overflow: hidden;
+            }
+
+            .recipe-poster-card::before {
+              content: "";
+              position: absolute;
+              inset: 0 0 auto 0;
+              height: 7px;
+              background: linear-gradient(90deg, #e00000, #111, #e00000);
+            }
+
+            .recipe-number {
+              position: absolute;
+              top: 12px;
+              right: 12px;
+              width: 34px;
+              height: 34px;
+              border-radius: 999px;
+              background: #111;
+              color: #fff;
+              display: grid;
+              place-items: center;
+              font-weight: 900;
+            }
+
+            .recipe-card-header {
+              padding-right: 38px;
+            }
+
+            .recipe-card-header h2 {
+              margin: 0 0 5px;
+              font-size: 21px;
+              line-height: 1.08;
+            }
+
+            .recipe-meta {
+              color: #666;
+              font-size: 12px;
+              font-weight: 700;
+            }
+
+            .poster-section-label {
+              margin: 14px 0 6px;
+              color: #555;
+              font-size: 11px;
+              text-transform: uppercase;
+              letter-spacing: 0.8px;
+              font-weight: 900;
+            }
+
+            .badge-wrap {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 5px;
+            }
+
+            .poster-badge {
+              display: inline-flex;
+              align-items: center;
+              gap: 5px;
+              border: 1.5px solid;
+              border-radius: 999px;
+              padding: 5px 8px;
+              font-size: 11px;
+              font-weight: 900;
+              line-height: 1.1;
+            }
+
+            .poster-none {
+              color: #777;
+              font-size: 12px;
+              font-weight: 700;
+            }
+
+            .possible-row {
+              padding: 9px;
+              border-radius: 14px;
+              background: #fff7f7;
+              border: 1px solid #ffd1d1;
+              margin-top: 10px;
+            }
+
+            .ingredients-box {
+              margin-top: 10px;
+              padding: 10px;
+              border-radius: 15px;
+              background: #f7f7f7;
+            }
+
+            .ingredients-box ul {
+              margin: 0;
+              padding-left: 18px;
+              columns: 2;
+              column-gap: 20px;
+            }
+
+            .ingredients-box li {
+              font-size: 11px;
+              margin-bottom: 3px;
+              break-inside: avoid;
+            }
+
+            .poster-footer {
+              margin-top: 18px;
+              padding: 12px 16px;
+              border-radius: 18px;
+              background: #fff4d6;
+              color: #8a5a00;
+              font-size: 13px;
+              font-weight: 800;
+              border: 1px solid #f1d28a;
+            }
+
+            .no-print {
+              position: fixed;
+              right: 16px;
+              bottom: 16px;
+              display: flex;
+              gap: 8px;
+            }
+
+            .no-print button {
+              border: 0;
+              border-radius: 999px;
+              background: #111;
+              color: #fff;
+              padding: 12px 16px;
+              cursor: pointer;
+              font-weight: 900;
+              box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+            }
+
+            @media print {
+              body {
+                background: #fff;
+              }
+
+              .poster-page {
+                padding: 0;
+                background: #fff;
+              }
+
+              .no-print {
+                display: none;
+              }
+
+              .recipe-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+              }
+
+              .recipe-poster-card {
+                box-shadow: none;
+              }
+            }
+          </style>
+        </head>
+
+        <body>
+          <main class="poster-page">
+            <section class="poster-header">
+              <div>
+                <h1>Allergen Poster</h1>
+                <div class="poster-subtitle">
+                  ${escapeHtml(selectedVenue.restaurantName)}
+                  • Generated ${escapeHtml(new Date().toLocaleString())}
+                </div>
+              </div>
+
+              <div class="poster-count">
+                <strong>${selectedPosterRecipes.length}</strong>
+                recipe${selectedPosterRecipes.length === 1 ? "" : "s"}
+              </div>
+            </section>
+
+            <section class="legend">
+              ${legendHtml}
+            </section>
+
+            <section class="recipe-grid">
+              ${recipeCardsHtml}
+            </section>
+
+            <section class="poster-footer">
+              Support tool only. Always verify against official recipe cards,
+              supplier labels, and onboard allergy procedures before answering a
+              Sailor allergy request.
+            </section>
+          </main>
+
+          <div class="no-print">
+            <button onclick="window.print()">🖨️ Print Poster</button>
+            <button onclick="window.close()">Close</button>
+          </div>
+
+          <script>
+            window.setTimeout(() => window.print(), 450);
+          </script>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open("", "_blank");
+
+    if (!printWindow) {
+      window.alert("Print window was blocked. Allow popups and try again.");
+      return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+
+    logUsageEvent("allergen_poster_printed", {
+      module: "allergen",
+      ship: userShip,
+      venue: selectedVenue.restaurantName,
+      recipeCount: selectedPosterRecipes.length,
+      allergens: allPosterAllergens,
+    });
+  };
+
   const exportRecipeMatrix = () => {
     const exportRows = rows.map((row, index) => ({
       Number: index + 1,
@@ -2069,6 +2593,9 @@ export default function AllergenModule({
                 setSelectedVenueKey(venue.venueKey);
                 setSelectedRecipeKey("");
                 setSelectedSubRecipeLine(null);
+                setPosterBuilderOpen(false);
+                setPosterSearch("");
+                setSelectedPosterRecipeKeys([]);
                 setIngredientSearch("");
               }}
             >
@@ -2107,8 +2634,121 @@ export default function AllergenModule({
               </p>
             </div>
 
-            <div style={styles.shipBadge}>{filteredRecipes.length} recipe(s)</div>
+            <div style={styles.headerActions}>
+              <button
+                type="button"
+                style={styles.backButton}
+                onClick={() => {
+                  setPosterBuilderOpen((current) => !current);
+                  setSelectedSubRecipeLine(null);
+                }}
+              >
+                🎨 Poster Builder
+              </button>
+
+              <div style={styles.shipBadge}>{filteredRecipes.length} recipe(s)</div>
+            </div>
           </div>
+
+          {posterBuilderOpen && (
+            <section style={localStyles.posterBuilderBox}>
+              <div style={localStyles.posterBuilderHeader}>
+                <div>
+                  <h3 style={localStyles.posterBuilderTitle}>
+                    🎨 Build Allergen Poster
+                  </h3>
+
+                  <div style={localStyles.posterBuilderSubtext}>
+                    Select recipes from {selectedVenue.restaurantName}, then print
+                    one combined poster.
+                  </div>
+                </div>
+
+                <div style={localStyles.posterSelectedCount}>
+                  {selectedPosterRecipes.length} selected
+                </div>
+              </div>
+
+              <input
+                placeholder="Search recipes for poster..."
+                value={posterSearch}
+                onChange={(event) => setPosterSearch(event.target.value)}
+                style={styles.searchInput}
+              />
+
+              <div style={styles.headerActions}>
+                <button
+                  type="button"
+                  style={styles.backButton}
+                  onClick={selectAllPosterRecipesShown}
+                  disabled={!posterRecipeOptions.length}
+                >
+                  Select Shown
+                </button>
+
+                <button
+                  type="button"
+                  style={styles.backButton}
+                  onClick={clearPosterRecipes}
+                  disabled={!selectedPosterRecipeKeys.length}
+                >
+                  Clear
+                </button>
+
+                <button
+                  type="button"
+                  style={styles.primaryButton}
+                  onClick={printAllergenPoster}
+                  disabled={!selectedPosterRecipeKeys.length}
+                >
+                  🖨️ Print Allergen Poster
+                </button>
+              </div>
+
+              <div style={localStyles.posterRecipePickerGrid}>
+                {posterRecipeOptions.map((recipe) => {
+                  const selected = selectedPosterRecipeKeys.includes(
+                    recipe.recipeKey
+                  );
+
+                  const posterAllergens = sortAllergens([
+                    ...(recipe.allergens || []),
+                    ...(recipe.possibleHidden || []),
+                  ]);
+
+                  return (
+                    <label
+                      key={`poster-${recipe.recipeKey}`}
+                      style={{
+                        ...localStyles.posterRecipeOption,
+                        ...(selected
+                          ? localStyles.posterRecipeOptionActive
+                          : {}),
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() => togglePosterRecipe(recipe.recipeKey)}
+                      />
+
+                      <div style={localStyles.posterRecipeText}>
+                        <strong>{recipe.recipeName}</strong>
+                        <span>Recipe code: {recipe.recipeCode || "N/A"}</span>
+                        <span>
+                          {posterAllergens.join(", ") || "No allergens found"}
+                        </span>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {!posterRecipeOptions.length && (
+                <p style={styles.emptyText}>No recipes match this poster search.</p>
+              )}
+            </section>
+          )}
 
           <div style={localStyles.recipeGrid}>
             {filteredRecipes.map((recipe) => (
@@ -2716,5 +3356,74 @@ const localStyles = {
     marginTop: 6,
     color: "#555",
     fontSize: 13,
+  },
+
+  posterBuilderBox: {
+    marginBottom: 18,
+    padding: 16,
+    borderRadius: 18,
+    background: "linear-gradient(135deg, #ffffff 0%, #f7f7f7 100%)",
+    border: "1px solid #ddd",
+    boxShadow: "0 8px 22px rgba(0,0,0,0.06)",
+  },
+
+  posterBuilderHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 12,
+    alignItems: "flex-start",
+    marginBottom: 12,
+    flexWrap: "wrap",
+  },
+
+  posterBuilderTitle: {
+    margin: 0,
+    fontSize: 20,
+  },
+
+  posterBuilderSubtext: {
+    marginTop: 4,
+    color: "#666",
+    fontSize: 13,
+    fontWeight: "bold",
+  },
+
+  posterSelectedCount: {
+    padding: "9px 12px",
+    borderRadius: 999,
+    background: "#111",
+    color: "#fff",
+    fontWeight: "bold",
+  },
+
+  posterRecipePickerGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+    gap: 8,
+    marginTop: 12,
+  },
+
+  posterRecipeOption: {
+    border: "1px solid #ddd",
+    borderRadius: 14,
+    background: "#fff",
+    padding: 10,
+    display: "grid",
+    gridTemplateColumns: "auto 1fr",
+    gap: 8,
+    cursor: "pointer",
+    alignItems: "flex-start",
+  },
+
+  posterRecipeOptionActive: {
+    border: "2px solid #111",
+    background: "#f2f2f2",
+  },
+
+  posterRecipeText: {
+    display: "grid",
+    gap: 3,
+    fontSize: 12,
+    color: "#555",
   },
 };
