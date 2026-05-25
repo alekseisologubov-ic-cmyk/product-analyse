@@ -97,6 +97,26 @@ const normalizeIngredientTextForMatch = (value) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const normalizeRecipeLookupName = (value) =>
+  normalizeIngredientTextForMatch(value)
+    .replace(/\bVV\b/g, " ")
+    .replace(/\bBR\b/g, " ")
+    .replace(/\bSC\b/g, " ")
+    .replace(/\bVL\b/g, " ")
+    .replace(/\bRL\b/g, " ")
+    .replace(/\b20\d{2}\b/g, " ")
+    .replace(/\b19\d{2}\b/g, " ")
+    .replace(/\bSUB RECIPE\b/g, " ")
+    .replace(/\bRECIPE\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const getRecipeLookupKeys = (value) =>
+  [
+    normalizeIngredientTextForMatch(value),
+    normalizeRecipeLookupName(value),
+  ].filter(Boolean);
+
 const escapeRegex = (value) =>
   String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -282,10 +302,29 @@ const shouldSkipPossibleAllergensForIngredient = (...values) => {
   );
 };
 
-const isSubRecipeRow = (item) =>
-  item?.assignedType === "R" ||
-  item?.hasProductRelation === "N" ||
-  item?.recipeIsBasic === "Y";
+const isSubRecipeRow = (item) => {
+  const assignedType = cleanText(item?.assignedType);
+  const hasProductRelation = cleanText(item?.hasProductRelation);
+  const recipeIsBasic = cleanText(item?.recipeIsBasic);
+  const nameText = cleanText(`${item?.ingredientName || ""} ${item?.assigned || ""}`);
+
+  if (assignedType === "R" || assignedType.includes("RECIPE")) {
+    return true;
+  }
+
+  const looksLikeRecipeName =
+    nameText.includes(" - VV") ||
+    nameText.includes("(BR)") ||
+    nameText.includes("(SC)") ||
+    nameText.includes("(VL)") ||
+    nameText.includes("(RL)") ||
+    nameText.includes(" RECIPE");
+
+  return (
+    looksLikeRecipeName &&
+    (hasProductRelation === "N" || recipeIsBasic === "Y")
+  );
+};
 
 const ALLERGEN_DISPLAY = {
   "Cereals containing gluten": { icon: "🌾", color: "#8a5a00" },
@@ -1495,14 +1534,20 @@ export default function AllergenModule({
   const getSubRecipeRowsForLine = (subRecipeLine) => {
     if (!subRecipeLine) return [];
 
-    const candidateNameKeys = [
-      subRecipeLine.ingredientName,
-      subRecipeLine.assigned,
-    ]
-      .map((value) => normalizeIngredientTextForMatch(value))
-      .filter(Boolean);
+    const currentVenueKey = cleanText(subRecipeLine.restaurantName);
 
-    const candidateNameSet = new Set(candidateNameKeys);
+    const sourceParentRecipeKey = cleanText(
+      `${subRecipeLine.recipeCode}|${subRecipeLine.recipeName}|${subRecipeLine.menuCode}|${subRecipeLine.menuName}`
+    );
+
+    const candidateNameSet = new Set(
+      [
+        subRecipeLine.ingredientName,
+        subRecipeLine.assigned,
+      ]
+        .flatMap((value) => getRecipeLookupKeys(value))
+        .filter(Boolean)
+    );
 
     const candidateCodes = [
       subRecipeLine.ingredientCode,
@@ -1513,42 +1558,93 @@ export default function AllergenModule({
       .map((value) => normalizeCode(value))
       .filter(Boolean);
 
-    const uniqueCandidateCodes = [...new Set(candidateCodes)];
-    const currentVenueKey = cleanText(subRecipeLine.restaurantName);
+    const candidateCodeSet = new Set(candidateCodes);
 
-    const rowMatchesSubRecipe = (row, sameVenueOnly = true) => {
-      if (!row || row.sourceRow === subRecipeLine.sourceRow) return false;
+    const isNotSameParentRecipe = (row) => {
+      const rowRecipeKey = cleanText(
+        `${row.recipeCode}|${row.recipeName}|${row.menuCode}|${row.menuName}`
+      );
 
-      if (sameVenueOnly && cleanText(row.restaurantName) !== currentVenueKey) {
-        return false;
-      }
-
-      const rowRecipeNameKey = normalizeIngredientTextForMatch(row.recipeName);
-      const rowMenuNameKey = normalizeIngredientTextForMatch(row.menuName);
-      const rowRecipeCode = normalizeCode(row.recipeCode);
-
-      const nameMatches =
-        candidateNameSet.has(rowRecipeNameKey) ||
-        candidateNameSet.has(rowMenuNameKey);
-
-      const codeMatches =
-        uniqueCandidateCodes.length > 0 &&
-        uniqueCandidateCodes.includes(rowRecipeCode);
-
-      return nameMatches || codeMatches;
+      return rowRecipeKey !== sourceParentRecipeKey;
     };
 
-    const sameVenueRows = rows
-      .filter((row) => rowMatchesSubRecipe(row, true))
-      .sort((a, b) => Number(a.sourceRow || 0) - Number(b.sourceRow || 0));
+    const sortBySourceRow = (list) =>
+      [...list].sort(
+        (a, b) => Number(a.sourceRow || 0) - Number(b.sourceRow || 0)
+      );
 
-    if (sameVenueRows.length) {
-      return sameVenueRows;
+    const rowNameMatchesCandidate = (value) =>
+      getRecipeLookupKeys(value).some((key) => candidateNameSet.has(key));
+
+    const recipeNameMatches = (row) => rowNameMatchesCandidate(row.recipeName);
+
+    const menuNameMatches = (row) => rowNameMatchesCandidate(row.menuName);
+
+    const recipeCodeMatches = (row) =>
+      candidateCodeSet.size > 0 &&
+      candidateCodeSet.has(normalizeCode(row.recipeCode));
+
+    const sameVenue = (row) => cleanText(row.restaurantName) === currentVenueKey;
+
+    const sameVenueRecipeNameRows = rows.filter(
+      (row) =>
+        row.sourceRow !== subRecipeLine.sourceRow &&
+        isNotSameParentRecipe(row) &&
+        sameVenue(row) &&
+        recipeNameMatches(row)
+    );
+
+    if (sameVenueRecipeNameRows.length) {
+      return sortBySourceRow(sameVenueRecipeNameRows);
     }
 
-    return rows
-      .filter((row) => rowMatchesSubRecipe(row, false))
-      .sort((a, b) => Number(a.sourceRow || 0) - Number(b.sourceRow || 0));
+    const sameVenueRecipeCodeRows = rows.filter(
+      (row) =>
+        row.sourceRow !== subRecipeLine.sourceRow &&
+        isNotSameParentRecipe(row) &&
+        sameVenue(row) &&
+        recipeCodeMatches(row)
+    );
+
+    if (sameVenueRecipeCodeRows.length) {
+      return sortBySourceRow(sameVenueRecipeCodeRows);
+    }
+
+    const anyVenueRecipeNameRows = rows.filter(
+      (row) =>
+        row.sourceRow !== subRecipeLine.sourceRow &&
+        isNotSameParentRecipe(row) &&
+        recipeNameMatches(row)
+    );
+
+    if (anyVenueRecipeNameRows.length) {
+      return sortBySourceRow(anyVenueRecipeNameRows);
+    }
+
+    const anyVenueRecipeCodeRows = rows.filter(
+      (row) =>
+        row.sourceRow !== subRecipeLine.sourceRow &&
+        isNotSameParentRecipe(row) &&
+        recipeCodeMatches(row)
+    );
+
+    if (anyVenueRecipeCodeRows.length) {
+      return sortBySourceRow(anyVenueRecipeCodeRows);
+    }
+
+    const sameVenueMenuNameRows = rows.filter(
+      (row) =>
+        row.sourceRow !== subRecipeLine.sourceRow &&
+        isNotSameParentRecipe(row) &&
+        sameVenue(row) &&
+        menuNameMatches(row)
+    );
+
+    if (sameVenueMenuNameRows.length) {
+      return sortBySourceRow(sameVenueMenuNameRows);
+    }
+
+    return [];
   };
 
   const selectedSubRecipeRows = useMemo(
@@ -2074,76 +2170,102 @@ export default function AllergenModule({
             />
 
             <div style={localStyles.ingredientGrid}>
-              {visibleIngredients.map((item) => (
-                <div
-                  key={`${item.sourceRow}-${item.ingredientCode}-${item.ingredientName}`}
-                  style={{
-                    ...localStyles.ingredientCard,
-                    ...(item.hiddenWarnings.length > 0
-                      ? localStyles.ingredientCardWarning
-                      : {}),
-                    ...(item.possibleHiddenAllergens.length > 0 &&
-                    !item.hiddenWarnings.length
-                      ? localStyles.ingredientCardPossible
-                      : {}),
-                  }}
-                >
-                  <div style={localStyles.ingredientTitle}>
-                    {item.ingredientName}
-                  </div>
+              {visibleIngredients.map((item) => {
+                const itemIsSubRecipe = isSubRecipeRow(item);
 
-                  {item.assigned && item.assigned !== item.ingredientName && (
-                    <div style={localStyles.compactMeta}>
-                      Product / Assigned: {item.assigned}
+                return (
+                  <div
+                    key={`${item.sourceRow}-${item.ingredientCode}-${item.ingredientName}`}
+                    role={itemIsSubRecipe ? "button" : undefined}
+                    tabIndex={itemIsSubRecipe ? 0 : undefined}
+                    onClick={() => {
+                      if (itemIsSubRecipe) {
+                        setSelectedSubRecipeLine(item);
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (
+                        itemIsSubRecipe &&
+                        (event.key === "Enter" || event.key === " ")
+                      ) {
+                        event.preventDefault();
+                        setSelectedSubRecipeLine(item);
+                      }
+                    }}
+                    style={{
+                      ...localStyles.ingredientCard,
+                      ...(itemIsSubRecipe
+                        ? localStyles.clickableIngredientCard
+                        : {}),
+                      ...(item.hiddenWarnings.length > 0
+                        ? localStyles.ingredientCardWarning
+                        : {}),
+                      ...(item.possibleHiddenAllergens.length > 0 &&
+                      !item.hiddenWarnings.length
+                        ? localStyles.ingredientCardPossible
+                        : {}),
+                    }}
+                  >
+                    <div style={localStyles.ingredientTitle}>
+                      {item.ingredientName}
                     </div>
-                  )}
 
-                  <div style={localStyles.typePill}>
-                    {isSubRecipeRow(item) ? "Sub Recipe" : "Ingredient"}
-                  </div>
+                    {item.assigned && item.assigned !== item.ingredientName && (
+                      <div style={localStyles.compactMeta}>
+                        Product / Assigned: {item.assigned}
+                      </div>
+                    )}
 
-                  {isSubRecipeRow(item) && (
-                    <button
-                      type="button"
-                      style={localStyles.subRecipeButton}
-                      onClick={() => setSelectedSubRecipeLine(item)}
-                    >
-                      🔎 Open Sub Recipe Ingredients
-                    </button>
-                  )}
-
-                  {item.ignoredBasic && (
-                    <div style={styles.statusNeutral}>Ignored basic item</div>
-                  )}
-
-                  {item.plainRawIngredient && !item.ignoredBasic && (
-                    <div style={styles.statusNeutral}>
-                      Fresh/raw item — possible allergens skipped
+                    <div style={localStyles.typePill}>
+                      {itemIsSubRecipe ? "Sub Recipe" : "Ingredient"}
                     </div>
-                  )}
 
-                  <div>
-                    <strong>Declared / real:</strong>
-                    <AllergenBadges allergens={item.explicitAllergens} />
-                  </div>
+                    {itemIsSubRecipe && (
+                      <button
+                        type="button"
+                        style={localStyles.subRecipeButton}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedSubRecipeLine(item);
+                        }}
+                      >
+                        🔎 Open Sub Recipe Ingredients
+                      </button>
+                    )}
 
-                  {item.possibleHiddenAllergens.length > 0 && (
+                    {item.ignoredBasic && (
+                      <div style={styles.statusNeutral}>Ignored basic item</div>
+                    )}
+
+                    {item.plainRawIngredient && !item.ignoredBasic && (
+                      <div style={styles.statusNeutral}>
+                        Fresh/raw item — possible allergens skipped
+                      </div>
+                    )}
+
                     <div>
-                      <strong>Possible hidden:</strong>
-                      <AllergenBadges
-                        allergens={item.possibleHiddenAllergens}
-                        possible
-                      />
+                      <strong>Declared / real:</strong>
+                      <AllergenBadges allergens={item.explicitAllergens} />
                     </div>
-                  )}
 
-                  {item.hiddenWarnings.map((warning, index) => (
-                    <div key={`${warning}-${index}`} style={styles.statusBad}>
-                      ⚠️ {warning}
-                    </div>
-                  ))}
-                </div>
-              ))}
+                    {item.possibleHiddenAllergens.length > 0 && (
+                      <div>
+                        <strong>Possible hidden:</strong>
+                        <AllergenBadges
+                          allergens={item.possibleHiddenAllergens}
+                          possible
+                        />
+                      </div>
+                    )}
+
+                    {item.hiddenWarnings.map((warning, index) => (
+                      <div key={`${warning}-${index}`} style={styles.statusBad}>
+                        ⚠️ {warning}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
             </div>
 
             {selectedSubRecipeLine && (
@@ -2214,84 +2336,110 @@ export default function AllergenModule({
                   )}
 
                   <div style={localStyles.ingredientGrid}>
-                    {selectedSubRecipeRows.map((subItem) => (
-                      <div
-                        key={`${subItem.sourceRow}-${subItem.ingredientCode}-${subItem.ingredientName}`}
-                        style={{
-                          ...localStyles.ingredientCard,
-                          ...(subItem.hiddenWarnings.length > 0
-                            ? localStyles.ingredientCardWarning
-                            : {}),
-                          ...(subItem.possibleHiddenAllergens.length > 0 &&
-                          !subItem.hiddenWarnings.length
-                            ? localStyles.ingredientCardPossible
-                            : {}),
-                        }}
-                      >
-                        <div style={localStyles.ingredientTitle}>
-                          {subItem.ingredientName}
-                        </div>
+                    {selectedSubRecipeRows.map((subItem) => {
+                      const subItemIsSubRecipe = isSubRecipeRow(subItem);
 
-                        {subItem.assigned &&
-                          subItem.assigned !== subItem.ingredientName && (
-                            <div style={localStyles.compactMeta}>
-                              Product / Assigned: {subItem.assigned}
+                      return (
+                        <div
+                          key={`${subItem.sourceRow}-${subItem.ingredientCode}-${subItem.ingredientName}`}
+                          role={subItemIsSubRecipe ? "button" : undefined}
+                          tabIndex={subItemIsSubRecipe ? 0 : undefined}
+                          onClick={() => {
+                            if (subItemIsSubRecipe) {
+                              setSelectedSubRecipeLine(subItem);
+                            }
+                          }}
+                          onKeyDown={(event) => {
+                            if (
+                              subItemIsSubRecipe &&
+                              (event.key === "Enter" || event.key === " ")
+                            ) {
+                              event.preventDefault();
+                              setSelectedSubRecipeLine(subItem);
+                            }
+                          }}
+                          style={{
+                            ...localStyles.ingredientCard,
+                            ...(subItemIsSubRecipe
+                              ? localStyles.clickableIngredientCard
+                              : {}),
+                            ...(subItem.hiddenWarnings.length > 0
+                              ? localStyles.ingredientCardWarning
+                              : {}),
+                            ...(subItem.possibleHiddenAllergens.length > 0 &&
+                            !subItem.hiddenWarnings.length
+                              ? localStyles.ingredientCardPossible
+                              : {}),
+                          }}
+                        >
+                          <div style={localStyles.ingredientTitle}>
+                            {subItem.ingredientName}
+                          </div>
+
+                          {subItem.assigned &&
+                            subItem.assigned !== subItem.ingredientName && (
+                              <div style={localStyles.compactMeta}>
+                                Product / Assigned: {subItem.assigned}
+                              </div>
+                            )}
+
+                          <div style={localStyles.typePill}>
+                            {subItemIsSubRecipe
+                              ? "Nested Sub Recipe"
+                              : "Ingredient"}
+                          </div>
+
+                          {subItemIsSubRecipe && (
+                            <button
+                              type="button"
+                              style={localStyles.subRecipeButton}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setSelectedSubRecipeLine(subItem);
+                              }}
+                            >
+                              🔎 Open Nested Sub Recipe
+                            </button>
+                          )}
+
+                          {subItem.ignoredBasic && (
+                            <div style={styles.statusNeutral}>
+                              Ignored basic item
                             </div>
                           )}
 
-                        <div style={localStyles.typePill}>
-                          {isSubRecipeRow(subItem)
-                            ? "Nested Sub Recipe"
-                            : "Ingredient"}
-                        </div>
+                          {subItem.plainRawIngredient && !subItem.ignoredBasic && (
+                            <div style={styles.statusNeutral}>
+                              Fresh/raw item — possible allergens skipped
+                            </div>
+                          )}
 
-                        {isSubRecipeRow(subItem) && (
-                          <button
-                            type="button"
-                            style={localStyles.subRecipeButton}
-                            onClick={() => setSelectedSubRecipeLine(subItem)}
-                          >
-                            🔎 Open Nested Sub Recipe
-                          </button>
-                        )}
-
-                        {subItem.ignoredBasic && (
-                          <div style={styles.statusNeutral}>
-                            Ignored basic item
-                          </div>
-                        )}
-
-                        {subItem.plainRawIngredient && !subItem.ignoredBasic && (
-                          <div style={styles.statusNeutral}>
-                            Fresh/raw item — possible allergens skipped
-                          </div>
-                        )}
-
-                        <div>
-                          <strong>Declared / real:</strong>
-                          <AllergenBadges allergens={subItem.explicitAllergens} />
-                        </div>
-
-                        {subItem.possibleHiddenAllergens.length > 0 && (
                           <div>
-                            <strong>Possible hidden:</strong>
-                            <AllergenBadges
-                              allergens={subItem.possibleHiddenAllergens}
-                              possible
-                            />
+                            <strong>Declared / real:</strong>
+                            <AllergenBadges allergens={subItem.explicitAllergens} />
                           </div>
-                        )}
 
-                        {subItem.hiddenWarnings.map((warning, index) => (
-                          <div
-                            key={`${warning}-${index}`}
-                            style={styles.statusBad}
-                          >
-                            ⚠️ {warning}
-                          </div>
-                        ))}
-                      </div>
-                    ))}
+                          {subItem.possibleHiddenAllergens.length > 0 && (
+                            <div>
+                              <strong>Possible hidden:</strong>
+                              <AllergenBadges
+                                allergens={subItem.possibleHiddenAllergens}
+                                possible
+                              />
+                            </div>
+                          )}
+
+                          {subItem.hiddenWarnings.map((warning, index) => (
+                            <div
+                              key={`${warning}-${index}`}
+                              style={styles.statusBad}
+                            >
+                              ⚠️ {warning}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -2428,6 +2576,11 @@ const localStyles = {
     gap: 4,
     fontSize: 11,
     alignContent: "start",
+  },
+
+  clickableIngredientCard: {
+    cursor: "pointer",
+    boxShadow: "0 4px 14px rgba(0,0,0,0.08)",
   },
 
   ingredientCardPossible: {
