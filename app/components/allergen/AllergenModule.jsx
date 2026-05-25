@@ -20,7 +20,11 @@ const normalizeCode = (value) => {
   if (!text) return "";
 
   const numberValue = Number(text);
-  if (Number.isFinite(numberValue) && String(Math.trunc(numberValue)) === text.replace(/\.0+$/, "")) {
+
+  if (
+    Number.isFinite(numberValue) &&
+    String(Math.trunc(numberValue)) === text.replace(/\.0+$/, "")
+  ) {
     return String(Math.trunc(numberValue));
   }
 
@@ -64,8 +68,11 @@ const getVenueNameColor = (venue) => {
   if (!text) return VENUE_NAME_COLORS[0];
 
   let hash = 0;
+
   for (let index = 0; index < text.length; index += 1) {
-    hash = (hash + text.charCodeAt(index) * (index + 1)) % VENUE_NAME_COLORS.length;
+    hash =
+      (hash + text.charCodeAt(index) * (index + 1)) %
+      VENUE_NAME_COLORS.length;
   }
 
   return VENUE_NAME_COLORS[hash];
@@ -77,6 +84,26 @@ const normalizeVenueName = (value) =>
     .replace(/\s+VV$/i, "")
     .replace(/\s+/g, " ")
     .trim();
+
+const normalizeIngredientTextForMatch = (value) =>
+  cleanText(value)
+    .replace(/[^A-Z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const escapeRegex = (value) =>
+  String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const textHasWordOrPhrase = (text, word) => {
+  const source = normalizeIngredientTextForMatch(text);
+  const target = normalizeIngredientTextForMatch(word);
+
+  if (!source || !target) return false;
+
+  return new RegExp(
+    `(^|[^A-Z0-9])${escapeRegex(target)}([^A-Z0-9]|$)`
+  ).test(source);
+};
 
 const IGNORED_BASIC_INGREDIENTS = [
   "WATER",
@@ -97,8 +124,87 @@ const IGNORED_BASIC_INGREDIENTS = [
   "GROUND BLACK PEPPER",
 ];
 
+const FRESH_HERB_OR_RAW_PRODUCE_WORDS = [
+  "HERB",
+  "HERBS",
+  "MINT",
+  "PARSLEY",
+  "BASIL",
+  "CILANTRO",
+  "CORIANDER",
+  "DILL",
+  "THYME",
+  "ROSEMARY",
+  "SAGE",
+  "OREGANO",
+  "MARJORAM",
+  "TARRAGON",
+  "CHERVIL",
+  "CHIVES",
+  "CHIVE",
+  "BAY LEAF",
+  "BAY LEAVES",
+  "LEMONGRASS",
+  "LEMON GRASS",
+  "KAFFIR LIME LEAF",
+  "LIME LEAF",
+  "LETTUCE",
+  "SPINACH",
+  "ARUGULA",
+  "ROCKET",
+  "KALE",
+  "CABBAGE",
+  "CARROT",
+  "ONION",
+  "GARLIC",
+  "SHALLOT",
+  "TOMATO",
+  "CUCUMBER",
+  "ZUCCHINI",
+  "COURGETTE",
+  "EGGPLANT",
+  "AUBERGINE",
+  "POTATO",
+  "MUSHROOM",
+  "CELERY",
+  "APPLE",
+  "ORANGE",
+  "LEMON",
+  "LIME",
+  "BANANA",
+  "BERRY",
+  "BERRIES",
+  "STRAWBERRY",
+  "BLUEBERRY",
+  "RASPBERRY",
+  "BLACKBERRY",
+];
+
+const PROCESSED_WORDS_THAT_BLOCK_RAW_PRODUCE_SKIP = [
+  "SAUCE",
+  "DRESSING",
+  "MARINADE",
+  "PASTE",
+  "PESTO",
+  "MAYONNAISE",
+  "AIOLI",
+  "BATTER",
+  "BREADING",
+  "CRUMB",
+  "CRUMBS",
+  "STUFFING",
+  "COOKIE",
+  "CAKE",
+  "BISCUIT",
+  "CRACKER",
+  "BREAD",
+  "PASTRY",
+  "GLAZE",
+  "SPREAD",
+];
+
 const isIgnoredBasicIngredient = (value) => {
-  const text = cleanText(value).replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+  const text = normalizeIngredientTextForMatch(value);
   if (!text) return false;
 
   if (IGNORED_BASIC_INGREDIENTS.includes(text)) return true;
@@ -111,41 +217,152 @@ const isIgnoredBasicIngredient = (value) => {
   ].some((rule) => rule.test(text));
 };
 
+const isPlainFreshHerbOrRawProduce = (...values) => {
+  const text = values
+    .map((value) => normalizeIngredientTextForMatch(value))
+    .join(" ");
+
+  if (!text.trim()) return false;
+
+  const hasProcessedWord = PROCESSED_WORDS_THAT_BLOCK_RAW_PRODUCE_SKIP.some(
+    (word) => textHasWordOrPhrase(text, word)
+  );
+
+  if (hasProcessedWord) return false;
+
+  return FRESH_HERB_OR_RAW_PRODUCE_WORDS.some((word) =>
+    textHasWordOrPhrase(text, word)
+  );
+};
+
+const shouldSkipPossibleAllergensForIngredient = (...values) => {
+  const text = values
+    .map((value) => normalizeIngredientTextForMatch(value))
+    .join(" ");
+
+  if (!text.trim()) return false;
+
+  return isIgnoredBasicIngredient(text) || isPlainFreshHerbOrRawProduce(...values);
+};
+
 const ALLERGEN_DISPLAY = {
   "Gluten / Wheat": { icon: "🌾", color: "#8a5a00" },
-  "Milk": { icon: "🥛", color: "#0057b8" },
-  "Eggs": { icon: "🥚", color: "#7a4f00" },
-  "Peanuts": { icon: "🥜", color: "#b00020" },
+  Milk: { icon: "🥛", color: "#0057b8" },
+  Eggs: { icon: "🥚", color: "#7a4f00" },
+  Peanuts: { icon: "🥜", color: "#b00020" },
   "Tree Nuts": { icon: "🌰", color: "#6b3f1d" },
-  "Soy": { icon: "🫘", color: "#2e7d32" },
-  "Sesame": { icon: "⚪", color: "#6a4a00" },
-  "Fish": { icon: "🐟", color: "#005f73" },
+  Soy: { icon: "🫘", color: "#2e7d32" },
+  Sesame: { icon: "⚪", color: "#6a4a00" },
+  Fish: { icon: "🐟", color: "#005f73" },
   "Crustacean Shellfish": { icon: "🦐", color: "#b00020" },
-  "Molluscs": { icon: "🦪", color: "#005f73" },
-  "Mustard": { icon: "🟡", color: "#8a5a00" },
-  "Celery": { icon: "🥬", color: "#2e7d32" },
-  "Lupin": { icon: "🌱", color: "#2e7d32" },
-  "Sulphites": { icon: "⚠️", color: "#8a5a00" },
+  Molluscs: { icon: "🦪", color: "#005f73" },
+  Mustard: { icon: "🟡", color: "#8a5a00" },
+  Celery: { icon: "🥬", color: "#2e7d32" },
+  Lupin: { icon: "🌱", color: "#2e7d32" },
+  Sulphites: { icon: "⚠️", color: "#8a5a00" },
 };
 
 const normalizeAllergenName = (value) => {
   const text = cleanText(value);
 
   if (!text) return "";
-  if (text.includes("GLUTEN") || text.includes("WHEAT") || text.includes("BARLEY") || text.includes("RYE") || text.includes("OATS")) return "Gluten / Wheat";
-  if (text.includes("MILK") || text.includes("LACTOSE") || text.includes("DAIRY")) return "Milk";
+
+  if (
+    [
+      "N/A",
+      "NA",
+      "NONE",
+      "NO",
+      "NO ALLERGEN",
+      "NO ALLERGENS",
+      "NULL",
+      "NIL",
+      "-",
+      "--",
+      "0",
+    ].includes(text)
+  ) {
+    return "";
+  }
+
+  if (
+    text.includes("GLUTEN") ||
+    text.includes("WHEAT") ||
+    text.includes("BARLEY") ||
+    text.includes("RYE") ||
+    text.includes("OATS")
+  ) {
+    return "Gluten / Wheat";
+  }
+
+  if (text.includes("MILK") || text.includes("LACTOSE") || text.includes("DAIRY")) {
+    return "Milk";
+  }
+
   if (text.includes("EGG")) return "Eggs";
   if (text.includes("PEANUT")) return "Peanuts";
-  if (text.includes("TREE NUT") || text.includes("NUTS") || text.includes("ALMOND") || text.includes("CASHEW") || text.includes("WALNUT") || text.includes("PECAN") || text.includes("PISTACHIO") || text.includes("HAZELNUT") || text.includes("MACADAMIA")) return "Tree Nuts";
+
+  if (
+    text.includes("TREE NUT") ||
+    text.includes("NUTS") ||
+    text.includes("ALMOND") ||
+    text.includes("CASHEW") ||
+    text.includes("WALNUT") ||
+    text.includes("PECAN") ||
+    text.includes("PISTACHIO") ||
+    text.includes("HAZELNUT") ||
+    text.includes("MACADAMIA")
+  ) {
+    return "Tree Nuts";
+  }
+
   if (text.includes("SOY")) return "Soy";
   if (text.includes("SESAME") || text.includes("TAHINI")) return "Sesame";
-  if (text.includes("CRUSTACEAN") || text.includes("SHRIMP") || text.includes("PRAWN") || text.includes("CRAB") || text.includes("LOBSTER")) return "Crustacean Shellfish";
-  if (text.includes("MOLLUSC") || text.includes("MOLLUSK") || text.includes("CLAM") || text.includes("MUSSEL") || text.includes("OYSTER") || text.includes("SCALLOP") || text.includes("SQUID") || text.includes("OCTOPUS")) return "Molluscs";
-  if (text.includes("FISH") || text.includes("ANCHOV") || text.includes("SALMON") || text.includes("TUNA") || text.includes("COD")) return "Fish";
+
+  if (
+    text.includes("CRUSTACEAN") ||
+    text.includes("SHRIMP") ||
+    text.includes("PRAWN") ||
+    text.includes("CRAB") ||
+    text.includes("LOBSTER")
+  ) {
+    return "Crustacean Shellfish";
+  }
+
+  if (
+    text.includes("MOLLUSC") ||
+    text.includes("MOLLUSK") ||
+    text.includes("CLAM") ||
+    text.includes("MUSSEL") ||
+    text.includes("OYSTER") ||
+    text.includes("SCALLOP") ||
+    text.includes("SQUID") ||
+    text.includes("OCTOPUS")
+  ) {
+    return "Molluscs";
+  }
+
+  if (
+    text.includes("FISH") ||
+    text.includes("ANCHOV") ||
+    text.includes("SALMON") ||
+    text.includes("TUNA") ||
+    text.includes("COD")
+  ) {
+    return "Fish";
+  }
+
   if (text.includes("MUSTARD")) return "Mustard";
   if (text.includes("CELERY") || text.includes("CELERIAC")) return "Celery";
   if (text.includes("LUPIN")) return "Lupin";
-  if (text.includes("SULPH") || text.includes("SULF") || text.includes("METABISULFITE")) return "Sulphites";
+
+  if (
+    text.includes("SULPH") ||
+    text.includes("SULF") ||
+    text.includes("METABISULFITE")
+  ) {
+    return "Sulphites";
+  }
 
   return safeText(value);
 };
@@ -165,20 +382,164 @@ const splitAllergens = (...values) => {
 };
 
 const KEYWORD_RULES = [
-  { allergen: "Gluten / Wheat", words: ["wheat", "flour", "bread", "bun", "baguette", "brioche", "croissant", "panko", "breadcrumb", "pasta", "noodle", "semolina", "barley", "rye", "malt", "couscous", "cracker", "cookie", "cake", "tart", "pie shell", "pastry", "phyllo", "filo", "tortilla", "wrap", "soy sauce"] },
-  { allergen: "Milk", words: ["milk", "cream", "butter", "cheese", "yogurt", "yoghurt", "parmesan", "mozzarella", "ricotta", "mascarpone", "whey", "casein", "lactose", "chocolate", "white chocolate", "milk chocolate", "caramel"] },
-  { allergen: "Eggs", words: ["egg", "eggs", "mayonnaise", "mayo", "aioli", "meringue", "custard", "hollandaise"] },
-  { allergen: "Peanuts", words: ["peanut", "peanutbutter", "peanut butter", "satay"] },
-  { allergen: "Tree Nuts", words: ["almond", "walnut", "pecan", "cashew", "hazelnut", "pistachio", "macadamia", "brazil nut", "pine nut", "marzipan", "praline", "gianduja", "nutella"] },
-  { allergen: "Soy", words: ["soy", "soya", "tofu", "edamame", "miso", "tamari", "soy sauce", "lecithin", "yuba"] },
-  { allergen: "Sesame", words: ["sesame", "tahini", "benne", "gingelly"] },
-  { allergen: "Fish", words: ["fish", "anchovy", "anchovies", "fish sauce", "worcestershire", "salmon", "tuna", "cod", "sardine", "mackerel", "trout"] },
-  { allergen: "Crustacean Shellfish", words: ["shrimp", "prawn", "crab", "lobster", "crayfish"] },
-  { allergen: "Molluscs", words: ["clam", "mussel", "oyster", "scallop", "squid", "octopus", "calamari"] },
-  { allergen: "Mustard", words: ["mustard", "dijon"] },
-  { allergen: "Celery", words: ["celery", "celeriac"] },
-  { allergen: "Lupin", words: ["lupin", "lupine"] },
-  { allergen: "Sulphites", words: ["sulphite", "sulfite", "metabisulfite", "sulfur dioxide", "sulphur dioxide"] },
+  {
+    allergen: "Gluten / Wheat",
+    words: [
+      "wheat",
+      "wheat flour",
+      "all purpose flour",
+      "ap flour",
+      "bread flour",
+      "cake flour",
+      "semolina",
+      "barley",
+      "rye",
+      "malt",
+      "panko",
+      "breadcrumb",
+      "bread crumb",
+      "breadcrumbs",
+      "bread crumbs",
+      "pasta",
+      "noodle",
+      "noodles",
+      "couscous",
+      "cracker",
+      "crackers",
+      "bread",
+      "bun",
+      "brioche",
+      "croissant",
+      "pastry",
+      "phyllo",
+      "filo",
+      "tortilla",
+      "wrap",
+      "soy sauce",
+    ],
+  },
+  {
+    allergen: "Milk",
+    words: [
+      "milk",
+      "cream",
+      "butter",
+      "cheese",
+      "yogurt",
+      "yoghurt",
+      "parmesan",
+      "mozzarella",
+      "ricotta",
+      "mascarpone",
+      "whey",
+      "casein",
+      "lactose",
+      "milk chocolate",
+      "white chocolate",
+    ],
+  },
+  {
+    allergen: "Eggs",
+    words: [
+      "egg",
+      "eggs",
+      "mayonnaise",
+      "mayo",
+      "aioli",
+      "meringue",
+      "custard",
+      "hollandaise",
+    ],
+  },
+  {
+    allergen: "Peanuts",
+    words: ["peanut", "peanuts", "peanut butter", "peanutbutter", "satay"],
+  },
+  {
+    allergen: "Tree Nuts",
+    words: [
+      "almond",
+      "walnut",
+      "pecan",
+      "cashew",
+      "hazelnut",
+      "pistachio",
+      "macadamia",
+      "brazil nut",
+      "pine nut",
+      "marzipan",
+      "praline",
+      "gianduja",
+      "nutella",
+    ],
+  },
+  {
+    allergen: "Soy",
+    words: ["soy", "soya", "tofu", "edamame", "miso", "tamari", "soy sauce", "yuba"],
+  },
+  {
+    allergen: "Sesame",
+    words: ["sesame", "tahini", "benne", "gingelly"],
+  },
+  {
+    allergen: "Fish",
+    words: [
+      "fish",
+      "anchovy",
+      "anchovies",
+      "fish sauce",
+      "salmon",
+      "tuna",
+      "cod",
+      "sardine",
+      "mackerel",
+      "trout",
+    ],
+  },
+  {
+    allergen: "Crustacean Shellfish",
+    words: ["shrimp", "prawn", "prawns", "crab", "lobster", "crayfish"],
+  },
+  {
+    allergen: "Molluscs",
+    words: [
+      "clam",
+      "clams",
+      "mussel",
+      "mussels",
+      "oyster",
+      "oysters",
+      "scallop",
+      "scallops",
+      "squid",
+      "octopus",
+      "calamari",
+    ],
+  },
+  {
+    allergen: "Mustard",
+    words: ["mustard", "dijon"],
+  },
+  {
+    allergen: "Celery",
+    words: ["celery", "celeriac"],
+  },
+  {
+    allergen: "Lupin",
+    words: ["lupin", "lupine"],
+  },
+  {
+    allergen: "Sulphites",
+    words: [
+      "sulphite",
+      "sulphites",
+      "sulfite",
+      "sulfites",
+      "metabisulfite",
+      "sulfur dioxide",
+      "sulphur dioxide",
+    ],
+  },
 ];
 
 const isProcessedOrPreparedItem = (value) => {
@@ -207,21 +568,61 @@ const isProcessedOrPreparedItem = (value) => {
     "PESTO",
     "MAYONNAISE",
     "AIOLI",
+    "HOLLANDAISE",
+    "TERIYAKI",
+    "HOISIN",
+    "WORCESTERSHIRE",
+    "OYSTER SAUCE",
+    "FISH SAUCE",
   ].some((word) => text.includes(word));
 };
 
 const PREMADE_COMMON_ALLERGEN_RULES = [
   {
-    words: ["chili sauce", "chilli sauce", "hot sauce", "sauce", "dressing", "marinade", "glaze"],
-    allergens: ["Soy", "Gluten / Wheat", "Sulphites"],
+    words: ["soy sauce", "teriyaki", "hoisin"],
+    allergens: ["Soy", "Gluten / Wheat"],
   },
   {
-    words: ["cookie", "cookies", "biscuit", "cake", "muffin", "brownie", "donut", "doughnut"],
-    allergens: ["Gluten / Wheat", "Milk", "Eggs", "Soy", "Tree Nuts"],
+    words: ["fish sauce"],
+    allergens: ["Fish"],
   },
   {
-    words: ["chocolate chip", "chocolate chips", "chocolate", "cocoa mix"],
-    allergens: ["Milk", "Soy", "Tree Nuts"],
+    words: ["oyster sauce"],
+    allergens: ["Molluscs", "Soy"],
+  },
+  {
+    words: ["worcestershire"],
+    allergens: ["Fish"],
+  },
+  {
+    words: [
+      "cookie",
+      "cookies",
+      "biscuit",
+      "cake",
+      "muffin",
+      "brownie",
+      "donut",
+      "doughnut",
+    ],
+    allergens: ["Gluten / Wheat", "Milk", "Eggs"],
+  },
+  {
+    words: [
+      "bread",
+      "bun",
+      "brioche",
+      "croissant",
+      "pastry",
+      "tart shell",
+      "pie shell",
+      "cracker",
+    ],
+    allergens: ["Gluten / Wheat"],
+  },
+  {
+    words: ["milk chocolate", "white chocolate"],
+    allergens: ["Milk"],
   },
   {
     words: ["peanut butter", "peanutbutter", "satay"],
@@ -236,36 +637,22 @@ const PREMADE_COMMON_ALLERGEN_RULES = [
     allergens: ["Eggs", "Mustard"],
   },
   {
-    words: ["bread", "bun", "brioche", "croissant", "pastry", "tart shell", "pie shell", "cracker"],
-    allergens: ["Gluten / Wheat", "Milk", "Eggs", "Soy", "Sesame"],
-  },
-  {
-    words: ["curry paste", "spice mix", "seasoning", "seasoning mix", "rub mix"],
-    allergens: ["Mustard", "Sesame", "Celery", "Sulphites", "Gluten / Wheat"],
-  },
-  {
-    words: ["cereal", "granola", "muesli"],
-    allergens: ["Gluten / Wheat", "Milk", "Soy", "Tree Nuts", "Peanuts", "Sesame"],
+    words: ["granola", "muesli"],
+    allergens: ["Gluten / Wheat", "Tree Nuts"],
   },
 ];
 
 const getPreparedCommonAllergens = (...values) => {
-  const text = values.map((value) => cleanText(value)).join(" ");
-  const compact = text.replace(/[^A-Z0-9]/g, "");
+  const text = values
+    .map((value) => normalizeIngredientTextForMatch(value))
+    .join(" ");
+
   const found = new Set();
 
   if (!text.trim()) return [];
 
   PREMADE_COMMON_ALLERGEN_RULES.forEach((rule) => {
-    const matched = rule.words.some((word) => {
-      const cleanWord = cleanText(word);
-      const compactWord = cleanWord.replace(/[^A-Z0-9]/g, "");
-
-      if (!cleanWord) return false;
-      if (compactWord && compact.includes(compactWord)) return true;
-
-      return new RegExp(`(^|[^A-Z0-9])${cleanWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^A-Z0-9]|$)`).test(text);
-    });
+    const matched = rule.words.some((word) => textHasWordOrPhrase(text, word));
 
     if (matched) {
       rule.allergens.forEach((allergen) => found.add(allergen));
@@ -276,41 +663,60 @@ const getPreparedCommonAllergens = (...values) => {
 };
 
 const keywordAllergensForText = (...values) => {
-  const text = values.map((value) => cleanText(value)).join(" ");
-  const compact = text.replace(/[^A-Z0-9]/g, "");
+  const text = values
+    .map((value) => normalizeIngredientTextForMatch(value))
+    .join(" ");
+
   const found = new Set();
 
   if (!text.trim()) return [];
 
   KEYWORD_RULES.forEach((rule) => {
-    const matched = rule.words.some((word) => {
-      const cleanWord = cleanText(word);
-      const compactWord = cleanWord.replace(/[^A-Z0-9]/g, "");
-
-      if (!cleanWord) return false;
-      if (compactWord && compact.includes(compactWord)) return true;
-
-      return new RegExp(`(^|[^A-Z0-9])${cleanWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^A-Z0-9]|$)`).test(text);
-    });
+    const matched = rule.words.some((word) => textHasWordOrPhrase(text, word));
 
     if (matched) found.add(rule.allergen);
   });
 
-  // Important false positive prevention.
-  if (/EGGPLANT/.test(text)) found.delete("Eggs");
-  if (/SEEDLESS/.test(text)) found.delete("Sesame");
+  // False-positive prevention.
+  if (textHasWordOrPhrase(text, "eggplant") || textHasWordOrPhrase(text, "aubergine")) {
+    found.delete("Eggs");
+  }
+
+  if (textHasWordOrPhrase(text, "seedless")) {
+    found.delete("Sesame");
+  }
+
+  // Non-wheat flours should not become gluten/wheat by keyword.
+  if (
+    textHasWordOrPhrase(text, "rice flour") ||
+    textHasWordOrPhrase(text, "corn flour") ||
+    textHasWordOrPhrase(text, "chickpea flour") ||
+    textHasWordOrPhrase(text, "gram flour") ||
+    textHasWordOrPhrase(text, "potato flour") ||
+    textHasWordOrPhrase(text, "tapioca flour") ||
+    textHasWordOrPhrase(text, "almond flour") ||
+    textHasWordOrPhrase(text, "coconut flour")
+  ) {
+    found.delete("Gluten / Wheat");
+  }
 
   return [...found].sort();
 };
 
 const looksGlutenFreeClaim = (...values) => {
   const text = values.map((value) => cleanText(value)).join(" ");
-  return /\bGF\b/.test(text) || text.includes("GLUTEN FREE") || text.includes("GLUTEN-FREE");
+  return (
+    /\bGF\b/.test(text) ||
+    text.includes("GLUTEN FREE") ||
+    text.includes("GLUTEN-FREE")
+  );
 };
 
 const getHeaderIndexes = (headers) => {
   const cleanHeaders = headers.map((header) => cleanText(header));
-  const compactHeaders = cleanHeaders.map((header) => header.replace(/[^A-Z0-9]/g, ""));
+  const compactHeaders = cleanHeaders.map((header) =>
+    header.replace(/[^A-Z0-9]/g, "")
+  );
 
   const compactName = (value) => cleanText(value).replace(/[^A-Z0-9]/g, "");
 
@@ -338,9 +744,7 @@ const getHeaderIndexes = (headers) => {
     category: findExact(["Category"], 4),
     subCategory: findExact(["SubCategory", "Sub Category"], 5),
 
-    // Important: these must match the actual ingredient/product columns.
-    // Do not use loose header matching here, because RestaurantName and RestaurantCode
-    // also contain the words Name and Code.
+    // These must match the actual ingredient/product columns.
     ingredientCode: ingredientCodeIndex,
     ingredientName: ingredientNameIndex,
 
@@ -356,22 +760,39 @@ const getHeaderIndexes = (headers) => {
     recipeAllergens: findExact(["RecipeAllergens", "Recipe Allergens"], 22),
   };
 };
+
 const parseIngredientByLocationWorkbook = (workbook) => {
-  const sheetName = workbook.SheetNames.find((name) => cleanText(name).includes("SHEET")) || workbook.SheetNames[0];
+  const sheetName =
+    workbook.SheetNames.find((name) => cleanText(name).includes("SHEET")) ||
+    workbook.SheetNames[0];
+
   const worksheet = workbook.Sheets[sheetName];
 
   if (!worksheet) {
     return { rows: [], venues: [], sourceSheet: sheetName || "" };
   }
 
-  const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+  const rawRows = XLSX.utils.sheet_to_json(worksheet, {
+    header: 1,
+    defval: "",
+  });
+
   const headerRowIndex = rawRows.findIndex((row) => {
-    const text = row.map((cell) => cleanText(cell)).join("|");
-    return text.includes("RESTAURANTNAME") && text.includes("RECIPENAME") && text.includes("INGREDIENTALLERGENS");
+    const compactText = row
+      .map((cell) => cleanText(cell).replace(/[^A-Z0-9]/g, ""))
+      .join("|");
+
+    return (
+      compactText.includes("RESTAURANTNAME") &&
+      compactText.includes("RECIPENAME") &&
+      compactText.includes("INGREDIENTALLERGENS")
+    );
   });
 
   if (headerRowIndex < 0) {
-    throw new Error("Could not find Ingredient by Location header row. Expected RestaurantName, RecipeName, Name, IngredientAllergens, RecipeAllergens.");
+    throw new Error(
+      "Could not find Ingredient by Location header row. Expected RestaurantName, RecipeName, Name, IngredientAllergens, RecipeAllergens."
+    );
   }
 
   const headers = rawRows[headerRowIndex];
@@ -380,6 +801,7 @@ const parseIngredientByLocationWorkbook = (workbook) => {
 
   rawRows.slice(headerRowIndex + 1).forEach((row, rowOffset) => {
     const get = (index) => (index >= 0 ? row[index] : "");
+
     const venueName = normalizeVenueName(get(indexes.restaurantName));
     const menuName = safeText(get(indexes.menuName));
     const recipeName = safeText(get(indexes.recipeName));
@@ -387,33 +809,78 @@ const parseIngredientByLocationWorkbook = (workbook) => {
 
     if (!venueName || !recipeName || !ingredientName) return;
 
+    const assigned = safeText(get(indexes.assigned));
     const ingredientAllergens = splitAllergens(get(indexes.ingredientAllergens));
-    const recipeAllergens = splitAllergens(get(indexes.recipeAllergens));
-    const explicitAllergens = [...new Set([...ingredientAllergens, ...recipeAllergens])].sort();
-    // Possible hidden allergens must be detected from the ingredient/product name only.
-    // Do not use category/sub-category here. Example: "Yogurt" can be in category
-    // "Egg, Milk, Yogurt", but that does not mean the yogurt contains egg.
-    const nameKeywordAllergens = keywordAllergensForText(
+    const recipeDeclaredAllergens = splitAllergens(get(indexes.recipeAllergens));
+
+    // Important:
+    // Ingredient cards should show only allergens that belong to this ingredient.
+    // Do NOT merge recipeDeclaredAllergens into every ingredient line.
+    // Example: a recipe may contain gluten from bread, but parsley/mint must not show gluten.
+    const nameDetectedRealAllergens = keywordAllergensForText(
       ingredientName,
-      get(indexes.assigned)
+      assigned
     );
-    const processedItem = isProcessedOrPreparedItem(ingredientName) || isProcessedOrPreparedItem(get(indexes.assigned));
-    const preparedCommonAllergens = processedItem
-      ? getPreparedCommonAllergens(ingredientName, get(indexes.assigned))
-      : [];
-    const detectedAllergens = [...new Set([...nameKeywordAllergens, ...preparedCommonAllergens])].sort();
-    const possibleHiddenAllergens = detectedAllergens.filter((allergen) => !explicitAllergens.includes(allergen));
+
     const ignoredBasic = isIgnoredBasicIngredient(ingredientName);
-    const gfClaim = looksGlutenFreeClaim(menuName, recipeName, get(indexes.specialInstructions), get(indexes.specialInstructions2));
-    const hasGluten = explicitAllergens.includes("Gluten / Wheat") || detectedAllergens.includes("Gluten / Wheat");
+
+    const plainRawIngredient = isPlainFreshHerbOrRawProduce(
+      ingredientName,
+      assigned
+    );
+
+    const skipPossibleAllergens = shouldSkipPossibleAllergensForIngredient(
+      ingredientName,
+      assigned
+    );
+
+    const processedItem =
+      !skipPossibleAllergens &&
+      (isProcessedOrPreparedItem(ingredientName) ||
+        isProcessedOrPreparedItem(assigned));
+
+    const preparedCommonAllergens = processedItem
+      ? getPreparedCommonAllergens(ingredientName, assigned)
+      : [];
+
+    // Real allergens shown on the ingredient card.
+    // These come from IngredientAllergens and clear ingredient-name detection.
+    const explicitAllergens = ignoredBasic
+      ? []
+      : [...new Set([...ingredientAllergens, ...nameDetectedRealAllergens])].sort();
+
+    const detectedAllergens = ignoredBasic
+      ? []
+      : [...new Set(nameDetectedRealAllergens)].sort();
+
+    // Fresh herbs, raw produce, water, salt, sugar, pepper do not receive possible hidden allergens.
+    const possibleHiddenAllergens =
+      ignoredBasic || skipPossibleAllergens
+        ? []
+        : preparedCommonAllergens.filter(
+            (allergen) => !explicitAllergens.includes(allergen)
+          );
+
+    const gfClaim = looksGlutenFreeClaim(
+      menuName,
+      recipeName,
+      get(indexes.specialInstructions),
+      get(indexes.specialInstructions2)
+    );
+
+    const hasIngredientGluten = explicitAllergens.includes("Gluten / Wheat");
     const hiddenWarnings = [];
 
-    if (!ignoredBasic && gfClaim && hasGluten) {
-      hiddenWarnings.push("Possible hidden gluten: recipe/menu says GF or gluten free but ingredient data shows gluten/wheat.");
+    if (!ignoredBasic && !skipPossibleAllergens && gfClaim && hasIngredientGluten) {
+      hiddenWarnings.push(
+        "Ingredient gluten check: recipe/menu says GF or gluten free, but this ingredient shows gluten/wheat."
+      );
     }
 
-    if (!ignoredBasic && processedItem) {
-      hiddenWarnings.push("Prepared / pre-made item: read the supplier label for may-contain, cross-contact, and full allergen information.");
+    if (!ignoredBasic && !skipPossibleAllergens && processedItem) {
+      hiddenWarnings.push(
+        "Prepared / pre-made item: read the supplier label for may-contain, cross-contact, and full allergen information."
+      );
     }
 
     parsedRows.push({
@@ -427,7 +894,7 @@ const parseIngredientByLocationWorkbook = (workbook) => {
       subCategory: safeText(get(indexes.subCategory)),
       ingredientCode: normalizeCode(get(indexes.ingredientCode)),
       ingredientName,
-      assigned: safeText(get(indexes.assigned)),
+      assigned,
       assignedType: safeText(get(indexes.assignedType)),
       recipeCode: normalizeCode(get(indexes.recipeCode)),
       recipeName,
@@ -436,12 +903,15 @@ const parseIngredientByLocationWorkbook = (workbook) => {
       recipeIsBasic: safeText(get(indexes.recipeIsBasic)),
       hasProductRelation: safeText(get(indexes.hasProductRelation)),
       ingredientAllergens,
-      recipeAllergens,
-      explicitAllergens: ignoredBasic ? [] : explicitAllergens,
-      detectedAllergens: ignoredBasic ? [] : detectedAllergens,
-      possibleHiddenAllergens: ignoredBasic ? [] : possibleHiddenAllergens,
+      recipeAllergens: recipeDeclaredAllergens,
+      recipeDeclaredAllergens,
+      explicitAllergens,
+      detectedAllergens,
+      possibleHiddenAllergens,
       hiddenWarnings,
       ignoredBasic,
+      plainRawIngredient,
+      skipPossibleAllergens,
       processedItem,
       gfClaim,
     });
@@ -451,6 +921,7 @@ const parseIngredientByLocationWorkbook = (workbook) => {
 
   parsedRows.forEach((row) => {
     const venueKey = cleanText(row.restaurantName);
+
     if (!venueMap.has(venueKey)) {
       venueMap.set(venueKey, {
         venueKey,
@@ -466,7 +937,10 @@ const parseIngredientByLocationWorkbook = (workbook) => {
     }
 
     const venue = venueMap.get(venueKey);
-    const recipeKey = cleanText(`${row.recipeCode}|${row.recipeName}|${row.menuCode}|${row.menuName}`);
+
+    const recipeKey = cleanText(
+      `${row.recipeCode}|${row.recipeName}|${row.menuCode}|${row.menuName}`
+    );
 
     if (!venue.recipesMap.has(recipeKey)) {
       venue.recipesMap.set(recipeKey, {
@@ -487,10 +961,15 @@ const parseIngredientByLocationWorkbook = (workbook) => {
     }
 
     const recipe = venue.recipesMap.get(recipeKey);
+
     recipe.rows.push(row);
     recipe.gfClaim = recipe.gfClaim || row.gfClaim;
 
-    if (row.assignedType === "R" || row.hasProductRelation === "N" || row.recipeIsBasic === "Y") {
+    if (
+      row.assignedType === "R" ||
+      row.hasProductRelation === "N" ||
+      row.recipeIsBasic === "Y"
+    ) {
       recipe.subRecipes.push(row);
     } else {
       recipe.ingredients.push(row);
@@ -498,7 +977,15 @@ const parseIngredientByLocationWorkbook = (workbook) => {
 
     if (!row.ignoredBasic) venue.ingredientCount += 1;
 
+    // Ingredient-level real allergens.
     row.explicitAllergens.forEach((allergen) => {
+      venue.allergens.add(allergen);
+      recipe.allergens.add(allergen);
+    });
+
+    // Recipe-level declared allergens belong to recipe/venue summaries only.
+    // They should not be copied onto every ingredient card.
+    (row.recipeDeclaredAllergens || []).forEach((allergen) => {
       venue.allergens.add(allergen);
       recipe.allergens.add(allergen);
     });
@@ -510,7 +997,12 @@ const parseIngredientByLocationWorkbook = (workbook) => {
 
     row.hiddenWarnings.forEach((warning) => {
       venue.hiddenWarningCount += 1;
-      recipe.hiddenWarnings.push({ warning, ingredientName: row.ingredientName, sourceRow: row.sourceRow });
+
+      recipe.hiddenWarnings.push({
+        warning,
+        ingredientName: row.ingredientName,
+        sourceRow: row.sourceRow,
+      });
     });
   });
 
@@ -524,10 +1016,18 @@ const parseIngredientByLocationWorkbook = (workbook) => {
           ...recipe,
           allergens: [...recipe.allergens].sort(),
           possibleHidden: [...recipe.possibleHidden].sort(),
-          ingredients: recipe.ingredients.sort((a, b) => a.ingredientName.localeCompare(b.ingredientName)),
-          subRecipes: recipe.subRecipes.sort((a, b) => a.ingredientName.localeCompare(b.ingredientName)),
+          ingredients: recipe.ingredients.sort((a, b) =>
+            a.ingredientName.localeCompare(b.ingredientName)
+          ),
+          subRecipes: recipe.subRecipes.sort((a, b) =>
+            a.ingredientName.localeCompare(b.ingredientName)
+          ),
         }))
-        .sort((a, b) => a.menuName.localeCompare(b.menuName) || a.recipeName.localeCompare(b.recipeName)),
+        .sort(
+          (a, b) =>
+            a.menuName.localeCompare(b.menuName) ||
+            a.recipeName.localeCompare(b.recipeName)
+        ),
     }))
     .sort((a, b) => a.restaurantName.localeCompare(b.restaurantName));
 
@@ -557,7 +1057,9 @@ const allergenBadgeStyle = (allergen, possible = false) => {
 };
 
 const AllergenBadges = ({ allergens = [], possible = false }) => {
-  if (!allergens.length) return <span style={{ color: "#777", fontSize: 13 }}>None found</span>;
+  if (!allergens.length) {
+    return <span style={{ color: "#777", fontSize: 13 }}>None found</span>;
+  }
 
   return (
     <div>
@@ -565,9 +1067,15 @@ const AllergenBadges = ({ allergens = [], possible = false }) => {
         const icon = ALLERGEN_DISPLAY[allergen]?.icon || "⚠️";
 
         return (
-          <span key={`${possible ? "possible" : "allergen"}-${allergen}`} style={allergenBadgeStyle(allergen, possible)}>
+          <span
+            key={`${possible ? "possible" : "allergen"}-${allergen}`}
+            style={allergenBadgeStyle(allergen, possible)}
+          >
             <span>{icon}</span>
-            <span>{possible ? "Possible " : ""}{allergen}</span>
+            <span>
+              {possible ? "Possible " : ""}
+              {allergen}
+            </span>
           </span>
         );
       })}
@@ -583,6 +1091,7 @@ const exportRowsToExcel = (rows, sheetName, fileName) => {
 
   const worksheet = XLSX.utils.json_to_sheet(rows);
   const workbook = XLSX.utils.book_new();
+
   XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
   XLSX.writeFile(workbook, fileName);
 };
@@ -609,8 +1118,15 @@ export default function AllergenModule({
   const [loading, setLoading] = useState(false);
   const [permanentFileLoading, setPermanentFileLoading] = useState(false);
 
-  const applyIngredientByLocationArrayBuffer = (arrayBuffer, fileName = "Permanent Ingredient by Location") => {
-    const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+  const applyIngredientByLocationArrayBuffer = (
+    arrayBuffer,
+    fileName = "Permanent Ingredient by Location"
+  ) => {
+    const workbook = XLSX.read(arrayBuffer, {
+      type: "array",
+      cellDates: true,
+    });
+
     const parsed = parseIngredientByLocationWorkbook(workbook);
 
     if (!parsed.rows.length) {
@@ -631,18 +1147,26 @@ export default function AllergenModule({
   const loadPermanentIngredientByLocationFile = async ({ silent = false } = {}) => {
     if (!supabase) {
       if (!silent) {
-        const text = "Supabase is not connected. Permanent Ingredient by Location file cannot load.";
+        const text =
+          "Supabase is not connected. Permanent Ingredient by Location file cannot load.";
         setMessage(text);
         window.alert(text);
       }
+
       return false;
     }
 
     setPermanentFileLoading(true);
-    if (!silent) setMessage("Loading permanent Ingredient by Location file...");
+
+    if (!silent) {
+      setMessage("Loading permanent Ingredient by Location file...");
+    }
 
     try {
-      const arrayBuffer = await downloadIngredientByLocationFileFromStorage({ supabase });
+      const arrayBuffer = await downloadIngredientByLocationFileFromStorage({
+        supabase,
+      });
+
       const parsed = applyIngredientByLocationArrayBuffer(
         arrayBuffer,
         "Permanent Ingredient by Location"
@@ -655,10 +1179,14 @@ export default function AllergenModule({
       return true;
     } catch (error) {
       if (!silent) {
-        const text = error?.message || "Could not load permanent Ingredient by Location file.";
+        const text =
+          error?.message ||
+          "Could not load permanent Ingredient by Location file.";
+
         setMessage(text);
         window.alert(text);
       }
+
       return false;
     } finally {
       setPermanentFileLoading(false);
@@ -672,10 +1200,13 @@ export default function AllergenModule({
 
   const uploadIngredientByLocationFile = async (event) => {
     const file = event.target.files?.[0];
+
     if (!file) return;
 
     if (!isAdmin) {
-      const text = "Only admins can replace the permanent Ingredient by Location file.";
+      const text =
+        "Only admins can replace the permanent Ingredient by Location file.";
+
       setMessage(text);
       window.alert(text);
       event.target.value = "";
@@ -683,7 +1214,9 @@ export default function AllergenModule({
     }
 
     if (!supabase) {
-      const text = "Supabase is not connected. Cannot save the permanent Ingredient by Location file.";
+      const text =
+        "Supabase is not connected. Cannot save the permanent Ingredient by Location file.";
+
       setMessage(text);
       window.alert(text);
       event.target.value = "";
@@ -694,7 +1227,10 @@ export default function AllergenModule({
     setMessage("Saving permanent Ingredient by Location file...");
 
     try {
-      await uploadIngredientByLocationFileToStorage({ supabase, file });
+      await uploadIngredientByLocationFileToStorage({
+        supabase,
+        file,
+      });
 
       const arrayBuffer = await file.arrayBuffer();
       const parsed = applyIngredientByLocationArrayBuffer(arrayBuffer, file.name);
@@ -712,7 +1248,10 @@ export default function AllergenModule({
         rows: parsed.rows.length,
       });
     } catch (error) {
-      const text = error?.message || "Could not save permanent Ingredient by Location file.";
+      const text =
+        error?.message ||
+        "Could not save permanent Ingredient by Location file.";
+
       setMessage(text);
       window.alert(text);
     } finally {
@@ -723,10 +1262,13 @@ export default function AllergenModule({
 
   const allAllergens = useMemo(() => {
     const set = new Set();
+
     rows.forEach((row) => {
       row.explicitAllergens.forEach((item) => set.add(item));
+      (row.recipeDeclaredAllergens || []).forEach((item) => set.add(item));
       row.possibleHiddenAllergens.forEach((item) => set.add(item));
     });
+
     return [...set].sort();
   }, [rows]);
 
@@ -739,7 +1281,9 @@ export default function AllergenModule({
     const query = venueSearch.toLowerCase().trim();
 
     return venues.filter((venue) => {
-      const matchesSearch = !query || venue.restaurantName.toLowerCase().includes(query);
+      const matchesSearch =
+        !query || venue.restaurantName.toLowerCase().includes(query);
+
       const matchesAllergen =
         allergenFilter === "ALL" ||
         venue.allergens.includes(allergenFilter) ||
@@ -773,7 +1317,12 @@ export default function AllergenModule({
 
   const selectedRecipe = useMemo(() => {
     if (!selectedVenue) return null;
-    return selectedVenue.recipes.find((recipe) => recipe.recipeKey === selectedRecipeKey) || null;
+
+    return (
+      selectedVenue.recipes.find(
+        (recipe) => recipe.recipeKey === selectedRecipeKey
+      ) || null
+    );
   }, [selectedVenue, selectedRecipeKey]);
 
   const visibleIngredients = useMemo(() => {
@@ -784,7 +1333,13 @@ export default function AllergenModule({
 
     return combined.filter((item) => {
       if (!query) return true;
-      return [item.ingredientName, item.assigned, item.explicitAllergens.join(" "), item.possibleHiddenAllergens.join(" ")]
+
+      return [
+        item.ingredientName,
+        item.assigned,
+        item.explicitAllergens.join(" "),
+        item.possibleHiddenAllergens.join(" "),
+      ]
         .join(" ")
         .toLowerCase()
         .includes(query);
@@ -809,31 +1364,53 @@ export default function AllergenModule({
       Type: row.assignedType === "R" ? "Sub Recipe" : "Ingredient",
       Category: row.category,
       SubCategory: row.subCategory,
-      ExplicitAllergens: row.explicitAllergens.join(", "),
+      IngredientDeclaredAllergens: row.ingredientAllergens.join(", "),
+      RecipeDeclaredAllergens: (row.recipeDeclaredAllergens || []).join(", "),
+      RealAllergensShownOnIngredient: row.explicitAllergens.join(", "),
+      NameDetectedAllergens: row.detectedAllergens.join(", "),
       PossibleHiddenAllergens: row.possibleHiddenAllergens.join(", "),
       HiddenWarnings: row.hiddenWarnings.join(" | "),
       IgnoredBasic: row.ignoredBasic ? "Yes" : "No",
+      PlainRawIngredient: row.plainRawIngredient ? "Yes" : "No",
+      PossibleAllergensSkipped: row.skipPossibleAllergens ? "Yes" : "No",
       SourceRow: row.sourceRow,
     }));
 
-    exportRowsToExcel(exportRows, "Allergen Matrix", `allergen-matrix-${userShip || "ship"}.xlsx`);
+    exportRowsToExcel(
+      exportRows,
+      "Allergen Matrix",
+      `allergen-matrix-${userShip || "ship"}.xlsx`
+    );
   };
 
   return (
     <main style={styles.page}>
       <header style={styles.header}>
-        <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
+        <img
+          src="/virgin-logo.png"
+          alt="Virgin Voyages"
+          style={styles.headerLogo}
+        />
+
         <div style={styles.headerActions}>
-          <button style={styles.backButton} onClick={onBack}>← Back</button>
-          <div style={styles.shipBadge}>🧬 Allergens {userShip ? `• ${userShip}` : ""}</div>
+          <button style={styles.backButton} onClick={onBack}>
+            ← Back
+          </button>
+
+          <div style={styles.shipBadge}>
+            🧬 Allergens {userShip ? `• ${userShip}` : ""}
+          </div>
         </div>
       </header>
 
       <section style={styles.grid}>
         <div style={styles.card}>
           <h2 style={styles.cardTitle}>🧬 Allergen Matrix</h2>
+
           <p style={styles.emptyText}>
-            Upload the Ingredient by Location workbook. This screen groups recipes by venue, then shows ingredients, sub-recipes, declared allergens, and possible hidden allergens.
+            Upload the Ingredient by Location workbook. This screen groups recipes
+            by venue, then shows ingredients, sub-recipes, declared allergens, and
+            possible hidden allergens.
           </p>
 
           <div style={styles.infoBox}>
@@ -852,7 +1429,10 @@ export default function AllergenModule({
 
           {isAdmin && (
             <>
-              <label style={styles.label}>Admin only: replace permanent Ingredient by Location file</label>
+              <label style={styles.label}>
+                Admin only: replace permanent Ingredient by Location file
+              </label>
+
               <input
                 type="file"
                 accept=".xlsx,.xls,.xlsm"
@@ -864,21 +1444,40 @@ export default function AllergenModule({
           )}
 
           <div style={styles.infoBox}>
-            <div>📄 File: <strong>{sourceFileName || "Not uploaded"}</strong></div>
-            <div>📋 Sheet: <strong>{sourceSheetName || "N/A"}</strong></div>
-            <div>🏢 Venues: <strong>{venues.length}</strong></div>
-            <div>🧾 Ingredient rows: <strong>{rows.length}</strong></div>
-            <div>🚨 Hidden warnings: <strong>{hiddenWarningRows.length}</strong></div>
+            <div>
+              📄 File: <strong>{sourceFileName || "Not uploaded"}</strong>
+            </div>
+            <div>
+              📋 Sheet: <strong>{sourceSheetName || "N/A"}</strong>
+            </div>
+            <div>
+              🏢 Venues: <strong>{venues.length}</strong>
+            </div>
+            <div>
+              🧾 Ingredient rows: <strong>{rows.length}</strong>
+            </div>
+            <div>
+              🚨 Hidden warnings: <strong>{hiddenWarningRows.length}</strong>
+            </div>
             {(loading || permanentFileLoading) && <div>Loading...</div>}
           </div>
 
           {message && <p style={styles.message}>{message}</p>}
 
           <div style={styles.warningText}>
-            This is a support tool only. It uses the workbook allergen columns first and checks the ingredient/product name for possible hidden allergens. Category and sub-category are not used to create allergen warnings and are hidden from compact cards. Always verify against official recipe cards and supplier specifications before answering a Sailor allergy request.
+            This is a support tool only. Ingredient cards now show only allergens
+            that belong to that ingredient. Recipe-level allergens are shown in
+            recipe summaries but are not copied to every ingredient. Fresh herbs,
+            raw produce, water, salt, sugar, and pepper do not receive possible
+            hidden allergen warnings. Always verify against official recipe cards
+            and supplier specifications before answering a Sailor allergy request.
           </div>
 
-          <button style={styles.primaryButton} onClick={exportRecipeMatrix} disabled={!rows.length}>
+          <button
+            style={styles.primaryButton}
+            onClick={exportRecipeMatrix}
+            disabled={!rows.length}
+          >
             📥 Export Full Allergen Matrix
           </button>
         </div>
@@ -887,14 +1486,22 @@ export default function AllergenModule({
           <h2 style={styles.cardTitle}>🔎 Filters</h2>
 
           <label style={styles.label}>Allergen filter</label>
-          <select value={allergenFilter} onChange={(event) => setAllergenFilter(event.target.value)} style={styles.select}>
+
+          <select
+            value={allergenFilter}
+            onChange={(event) => setAllergenFilter(event.target.value)}
+            style={styles.select}
+          >
             <option value="ALL">All allergens</option>
             {allAllergens.map((allergen) => (
-              <option key={allergen} value={allergen}>{allergen}</option>
+              <option key={allergen} value={allergen}>
+                {allergen}
+              </option>
             ))}
           </select>
 
           <label style={styles.label}>Search venue</label>
+
           <input
             placeholder="Search venue..."
             value={venueSearch}
@@ -903,6 +1510,7 @@ export default function AllergenModule({
           />
 
           <label style={styles.label}>Search recipe/menu</label>
+
           <input
             placeholder="Search recipe code, recipe name, menu..."
             value={recipeSearch}
@@ -915,7 +1523,12 @@ export default function AllergenModule({
       <section style={styles.card}>
         <h2 style={styles.productTitle}>🏢 Venues</h2>
 
-        {!venues.length && <p style={styles.emptyText}>Permanent Ingredient by Location file will load automatically. Admin can replace it if needed.</p>}
+        {!venues.length && (
+          <p style={styles.emptyText}>
+            Permanent Ingredient by Location file will load automatically. Admin
+            can replace it if needed.
+          </p>
+        )}
 
         <div style={localStyles.venueGrid}>
           {filteredVenues.map((venue) => (
@@ -924,7 +1537,9 @@ export default function AllergenModule({
               type="button"
               style={{
                 ...localStyles.venueCard,
-                ...(selectedVenueKey === venue.venueKey ? localStyles.venueCardActive : {}),
+                ...(selectedVenueKey === venue.venueKey
+                  ? localStyles.venueCardActive
+                  : {}),
               }}
               onClick={() => {
                 setSelectedVenueKey(venue.venueKey);
@@ -940,7 +1555,10 @@ export default function AllergenModule({
               >
                 {venue.restaurantName}
               </strong>
-              <span style={localStyles.venueRecipeCount}>{venue.recipes.length} recipe(s)</span>
+
+              <span style={localStyles.venueRecipeCount}>
+                {venue.recipes.length} recipe(s)
+              </span>
             </button>
           ))}
         </div>
@@ -948,11 +1566,22 @@ export default function AllergenModule({
 
       {selectedVenue && (
         <section style={styles.card}>
-          <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 16 }}>
+          <div
+            style={{
+              ...styles.header,
+              boxShadow: "none",
+              padding: 0,
+              marginBottom: 16,
+            }}
+          >
             <div>
               <h2 style={styles.productTitle}>{selectedVenue.restaurantName}</h2>
-              <p style={{ ...styles.emptyText, margin: 0 }}>Click a recipe to view ingredients, sub-recipes and allergen detail.</p>
+
+              <p style={{ ...styles.emptyText, margin: 0 }}>
+                Click a recipe to view ingredients, sub-recipes and allergen detail.
+              </p>
             </div>
+
             <div style={styles.shipBadge}>{filteredRecipes.length} recipe(s)</div>
           </div>
 
@@ -963,8 +1592,12 @@ export default function AllergenModule({
                 type="button"
                 style={{
                   ...localStyles.recipeCard,
-                  ...(selectedRecipeKey === recipe.recipeKey ? localStyles.recipeCardActive : {}),
-                  ...(recipe.hiddenWarnings.length > 0 ? localStyles.recipeCardWarning : {}),
+                  ...(selectedRecipeKey === recipe.recipeKey
+                    ? localStyles.recipeCardActive
+                    : {}),
+                  ...(recipe.hiddenWarnings.length > 0
+                    ? localStyles.recipeCardWarning
+                    : {}),
                 }}
                 onClick={() => {
                   setSelectedRecipeKey(recipe.recipeKey);
@@ -973,10 +1606,23 @@ export default function AllergenModule({
               >
                 <strong>{recipe.recipeName}</strong>
                 <span>Recipe code: {recipe.recipeCode || "N/A"}</span>
-                <span>{recipe.ingredients.length} ingredient(s), {recipe.subRecipes.length} sub recipe line(s)</span>
+                <span>
+                  {recipe.ingredients.length} ingredient(s),{" "}
+                  {recipe.subRecipes.length} sub recipe line(s)
+                </span>
+
                 <AllergenBadges allergens={recipe.allergens.slice(0, 6)} />
-                {recipe.possibleHidden.length > 0 && <AllergenBadges allergens={recipe.possibleHidden.slice(0, 4)} possible />}
-                {recipe.hiddenWarnings.length > 0 && <div style={styles.statusBad}>Hidden warning</div>}
+
+                {recipe.possibleHidden.length > 0 && (
+                  <AllergenBadges
+                    allergens={recipe.possibleHidden.slice(0, 4)}
+                    possible
+                  />
+                )}
+
+                {recipe.hiddenWarnings.length > 0 && (
+                  <div style={styles.statusBad}>Hidden warning</div>
+                )}
               </button>
             ))}
           </div>
@@ -991,7 +1637,10 @@ export default function AllergenModule({
             setIngredientSearch("");
           }}
         >
-          <div style={localStyles.recipeModalCard} onClick={(event) => event.stopPropagation()}>
+          <div
+            style={localStyles.recipeModalCard}
+            onClick={(event) => event.stopPropagation()}
+          >
             <button
               type="button"
               style={styles.closeButton}
@@ -1005,21 +1654,25 @@ export default function AllergenModule({
 
             <div style={localStyles.modalHeader}>
               <div>
-                <h2 style={{ ...styles.productTitle, marginBottom: 4 }}>🧾 {selectedRecipe.recipeName}</h2>
+                <h2 style={{ ...styles.productTitle, marginBottom: 4 }}>
+                  🧾 {selectedRecipe.recipeName}
+                </h2>
+
                 <p style={{ ...styles.emptyText, margin: 0 }}>
-                  Recipe code {selectedRecipe.recipeCode || "N/A"} • Menu {selectedRecipe.menuName || "N/A"}
+                  Recipe code {selectedRecipe.recipeCode || "N/A"} • Menu{" "}
+                  {selectedRecipe.menuName || "N/A"}
                 </p>
               </div>
-              <div style={styles.statusNeutral}>
-                Allergen Review
-              </div>
+
+              <div style={styles.statusNeutral}>Allergen Review</div>
             </div>
 
             <section style={localStyles.modalSummaryGrid}>
               <div style={styles.infoBox}>
-                <strong>Declared allergens</strong>
+                <strong>Recipe / item allergens</strong>
                 <AllergenBadges allergens={selectedRecipe.allergens} />
               </div>
+
               <div style={styles.infoBox}>
                 <strong>Possible hidden allergens</strong>
                 <AllergenBadges allergens={selectedRecipe.possibleHidden} possible />
@@ -1039,31 +1692,58 @@ export default function AllergenModule({
                   key={`${item.sourceRow}-${item.ingredientCode}-${item.ingredientName}`}
                   style={{
                     ...localStyles.ingredientCard,
-                    ...(item.hiddenWarnings.length > 0 ? localStyles.ingredientCardWarning : {}),
-                    ...(item.possibleHiddenAllergens.length > 0 && !item.hiddenWarnings.length ? localStyles.ingredientCardPossible : {}),
+                    ...(item.hiddenWarnings.length > 0
+                      ? localStyles.ingredientCardWarning
+                      : {}),
+                    ...(item.possibleHiddenAllergens.length > 0 &&
+                    !item.hiddenWarnings.length
+                      ? localStyles.ingredientCardPossible
+                      : {}),
                   }}
                 >
-                  <div style={localStyles.ingredientTitle}>{item.ingredientName}</div>
+                  <div style={localStyles.ingredientTitle}>
+                    {item.ingredientName}
+                  </div>
+
                   {item.assigned && item.assigned !== item.ingredientName && (
-                    <div style={localStyles.compactMeta}>Product / Assigned: {item.assigned}</div>
+                    <div style={localStyles.compactMeta}>
+                      Product / Assigned: {item.assigned}
+                    </div>
                   )}
-                  <div style={localStyles.typePill}>{item.assignedType === "R" ? "Sub Recipe" : "Ingredient"}</div>
-                  {item.ignoredBasic && <div style={styles.statusNeutral}>Ignored basic item</div>}
+
+                  <div style={localStyles.typePill}>
+                    {item.assignedType === "R" ? "Sub Recipe" : "Ingredient"}
+                  </div>
+
+                  {item.ignoredBasic && (
+                    <div style={styles.statusNeutral}>Ignored basic item</div>
+                  )}
+
+                  {item.plainRawIngredient && !item.ignoredBasic && (
+                    <div style={styles.statusNeutral}>
+                      Fresh/raw item — possible allergens skipped
+                    </div>
+                  )}
 
                   <div>
-                    <strong>Declared:</strong>
+                    <strong>Declared / real:</strong>
                     <AllergenBadges allergens={item.explicitAllergens} />
                   </div>
 
                   {item.possibleHiddenAllergens.length > 0 && (
                     <div>
                       <strong>Possible hidden:</strong>
-                      <AllergenBadges allergens={item.possibleHiddenAllergens} possible />
+                      <AllergenBadges
+                        allergens={item.possibleHiddenAllergens}
+                        possible
+                      />
                     </div>
                   )}
 
                   {item.hiddenWarnings.map((warning, index) => (
-                    <div key={`${warning}-${index}`} style={styles.statusBad}>⚠️ {warning}</div>
+                    <div key={`${warning}-${index}`} style={styles.statusBad}>
+                      ⚠️ {warning}
+                    </div>
                   ))}
                 </div>
               ))}
@@ -1081,6 +1761,7 @@ const localStyles = {
     gridTemplateColumns: "repeat(auto-fill, minmax(145px, 1fr))",
     gap: 8,
   },
+
   venueCard: {
     border: "1px solid #ddd",
     borderRadius: 14,
@@ -1096,33 +1777,40 @@ const localStyles = {
     alignContent: "center",
     minHeight: 74,
   },
+
   venueCardActive: {
     border: "2px solid #111",
     background: "#f2f2f2",
   },
+
   venueCardWarning: {
     border: "2px solid #b00020",
     background: "#fff0f0",
   },
+
   venueIcon: {
     display: "none",
   },
+
   venueName: {
     fontSize: 14,
     lineHeight: 1.15,
     fontWeight: 800,
     overflowWrap: "anywhere",
   },
+
   venueRecipeCount: {
     color: "#555",
     fontSize: 12,
     fontWeight: 700,
   },
+
   recipeGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill, minmax(165px, 1fr))",
     gap: 8,
   },
+
   recipeCard: {
     border: "1px solid #ddd",
     borderRadius: 14,
@@ -1137,14 +1825,17 @@ const localStyles = {
     fontSize: 12,
     alignContent: "start",
   },
+
   recipeCardActive: {
     border: "2px solid #111",
     background: "#f2f2f2",
   },
+
   recipeCardWarning: {
     border: "2px solid #b00020",
     background: "#fff0f0",
   },
+
   recipeModalCard: {
     background: "#fff",
     borderRadius: 18,
@@ -1156,6 +1847,7 @@ const localStyles = {
     position: "relative",
     boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
   },
+
   modalHeader: {
     display: "flex",
     justifyContent: "space-between",
@@ -1165,17 +1857,20 @@ const localStyles = {
     paddingRight: 42,
     flexWrap: "wrap",
   },
+
   modalSummaryGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
     gap: 12,
     marginBottom: 12,
   },
+
   ingredientGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill, minmax(165px, 1fr))",
     gap: 8,
   },
+
   ingredientCard: {
     border: "1px solid #ddd",
     borderRadius: 14,
@@ -1186,26 +1881,31 @@ const localStyles = {
     fontSize: 11,
     alignContent: "start",
   },
+
   ingredientCardPossible: {
     border: "1.5px solid #8a5a00",
     background: "#fff8e1",
   },
+
   ingredientCardWarning: {
     border: "2px solid #b00020",
     background: "#fff0f0",
   },
+
   ingredientTitle: {
     fontWeight: "bold",
     fontSize: 12.5,
     lineHeight: 1.12,
     overflowWrap: "anywhere",
   },
+
   compactMeta: {
     color: "#555",
     fontSize: 11,
     lineHeight: 1.2,
     overflowWrap: "anywhere",
   },
+
   typePill: {
     justifySelf: "start",
     padding: "3px 7px",
