@@ -1345,6 +1345,14 @@ export default function AllergenModule({
   const [posterSearch, setPosterSearch] = useState("");
   const [selectedPosterRecipeKeys, setSelectedPosterRecipeKeys] = useState([]);
 
+  const [safeDishFinderOpen, setSafeDishFinderOpen] = useState(false);
+  const [safeDishSearch, setSafeDishSearch] = useState("");
+  const [selectedSafeAllergens, setSelectedSafeAllergens] = useState([]);
+  const [
+    includePossibleHiddenInSafeFinder,
+    setIncludePossibleHiddenInSafeFinder,
+  ] = useState(true);
+
   const [venueSearch, setVenueSearch] = useState("");
   const [recipeSearch, setRecipeSearch] = useState("");
   const [ingredientSearch, setIngredientSearch] = useState("");
@@ -1378,6 +1386,10 @@ export default function AllergenModule({
     setPosterBuilderOpen(false);
     setPosterSearch("");
     setSelectedPosterRecipeKeys([]);
+    setSafeDishFinderOpen(false);
+    setSafeDishSearch("");
+    setSelectedSafeAllergens([]);
+    setIncludePossibleHiddenInSafeFinder(true);
     setIngredientSearch("");
 
     return parsed;
@@ -1912,271 +1924,42 @@ export default function AllergenModule({
         <head>
           <title>Allergen Poster - ${escapeHtml(selectedVenue.restaurantName)}</title>
           <style>
-            @page {
-              size: A4 landscape;
-              margin: 10mm;
-            }
-
-            * {
-              box-sizing: border-box;
-            }
-
-            body {
-              margin: 0;
-              padding: 0;
-              font-family: Arial, sans-serif;
-              color: #111;
-              background: #f3f4f6;
-            }
-
-            .poster-page {
-              min-height: 100vh;
-              padding: 22px;
-              background:
-                radial-gradient(circle at top left, rgba(224,0,0,0.12), transparent 28%),
-                linear-gradient(135deg, #ffffff 0%, #f7f7f7 48%, #ececec 100%);
-            }
-
-            .poster-header {
-              display: grid;
-              grid-template-columns: 1fr auto;
-              gap: 20px;
-              align-items: center;
-              padding: 22px 24px;
-              border-radius: 24px;
-              background: #111;
-              color: #fff;
-              box-shadow: 0 12px 34px rgba(0,0,0,0.18);
-            }
-
-            .poster-header h1 {
-              margin: 0;
-              font-size: 34px;
-              line-height: 1.05;
-              letter-spacing: -0.8px;
-            }
-
-            .poster-subtitle {
-              margin-top: 8px;
-              font-size: 15px;
-              opacity: 0.86;
-            }
-
-            .poster-count {
-              padding: 14px 18px;
-              border-radius: 18px;
-              background: #fff;
-              color: #111;
-              font-weight: 900;
-              text-align: center;
-              min-width: 150px;
-            }
-
-            .poster-count strong {
-              display: block;
-              font-size: 32px;
-              line-height: 1;
-            }
-
-            .legend {
-              margin-top: 16px;
-              padding: 14px;
-              border-radius: 20px;
-              background: rgba(255,255,255,0.9);
-              display: flex;
-              flex-wrap: wrap;
-              gap: 7px;
-              border: 1px solid rgba(0,0,0,0.08);
-            }
-
-            .legend-pill {
-              display: inline-flex;
-              align-items: center;
-              gap: 5px;
-              padding: 6px 9px;
-              border-radius: 999px;
-              background: #f2f2f2;
-              color: #777;
-              font-size: 11px;
-              font-weight: 800;
-              opacity: 0.45;
-            }
-
-            .legend-active {
-              background: #111;
-              color: #fff;
-              opacity: 1;
-            }
-
-            .recipe-grid {
-              margin-top: 18px;
-              display: grid;
-              grid-template-columns: repeat(3, minmax(0, 1fr));
-              gap: 14px;
-            }
-
-            .recipe-poster-card {
-              position: relative;
-              break-inside: avoid;
-              min-height: 260px;
-              padding: 18px;
-              border-radius: 22px;
-              background: #fff;
-              border: 1px solid rgba(0,0,0,0.08);
-              box-shadow: 0 10px 26px rgba(0,0,0,0.10);
-              overflow: hidden;
-            }
-
-            .recipe-poster-card::before {
-              content: "";
-              position: absolute;
-              inset: 0 0 auto 0;
-              height: 7px;
-              background: linear-gradient(90deg, #e00000, #111, #e00000);
-            }
-
-            .recipe-number {
-              position: absolute;
-              top: 12px;
-              right: 12px;
-              width: 34px;
-              height: 34px;
-              border-radius: 999px;
-              background: #111;
-              color: #fff;
-              display: grid;
-              place-items: center;
-              font-weight: 900;
-            }
-
-            .recipe-card-header {
-              padding-right: 38px;
-            }
-
-            .recipe-card-header h2 {
-              margin: 0 0 5px;
-              font-size: 21px;
-              line-height: 1.08;
-            }
-
-            .recipe-meta {
-              color: #666;
-              font-size: 12px;
-              font-weight: 700;
-            }
-
-            .poster-section-label {
-              margin: 14px 0 6px;
-              color: #555;
-              font-size: 11px;
-              text-transform: uppercase;
-              letter-spacing: 0.8px;
-              font-weight: 900;
-            }
-
-            .badge-wrap {
-              display: flex;
-              flex-wrap: wrap;
-              gap: 5px;
-            }
-
-            .poster-badge {
-              display: inline-flex;
-              align-items: center;
-              gap: 5px;
-              border: 1.5px solid;
-              border-radius: 999px;
-              padding: 5px 8px;
-              font-size: 11px;
-              font-weight: 900;
-              line-height: 1.1;
-            }
-
-            .poster-none {
-              color: #777;
-              font-size: 12px;
-              font-weight: 700;
-            }
-
-            .possible-row {
-              padding: 9px;
-              border-radius: 14px;
-              background: #fff7f7;
-              border: 1px solid #ffd1d1;
-              margin-top: 10px;
-            }
-
-            .ingredients-box {
-              margin-top: 10px;
-              padding: 10px;
-              border-radius: 15px;
-              background: #f7f7f7;
-            }
-
-            .ingredients-box ul {
-              margin: 0;
-              padding-left: 18px;
-              columns: 2;
-              column-gap: 20px;
-            }
-
-            .ingredients-box li {
-              font-size: 11px;
-              margin-bottom: 3px;
-              break-inside: avoid;
-            }
-
-            .poster-footer {
-              margin-top: 18px;
-              padding: 12px 16px;
-              border-radius: 18px;
-              background: #fff4d6;
-              color: #8a5a00;
-              font-size: 13px;
-              font-weight: 800;
-              border: 1px solid #f1d28a;
-            }
-
-            .no-print {
-              position: fixed;
-              right: 16px;
-              bottom: 16px;
-              display: flex;
-              gap: 8px;
-            }
-
-            .no-print button {
-              border: 0;
-              border-radius: 999px;
-              background: #111;
-              color: #fff;
-              padding: 12px 16px;
-              cursor: pointer;
-              font-weight: 900;
-              box-shadow: 0 8px 24px rgba(0,0,0,0.22);
-            }
-
+            @page { size: A4 landscape; margin: 10mm; }
+            * { box-sizing: border-box; }
+            body { margin: 0; padding: 0; font-family: Arial, sans-serif; color: #111; background: #f3f4f6; }
+            .poster-page { min-height: 100vh; padding: 22px; background: radial-gradient(circle at top left, rgba(224,0,0,0.12), transparent 28%), linear-gradient(135deg, #ffffff 0%, #f7f7f7 48%, #ececec 100%); }
+            .poster-header { display: grid; grid-template-columns: 1fr auto; gap: 20px; align-items: center; padding: 22px 24px; border-radius: 24px; background: #111; color: #fff; box-shadow: 0 12px 34px rgba(0,0,0,0.18); }
+            .poster-header h1 { margin: 0; font-size: 34px; line-height: 1.05; letter-spacing: -0.8px; }
+            .poster-subtitle { margin-top: 8px; font-size: 15px; opacity: 0.86; }
+            .poster-count { padding: 14px 18px; border-radius: 18px; background: #fff; color: #111; font-weight: 900; text-align: center; min-width: 150px; }
+            .poster-count strong { display: block; font-size: 32px; line-height: 1; }
+            .legend { margin-top: 16px; padding: 14px; border-radius: 20px; background: rgba(255,255,255,0.9); display: flex; flex-wrap: wrap; gap: 7px; border: 1px solid rgba(0,0,0,0.08); }
+            .legend-pill { display: inline-flex; align-items: center; gap: 5px; padding: 6px 9px; border-radius: 999px; background: #f2f2f2; color: #777; font-size: 11px; font-weight: 800; opacity: 0.45; }
+            .legend-active { background: #111; color: #fff; opacity: 1; }
+            .recipe-grid { margin-top: 18px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+            .recipe-poster-card { position: relative; break-inside: avoid; min-height: 260px; padding: 18px; border-radius: 22px; background: #fff; border: 1px solid rgba(0,0,0,0.08); box-shadow: 0 10px 26px rgba(0,0,0,0.10); overflow: hidden; }
+            .recipe-poster-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 7px; background: linear-gradient(90deg, #e00000, #111, #e00000); }
+            .recipe-number { position: absolute; top: 12px; right: 12px; width: 34px; height: 34px; border-radius: 999px; background: #111; color: #fff; display: grid; place-items: center; font-weight: 900; }
+            .recipe-card-header { padding-right: 38px; }
+            .recipe-card-header h2 { margin: 0 0 5px; font-size: 21px; line-height: 1.08; }
+            .recipe-meta { color: #666; font-size: 12px; font-weight: 700; }
+            .poster-section-label { margin: 14px 0 6px; color: #555; font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 900; }
+            .badge-wrap { display: flex; flex-wrap: wrap; gap: 5px; }
+            .poster-badge { display: inline-flex; align-items: center; gap: 5px; border: 1.5px solid; border-radius: 999px; padding: 5px 8px; font-size: 11px; font-weight: 900; line-height: 1.1; }
+            .poster-none { color: #777; font-size: 12px; font-weight: 700; }
+            .possible-row { padding: 9px; border-radius: 14px; background: #fff7f7; border: 1px solid #ffd1d1; margin-top: 10px; }
+            .ingredients-box { margin-top: 10px; padding: 10px; border-radius: 15px; background: #f7f7f7; }
+            .ingredients-box ul { margin: 0; padding-left: 18px; columns: 2; column-gap: 20px; }
+            .ingredients-box li { font-size: 11px; margin-bottom: 3px; break-inside: avoid; }
+            .poster-footer { margin-top: 18px; padding: 12px 16px; border-radius: 18px; background: #fff4d6; color: #8a5a00; font-size: 13px; font-weight: 800; border: 1px solid #f1d28a; }
+            .no-print { position: fixed; right: 16px; bottom: 16px; display: flex; gap: 8px; }
+            .no-print button { border: 0; border-radius: 999px; background: #111; color: #fff; padding: 12px 16px; cursor: pointer; font-weight: 900; box-shadow: 0 8px 24px rgba(0,0,0,0.22); }
             @media print {
-              body {
-                background: #fff;
-              }
-
-              .poster-page {
-                padding: 0;
-                background: #fff;
-              }
-
-              .no-print {
-                display: none;
-              }
-
-              .recipe-grid {
-                grid-template-columns: repeat(3, minmax(0, 1fr));
-              }
-
-              .recipe-poster-card {
-                box-shadow: none;
-              }
+              body { background: #fff; }
+              .poster-page { padding: 0; background: #fff; }
+              .no-print { display: none; }
+              .recipe-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+              .recipe-poster-card { box-shadow: none; }
             }
           </style>
         </head>
@@ -2198,13 +1981,8 @@ export default function AllergenModule({
               </div>
             </section>
 
-            <section class="legend">
-              ${legendHtml}
-            </section>
-
-            <section class="recipe-grid">
-              ${recipeCardsHtml}
-            </section>
+            <section class="legend">${legendHtml}</section>
+            <section class="recipe-grid">${recipeCardsHtml}</section>
 
             <section class="poster-footer">
               Support tool only. Always verify against official recipe cards,
@@ -2242,6 +2020,300 @@ export default function AllergenModule({
       venue: selectedVenue.restaurantName,
       recipeCount: selectedPosterRecipes.length,
       allergens: allPosterAllergens,
+    });
+  };
+
+  const toggleSafeAllergen = (allergen) => {
+    setSelectedSafeAllergens((current) =>
+      current.includes(allergen)
+        ? current.filter((item) => item !== allergen)
+        : [...current, allergen]
+    );
+  };
+
+  const clearSafeAllergens = () => {
+    setSelectedSafeAllergens([]);
+    setSafeDishSearch("");
+  };
+
+  const selectedSafeAllergenSet = useMemo(
+    () => new Set(selectedSafeAllergens),
+    [selectedSafeAllergens]
+  );
+
+  const safeDishRows = useMemo(() => {
+    if (!selectedVenue || !selectedSafeAllergens.length) return [];
+
+    const query = safeDishSearch.toLowerCase().trim();
+
+    return selectedVenue.recipes
+      .map((recipe) => {
+        const recipeAllergens = sortAllergens(recipe.allergens || []);
+        const possibleHidden = sortAllergens(recipe.possibleHidden || []);
+
+        const blockingDeclared = recipeAllergens.filter((allergen) =>
+          selectedSafeAllergenSet.has(allergen)
+        );
+
+        const blockingPossible = includePossibleHiddenInSafeFinder
+          ? possibleHidden.filter((allergen) =>
+              selectedSafeAllergenSet.has(allergen)
+            )
+          : [];
+
+        const blockedAllergens = sortAllergens([
+          ...blockingDeclared,
+          ...blockingPossible,
+        ]);
+
+        const available = blockedAllergens.length === 0;
+
+        return {
+          recipe,
+          recipeKey: recipe.recipeKey,
+          recipeName: recipe.recipeName || "",
+          recipeCode: recipe.recipeCode || "",
+          menuName: recipe.menuName || "",
+          allergens: recipeAllergens,
+          possibleHidden,
+          blockingDeclared,
+          blockingPossible,
+          blockedAllergens,
+          available,
+          ingredientCount:
+            Number(recipe.ingredients?.length || 0) +
+            Number(recipe.subRecipes?.length || 0),
+        };
+      })
+      .filter((item) => item.available)
+      .filter((item) => {
+        if (!query) return true;
+
+        return [
+          item.recipeName,
+          item.recipeCode,
+          item.menuName,
+          item.allergens.join(" "),
+          item.possibleHidden.join(" "),
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+      })
+      .sort(
+        (a, b) =>
+          a.menuName.localeCompare(b.menuName) ||
+          a.recipeName.localeCompare(b.recipeName)
+      );
+  }, [
+    selectedVenue,
+    selectedSafeAllergens,
+    selectedSafeAllergenSet,
+    safeDishSearch,
+    includePossibleHiddenInSafeFinder,
+  ]);
+
+  const blockedDishRows = useMemo(() => {
+    if (!selectedVenue || !selectedSafeAllergens.length) return [];
+
+    return selectedVenue.recipes
+      .map((recipe) => {
+        const recipeAllergens = sortAllergens(recipe.allergens || []);
+        const possibleHidden = sortAllergens(recipe.possibleHidden || []);
+
+        const blockingDeclared = recipeAllergens.filter((allergen) =>
+          selectedSafeAllergenSet.has(allergen)
+        );
+
+        const blockingPossible = includePossibleHiddenInSafeFinder
+          ? possibleHidden.filter((allergen) =>
+              selectedSafeAllergenSet.has(allergen)
+            )
+          : [];
+
+        const blockedAllergens = sortAllergens([
+          ...blockingDeclared,
+          ...blockingPossible,
+        ]);
+
+        return {
+          recipe,
+          recipeName: recipe.recipeName || "",
+          recipeCode: recipe.recipeCode || "",
+          menuName: recipe.menuName || "",
+          blockingDeclared,
+          blockingPossible,
+          blockedAllergens,
+          available: blockedAllergens.length === 0,
+        };
+      })
+      .filter((item) => !item.available)
+      .sort(
+        (a, b) =>
+          a.menuName.localeCompare(b.menuName) ||
+          a.recipeName.localeCompare(b.recipeName)
+      );
+  }, [
+    selectedVenue,
+    selectedSafeAllergens,
+    selectedSafeAllergenSet,
+    includePossibleHiddenInSafeFinder,
+  ]);
+
+  const exportSafeDishFinderToExcel = () => {
+    if (!selectedVenue) {
+      window.alert("Choose a venue first.");
+      return;
+    }
+
+    if (!selectedSafeAllergens.length) {
+      window.alert("Choose at least one allergen.");
+      return;
+    }
+
+    if (!safeDishRows.length) {
+      window.alert("No available dishes found for the selected allergens.");
+      return;
+    }
+
+    const exportRows = safeDishRows.map((item, index) => ({
+      Number: index + 1,
+      Venue: selectedVenue.restaurantName,
+      RecipeCode: item.recipeCode,
+      RecipeName: item.recipeName,
+      MenuName: item.menuName,
+      AvoidingAllergens: selectedSafeAllergens.join(", "),
+      Available: "Yes",
+      RecipeAllergensFound: item.allergens.join(", "),
+      PossibleHiddenAllergensFound: item.possibleHidden.join(", "),
+      PossibleHiddenIncludedInCheck: includePossibleHiddenInSafeFinder
+        ? "Yes"
+        : "No",
+      IngredientLines: item.ingredientCount,
+    }));
+
+    exportRowsToExcel(
+      exportRows,
+      "Available Dishes",
+      `available-dishes-${selectedVenue.restaurantName
+        .replace(/[^a-z0-9]+/gi, "-")
+        .toLowerCase()
+        .slice(0, 40)}-${userShip || "ship"}.xlsx`
+    );
+
+    logUsageEvent("safe_dish_finder_exported", {
+      module: "allergen",
+      ship: userShip,
+      venue: selectedVenue.restaurantName,
+      allergens: selectedSafeAllergens,
+      availableDishes: safeDishRows.length,
+      blockedDishes: blockedDishRows.length,
+      includePossibleHidden: includePossibleHiddenInSafeFinder,
+    });
+  };
+
+  const printSafeDishFinder = () => {
+    if (!selectedVenue) {
+      window.alert("Choose a venue first.");
+      return;
+    }
+
+    if (!selectedSafeAllergens.length) {
+      window.alert("Choose at least one allergen.");
+      return;
+    }
+
+    if (!safeDishRows.length) {
+      window.alert("No available dishes found for the selected allergens.");
+      return;
+    }
+
+    const allergenText = selectedSafeAllergens.join(", ");
+
+    const rowsHtml = safeDishRows
+      .map(
+        (item, index) => `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${escapeHtml(item.recipeName)}</td>
+            <td>${escapeHtml(item.recipeCode || "N/A")}</td>
+            <td>${escapeHtml(item.menuName || "N/A")}</td>
+            <td>${escapeHtml(item.allergens.join(", ") || "None found")}</td>
+            <td>${escapeHtml(item.possibleHidden.join(", ") || "None found")}</td>
+          </tr>
+        `
+      )
+      .join("");
+
+    const html = `
+      <html>
+        <head>
+          <title>Available Dishes - ${escapeHtml(selectedVenue.restaurantName)}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; color: #111; }
+            h1 { margin-bottom: 4px; }
+            .meta { margin: 4px 0; color: #555; font-weight: bold; }
+            .warning { margin-top: 14px; padding: 12px; border-radius: 12px; background: #fff4d6; color: #8a5a00; font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+            th, td { border: 1px solid #ccc; padding: 7px; text-align: left; vertical-align: top; }
+            th { background: #f2f2f2; }
+            .good { color: #2e7d32; font-weight: bold; }
+          </style>
+        </head>
+
+        <body>
+          <h1>Available Dishes</h1>
+          <div class="meta">Venue: ${escapeHtml(selectedVenue.restaurantName)}</div>
+          <div class="meta">Avoiding: ${escapeHtml(allergenText)}</div>
+          <div class="meta">Available dishes: ${safeDishRows.length}</div>
+          <div class="meta">Blocked dishes: ${blockedDishRows.length}</div>
+          <div class="meta">Possible hidden allergens included: ${
+            includePossibleHiddenInSafeFinder ? "Yes" : "No"
+          }</div>
+
+          <div class="warning">
+            Support tool only. Always verify with official recipe cards, supplier labels,
+            and onboard allergy procedures before confirming a dish is safe.
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Dish / Recipe</th>
+                <th>Recipe Code</th>
+                <th>Menu</th>
+                <th>Recipe Allergens Found</th>
+                <th>Possible Hidden Allergens Found</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open("", "_blank");
+
+    if (!printWindow) {
+      window.alert("Print window was blocked. Allow popups and try again.");
+      return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+
+    logUsageEvent("safe_dish_finder_printed", {
+      module: "allergen",
+      ship: userShip,
+      venue: selectedVenue.restaurantName,
+      allergens: selectedSafeAllergens,
+      availableDishes: safeDishRows.length,
+      blockedDishes: blockedDishRows.length,
+      includePossibleHidden: includePossibleHiddenInSafeFinder,
     });
   };
 
@@ -2596,6 +2668,10 @@ export default function AllergenModule({
                 setPosterBuilderOpen(false);
                 setPosterSearch("");
                 setSelectedPosterRecipeKeys([]);
+                setSafeDishFinderOpen(false);
+                setSafeDishSearch("");
+                setSelectedSafeAllergens([]);
+                setIncludePossibleHiddenInSafeFinder(true);
                 setIngredientSearch("");
               }}
             >
@@ -2639,7 +2715,20 @@ export default function AllergenModule({
                 type="button"
                 style={styles.backButton}
                 onClick={() => {
+                  setSafeDishFinderOpen((current) => !current);
+                  setPosterBuilderOpen(false);
+                  setSelectedSubRecipeLine(null);
+                }}
+              >
+                🛡️ Safe Dish Finder
+              </button>
+
+              <button
+                type="button"
+                style={styles.backButton}
+                onClick={() => {
                   setPosterBuilderOpen((current) => !current);
+                  setSafeDishFinderOpen(false);
                   setSelectedSubRecipeLine(null);
                 }}
               >
@@ -2649,6 +2738,174 @@ export default function AllergenModule({
               <div style={styles.shipBadge}>{filteredRecipes.length} recipe(s)</div>
             </div>
           </div>
+
+          {safeDishFinderOpen && (
+            <section style={localStyles.safeDishFinderBox}>
+              <div style={localStyles.safeDishHeader}>
+                <div>
+                  <h3 style={localStyles.safeDishTitle}>
+                    🛡️ Safe Dish Finder
+                  </h3>
+
+                  <div style={localStyles.safeDishSubtext}>
+                    Choose allergen(s), then see which dishes in{" "}
+                    {selectedVenue.restaurantName} do not contain them.
+                  </div>
+                </div>
+
+                <div style={localStyles.safeDishCount}>
+                  {selectedSafeAllergens.length
+                    ? `${safeDishRows.length} available`
+                    : "Choose allergen(s)"}
+                </div>
+              </div>
+
+              <div style={localStyles.safeAllergenGrid}>
+                {ALLERGEN_ORDER.map((allergen) => {
+                  const selected = selectedSafeAllergens.includes(allergen);
+                  const config = ALLERGEN_DISPLAY[allergen] || {
+                    icon: "⚠️",
+                    color: "#555",
+                  };
+
+                  return (
+                    <button
+                      key={`safe-allergen-${allergen}`}
+                      type="button"
+                      style={{
+                        ...localStyles.safeAllergenButton,
+                        ...(selected ? localStyles.safeAllergenButtonActive : {}),
+                      }}
+                      onClick={() => toggleSafeAllergen(allergen)}
+                    >
+                      <span>{config.icon}</span>
+                      <span>{allergen}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <label style={styles.checkboxRow}>
+                <input
+                  type="checkbox"
+                  checked={includePossibleHiddenInSafeFinder}
+                  onChange={(event) =>
+                    setIncludePossibleHiddenInSafeFinder(event.target.checked)
+                  }
+                />
+                <span>
+                  Exclude dishes with possible hidden allergens too. Recommended for allergy requests.
+                </span>
+              </label>
+
+              <input
+                placeholder="Search available dishes..."
+                value={safeDishSearch}
+                onChange={(event) => setSafeDishSearch(event.target.value)}
+                style={styles.searchInput}
+              />
+
+              <div style={styles.headerActions}>
+                <button
+                  type="button"
+                  style={styles.backButton}
+                  onClick={clearSafeAllergens}
+                  disabled={!selectedSafeAllergens.length && !safeDishSearch}
+                >
+                  Clear
+                </button>
+
+                <button
+                  type="button"
+                  style={styles.backButton}
+                  onClick={printSafeDishFinder}
+                  disabled={!safeDishRows.length}
+                >
+                  🖨️ Print Available Dishes
+                </button>
+
+                <button
+                  type="button"
+                  style={styles.primaryButton}
+                  onClick={exportSafeDishFinderToExcel}
+                  disabled={!safeDishRows.length}
+                >
+                  📥 Export Available Dishes
+                </button>
+              </div>
+
+              {selectedSafeAllergens.length > 0 && (
+                <div style={styles.infoBox}>
+                  <div>
+                    🚫 Avoiding: <strong>{selectedSafeAllergens.join(", ")}</strong>
+                  </div>
+                  <div>
+                    ✅ Available dishes: <strong>{safeDishRows.length}</strong>
+                  </div>
+                  <div>
+                    ❌ Blocked dishes: <strong>{blockedDishRows.length}</strong>
+                  </div>
+                  <div>
+                    🕵️ Possible hidden allergens included in check:{" "}
+                    <strong>
+                      {includePossibleHiddenInSafeFinder ? "Yes" : "No"}
+                    </strong>
+                  </div>
+                </div>
+              )}
+
+              {!selectedSafeAllergens.length && (
+                <p style={styles.emptyText}>
+                  Select one or more allergens above to see available dishes.
+                </p>
+              )}
+
+              {selectedSafeAllergens.length > 0 && !safeDishRows.length && (
+                <p style={styles.warningText}>
+                  No available dishes found for the selected allergen combination.
+                  Verify with official recipe cards and onboard allergy procedures.
+                </p>
+              )}
+
+              <div style={localStyles.safeDishGrid}>
+                {safeDishRows.map((item) => (
+                  <button
+                    key={`safe-dish-${item.recipeKey}`}
+                    type="button"
+                    style={localStyles.safeDishCard}
+                    onClick={() => {
+                      setSelectedRecipeKey(item.recipeKey);
+                      setSelectedSubRecipeLine(null);
+                      setIngredientSearch("");
+                    }}
+                  >
+                    <div style={localStyles.safeDishGoodBadge}>✅ Available</div>
+
+                    <strong>{item.recipeName}</strong>
+
+                    <span>Recipe code: {item.recipeCode || "N/A"}</span>
+
+                    {item.menuName && <span>Menu: {item.menuName}</span>}
+
+                    <div style={localStyles.safeDishMeta}>
+                      Allergens found: {item.allergens.join(", ") || "None found"}
+                    </div>
+
+                    {includePossibleHiddenInSafeFinder && (
+                      <div style={localStyles.safeDishMeta}>
+                        Possible hidden:{" "}
+                        {item.possibleHidden.join(", ") || "None found"}
+                      </div>
+                    )}
+
+                    <div style={localStyles.safeDishOpenHint}>
+                      Click to open recipe details
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
 
           {posterBuilderOpen && (
             <section style={localStyles.posterBuilderBox}>
@@ -3425,5 +3682,114 @@ const localStyles = {
     gap: 3,
     fontSize: 12,
     color: "#555",
+  },
+
+  safeDishFinderBox: {
+    marginBottom: 18,
+    padding: 16,
+    borderRadius: 18,
+    background: "linear-gradient(135deg, #f0fff4 0%, #ffffff 100%)",
+    border: "1px solid #bde5c8",
+    boxShadow: "0 8px 22px rgba(0,0,0,0.06)",
+  },
+
+  safeDishHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 12,
+    alignItems: "flex-start",
+    marginBottom: 12,
+    flexWrap: "wrap",
+  },
+
+  safeDishTitle: {
+    margin: 0,
+    fontSize: 20,
+  },
+
+  safeDishSubtext: {
+    marginTop: 4,
+    color: "#2e7d32",
+    fontSize: 13,
+    fontWeight: "bold",
+  },
+
+  safeDishCount: {
+    padding: "9px 12px",
+    borderRadius: 999,
+    background: "#2e7d32",
+    color: "#fff",
+    fontWeight: "bold",
+  },
+
+  safeAllergenGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))",
+    gap: 8,
+    marginBottom: 12,
+  },
+
+  safeAllergenButton: {
+    border: "1px solid #ddd",
+    borderRadius: 999,
+    background: "#fff",
+    padding: "9px 11px",
+    display: "flex",
+    gap: 7,
+    alignItems: "center",
+    cursor: "pointer",
+    fontWeight: "bold",
+    color: "#111",
+    textAlign: "left",
+  },
+
+  safeAllergenButtonActive: {
+    border: "2px solid #2e7d32",
+    background: "#e8f5e9",
+    color: "#2e7d32",
+  },
+
+  safeDishGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+    gap: 10,
+    marginTop: 14,
+  },
+
+  safeDishCard: {
+    border: "2px solid #2e7d32",
+    borderRadius: 16,
+    background: "#fff",
+    padding: 12,
+    display: "grid",
+    gap: 5,
+    textAlign: "left",
+    cursor: "pointer",
+    fontFamily: "inherit",
+    color: "#111",
+    boxShadow: "0 5px 16px rgba(0,0,0,0.06)",
+  },
+
+  safeDishGoodBadge: {
+    justifySelf: "start",
+    padding: "5px 8px",
+    borderRadius: 999,
+    background: "#e8f5e9",
+    color: "#2e7d32",
+    fontWeight: "bold",
+    fontSize: 12,
+  },
+
+  safeDishMeta: {
+    color: "#555",
+    fontSize: 12,
+    lineHeight: 1.25,
+  },
+
+  safeDishOpenHint: {
+    marginTop: 5,
+    color: "#2e7d32",
+    fontSize: 12,
+    fontWeight: "bold",
   },
 };
