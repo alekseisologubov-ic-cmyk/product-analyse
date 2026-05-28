@@ -139,6 +139,25 @@ const textHasWordOrPhrase = (text, word) => {
   ).test(source);
 };
 
+const isGlutenFreeProductClaim = (...values) => {
+  const text = values
+    .map((value) => cleanText(value))
+    .join(" ")
+    .replace(/[^A-Z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!text) return false;
+
+  return (
+    /\bGF\b/.test(text) ||
+    text.includes("GLUTEN FREE") ||
+    text.includes("GLUTENFREE") ||
+    text.includes("FREE FROM GLUTEN") ||
+    text.includes("NO GLUTEN")
+  );
+};
+
 const ALLERGEN_ORDER = [
   "Cereals containing gluten",
   "Crustaceans",
@@ -844,6 +863,10 @@ const getPreparedCommonAllergens = (...values) => {
     }
   });
 
+  if (isGlutenFreeProductClaim(...values)) {
+    found.delete("Cereals containing gluten");
+  }
+
   return sortAllergens([...found]);
 };
 
@@ -899,6 +922,10 @@ const keywordAllergensForText = (...values) => {
     found.delete("Milk");
   }
 
+  if (isGlutenFreeProductClaim(...values)) {
+    found.delete("Cereals containing gluten");
+  }
+
   return sortAllergens([...found]);
 };
 
@@ -908,7 +935,10 @@ const looksGlutenFreeClaim = (...values) => {
   return (
     /\bGF\b/.test(text) ||
     text.includes("GLUTEN FREE") ||
-    text.includes("GLUTEN-FREE")
+    text.includes("GLUTEN-FREE") ||
+    text.includes("GLUTENFREE") ||
+    text.includes("FREE FROM GLUTEN") ||
+    text.includes("NO GLUTEN")
   );
 };
 
@@ -1023,9 +1053,18 @@ const parseIngredientByLocationWorkbook = (workbook) => {
     const recipeIsBasic = safeText(get(indexes.recipeIsBasic));
     const hasProductRelation = safeText(get(indexes.hasProductRelation));
     const ingredientCode = normalizeCode(get(indexes.ingredientCode));
+    const glutenFreeProductClaim = isGlutenFreeProductClaim(ingredientName, assigned);
 
-    const ingredientAllergens = splitAllergens(get(indexes.ingredientAllergens));
-    const recipeDeclaredAllergens = splitAllergens(get(indexes.recipeAllergens));
+    const rawIngredientAllergens = splitAllergens(get(indexes.ingredientAllergens));
+    const rawRecipeDeclaredAllergens = splitAllergens(get(indexes.recipeAllergens));
+
+    const ingredientAllergens = glutenFreeProductClaim
+      ? rawIngredientAllergens.filter(
+          (allergen) => allergen !== "Cereals containing gluten"
+        )
+      : rawIngredientAllergens;
+
+    const recipeDeclaredAllergens = rawRecipeDeclaredAllergens;
 
     const currentLineIsSubRecipe = isSubRecipeRow({
       ingredientName,
@@ -1141,6 +1180,7 @@ const parseIngredientByLocationWorkbook = (workbook) => {
       skipPossibleAllergens,
       processedItem,
       onboardRecipeLine,
+      glutenFreeProductClaim,
       gfClaim,
     });
   });
@@ -2338,6 +2378,7 @@ export default function AllergenModule({
       HiddenWarnings: row.hiddenWarnings.join(" | "),
       IgnoredBasic: row.ignoredBasic ? "Yes" : "No",
       PlainRawIngredient: row.plainRawIngredient ? "Yes" : "No",
+      GlutenFreeProductClaim: row.glutenFreeProductClaim ? "Yes" : "No",
       PossibleAllergensSkipped: row.skipPossibleAllergens ? "Yes" : "No",
       OnboardRecipeLine: row.onboardRecipeLine ? "Yes" : "No",
       SourceRow: row.sourceRow,
@@ -2380,6 +2421,7 @@ export default function AllergenModule({
           sourceRows: new Set(),
           ignoredBasic: false,
           plainRawIngredient: false,
+          glutenFreeProductClaim: false,
           possibleAllergensSkipped: false,
           onboardRecipeLine: false,
         });
@@ -2417,6 +2459,8 @@ export default function AllergenModule({
       product.ignoredBasic = product.ignoredBasic || row.ignoredBasic;
       product.plainRawIngredient =
         product.plainRawIngredient || row.plainRawIngredient;
+      product.glutenFreeProductClaim =
+        product.glutenFreeProductClaim || row.glutenFreeProductClaim;
       product.possibleAllergensSkipped =
         product.possibleAllergensSkipped || row.skipPossibleAllergens;
       product.onboardRecipeLine =
@@ -2456,6 +2500,7 @@ export default function AllergenModule({
           FreshRawItemPossibleAllergensSkipped: product.plainRawIngredient
             ? "Yes"
             : "No",
+          GlutenFreeProductClaim: product.glutenFreeProductClaim ? "Yes" : "No",
           PossibleAllergensSkipped: product.possibleAllergensSkipped
             ? "Yes"
             : "No",
@@ -2575,14 +2620,11 @@ export default function AllergenModule({
             This support tool lists only the 14 required allergen groups:
             cereals containing gluten, crustaceans, eggs, fish, peanuts,
             soybeans, milk, tree nuts, celery, mustard, sesame seeds, sulphur
-            dioxide and sulphites, lupin, and molluscs. Ingredient cards show
-            allergens that belong to that ingredient. Recipe-level allergens are
-            shown in recipe summaries but are not copied to every ingredient.
-            Onboard sub-recipes such as items ending with “(BR) - 2019 - VV” are
-            treated as made onboard, so they do not receive the red supplier-label
-            warning just because they contain words like puree, sauce, or paste.
-            Always verify against official recipe cards and supplier
-            specifications before answering a Sailor allergy request.
+            dioxide and sulphites, lupin, and molluscs. Gluten-free product
+            names such as “Gluten Free Cookies” or “GF Bread” will not be marked
+            as cereals containing gluten from keyword matching. Always verify
+            against official recipe cards, supplier labels, and onboard allergy
+            procedures before answering a Sailor allergy request.
           </div>
 
           <button
@@ -3188,6 +3230,12 @@ export default function AllergenModule({
                       </div>
                     )}
 
+                    {item.glutenFreeProductClaim && (
+                      <div style={styles.statusNeutral}>
+                        Gluten-free product claim
+                      </div>
+                    )}
+
                     {item.onboardRecipeLine && (
                       <div style={styles.statusNeutral}>
                         Onboard recipe item
@@ -3362,6 +3410,12 @@ export default function AllergenModule({
                           {subItem.plainRawIngredient && !subItem.ignoredBasic && (
                             <div style={styles.statusNeutral}>
                               Fresh/raw item — possible allergens skipped
+                            </div>
+                          )}
+
+                          {subItem.glutenFreeProductClaim && (
+                            <div style={styles.statusNeutral}>
+                              Gluten-free product claim
                             </div>
                           )}
 
