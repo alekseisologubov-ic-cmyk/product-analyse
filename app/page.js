@@ -6604,16 +6604,55 @@ const getEquipmentFallbackImage = (item) => {
   const allergenWarnings = selectedRecipe ? detectAllergens(productsInRecipe) : [];
   const filteredProducts = products.filter((p) => p.toLowerCase().includes(search.toLowerCase()));
 
-  const productCostReportRows = useMemo(() => getConsumptionCostReportRows(), [consumptionData, viewMode, userShip]);
-  const filteredProductCostReportRows = useMemo(() => {
-    const term = productCostReportSearch.toLowerCase().trim();
-    if (!term) return productCostReportRows;
+  const productCostReportRows = useMemo(
+  () => getConsumptionCostReportRows(),
+  [consumptionData, viewMode, userShip]
+);
 
-    return productCostReportRows.filter((item) => {
-      const venueText = item.venues.map((venue) => venue.location).join(" ");
-      return (item.product + " " + (item.code || "") + " " + venueText).toLowerCase().includes(term);
-    });
-  }, [productCostReportRows, productCostReportSearch]);
+const productCostReportRowsWithRegionalPar = useMemo(
+  () =>
+    enrichDashboardProductsWithRegionalPar({
+      products: productCostReportRows,
+      yearlyRegionalConsumption,
+      selectedRegion: selectedRegionalConsumptionRegion,
+      voyageDays: 14,
+      bufferPercent: regionalParBufferPercent,
+    }),
+  [
+    productCostReportRows,
+    yearlyRegionalConsumption,
+    selectedRegionalConsumptionRegion,
+    regionalParBufferPercent,
+  ]
+);
+
+const dashboardRegionalMatchedCount = productCostReportRowsWithRegionalPar.filter(
+  (item) => item.regionalHasData
+).length;
+
+const filteredProductCostReportRows = useMemo(() => {
+  const term = productCostReportSearch.toLowerCase().trim();
+
+  if (!term) return productCostReportRowsWithRegionalPar;
+
+  return productCostReportRowsWithRegionalPar.filter((item) => {
+    const venueText = item.venues.map((venue) => venue.location).join(" ");
+
+    return (
+      item.product +
+      " " +
+      (item.code || "") +
+      " " +
+      venueText +
+      " " +
+      (item.regionalRegion || "") +
+      " " +
+      (item.suggestionBasis || "")
+    )
+      .toLowerCase()
+      .includes(term);
+  });
+}, [productCostReportRowsWithRegionalPar, productCostReportSearch]);
 
   const sendAccessCode = () => {
     const email = normalizeAppEmail(userEmail);
