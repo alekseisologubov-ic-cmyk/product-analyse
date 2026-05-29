@@ -4030,68 +4030,67 @@ for (let index = 0; index < items.length; index += 1) {
   };
 
   const uploadConsumptionFile = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    readExcelFile(file, (workbook) => {
-      const rows = workbookToRows(workbook);
-      setConsumptionRows(rows);
-      setProducts(buildProductList(rows));
-      setSelectedProduct("");
-      setSelectedRecipe(null);
-      setMessage("Consumption file loaded.");
-      logUsageEvent("product_consumption_file_uploaded", {
-        module: "product_dashboard",
-        fileName: file.name,
-        rowCount: Math.max(rows.length - 1, 0),
-        products: buildProductList(rows).length,
-      });
-    });
-  };
-const uploadYearlyRegionalConsumptionFile = (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
 
-  setYearlyRegionalMessage("Preparing yearly regional consumption file...");
+  setMessage("Loading consumption file...");
 
-  readExcelFile(file, (workbook) => {
-    try {
-      const parsed = parseYearlyRegionalConsumptionWorkbook(workbook);
+  readExcelFile(
+    file,
+    (workbook) => {
+      try {
+        const rows = workbookToRows(workbook);
+        const safeRows = Array.isArray(rows) ? rows : [];
+        const productList = buildProductList(safeRows);
 
-      setYearlyRegionalConsumption(parsed);
-      setYearlyRegionalFileName(file.name);
+        setConsumptionRows(safeRows);
+        setProducts(productList);
+        setSelectedProduct("");
+        setSelectedRecipe(null);
+        setProductCostReportSearch("");
 
-      if (!parsed.regionOptions?.length) {
-        setSelectedRegionalConsumptionRegion(YEARLY_REGION_ALL);
-        setYearlyRegionalMessage(
-          "Yearly file loaded, but no regional ship blocks were detected. Check the header rows."
+        setMessage(
+          "Consumption file loaded. " +
+            Math.max(safeRows.length - 1, 0) +
+            " row(s), " +
+            productList.length +
+            " product(s)."
         );
-      } else {
-        setYearlyRegionalMessage(
-          "Yearly regional file loaded. " +
-            parsed.aggregates.length +
-            " regional product records found across " +
-            parsed.regionOptions.length +
-            " region(s)."
-        );
+
+        logUsageEvent("product_consumption_file_uploaded", {
+          module: "product_dashboard",
+          fileName: file.name,
+          rowCount: Math.max(safeRows.length - 1, 0),
+          products: productList.length,
+        });
+      } catch (error) {
+        setConsumptionRows([]);
+        setProducts([]);
+        setSelectedProduct("");
+        setSelectedRecipe(null);
+
+        const text =
+          error?.message ||
+          "Could not process the consumption file. Please check the file format.";
+
+        setMessage(text);
+        window.alert(text);
       }
+    },
+    (error) => {
+      setConsumptionRows([]);
+      setProducts([]);
+      setSelectedProduct("");
+      setSelectedRecipe(null);
 
-      logUsageEvent("yearly_regional_consumption_uploaded", {
-        module: "product_dashboard",
-        fileName: file.name,
-        sourceSheet: parsed.sourceSheet,
-        regions: parsed.regionOptions || [],
-        aggregates: parsed.aggregates.length,
-        shipRegionBlocks: parsed.shipRegionBlocks.length,
-      });
-    } catch (error) {
-      setYearlyRegionalConsumption(null);
-      setYearlyRegionalFileName("");
-      setYearlyRegionalMessage(
-        error?.message || "Could not prepare yearly regional consumption file."
-      );
+      const text =
+        error?.message ||
+        "Could not read the consumption file. Please upload a valid Excel file.";
+
+      setMessage(text);
+      window.alert(text);
     }
-  });
+  );
 
   e.target.value = "";
 };
