@@ -113,6 +113,7 @@ const normalizeShipCode = (value) => {
 };
 
 const SCHEDULE_ALL_SHIPS = "ALL";
+const YEARLY_REPORT_ALL_SHIPS = "ALL_SHIPS";
 const MASTER_INVENTORY_SCOPE = "GLOBAL";
 const EQUIPMENT_PICTURE_BUCKET = "equipment-pictures";
 
