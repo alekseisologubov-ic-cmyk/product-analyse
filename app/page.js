@@ -4110,7 +4110,6 @@ for (let index = 0; index < items.length; index += 1) {
       setYearlyRegionalMessage(
         "Permanent yearly regional consumption file was not found. You can still upload it manually."
       );
-      const loadPermanentIngredientByLocationForProductDashboard = async ({ silent = false } = {}) => {
       return;
     }
 
@@ -4158,6 +4157,63 @@ for (let index = 0; index < items.length; index += 1) {
     setYearlyRegionalMessage(
       error?.message || "Could not load permanent yearly regional consumption file."
     );
+  }
+};
+  const uploadYearlyRegionalConsumptionFile = async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  try {
+    setYearlyRegionalMessage("Loading yearly regional consumption file...");
+
+    const arrayBuffer = await file.arrayBuffer();
+
+    const workbook = XLSX.read(arrayBuffer, {
+      type: "array",
+      cellDates: true,
+    });
+
+    const parsed = parseYearlyRegionalConsumptionWorkbook(workbook);
+
+    setYearlyRegionalConsumption(parsed);
+    setYearlyRegionalFileName(file.name);
+    setSelectedRegionalConsumptionRegion("");
+
+    if (!parsed.regionOptions?.length) {
+      setYearlyRegionalMessage(
+        "Yearly regional file loaded, but no region / home port blocks were detected. Check the header rows."
+      );
+      return;
+    }
+
+    setYearlyRegionalMessage(
+      "Yearly regional file loaded. " +
+        parsed.aggregates.length +
+        " regional product records found across " +
+        parsed.regionOptions.length +
+        " region(s)."
+    );
+
+    logUsageEvent("yearly_regional_consumption_uploaded", {
+      module: "product_dashboard",
+      fileName: file.name,
+      sourceSheet: parsed.sourceSheet,
+      regions: parsed.regionOptions || [],
+      aggregates: parsed.aggregates.length,
+      shipRegionBlocks: parsed.shipRegionBlocks.length,
+    });
+  } catch (error) {
+    setYearlyRegionalConsumption(null);
+    setYearlyRegionalFileName("");
+    setSelectedRegionalConsumptionRegion("");
+
+    const text =
+      error?.message || "Could not load yearly regional consumption file.";
+
+    setYearlyRegionalMessage(text);
+    window.alert(text);
+  } finally {
+    event.target.value = "";
   }
 };
   const loadPermanentIngredientByLocationForProductDashboard = async ({ silent = false } = {}) => {
