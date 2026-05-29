@@ -7,7 +7,7 @@ import {
   parseYearlyRegionalConsumptionWorkbook,
   getRegionalParSuggestion,
   formatRegionalQty,
-} from "../lib/yearlyRegionalConsumption";
+} from "../../lib/yearlyRegionalConsumption";
 
 const SHIPS = ["BRL", "RL", "SC", "VL"];
 const REPORT_RENDER_BATCH = 120;
