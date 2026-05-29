@@ -6652,27 +6652,51 @@ const getEquipmentFallbackImage = (item) => {
   const allergenWarnings = selectedRecipe ? detectAllergens(productsInRecipe) : [];
   const filteredProducts = products.filter((p) => p.toLowerCase().includes(search.toLowerCase()));
 
-  const productCostReportRows = useMemo(
-  () => getConsumptionCostReportRows(),
-  [consumptionData, viewMode, userShip]
-);
+  const productCostReportRows = useMemo(() => {
+  try {
+    const rows = getConsumptionCostReportRows();
+    return Array.isArray(rows) ? rows : [];
+  } catch (error) {
+    console.error("Could not build product cost report rows:", error);
+    return [];
+  }
+}, [consumptionData, viewMode, userShip]);
 
-const productCostReportRowsWithRegionalPar = useMemo(
-  () =>
-    enrichDashboardProductsWithRegionalPar({
-      products: productCostReportRows,
+const productCostReportRowsWithRegionalPar = useMemo(() => {
+  try {
+    return enrichDashboardProductsWithRegionalPar({
+      products: Array.isArray(productCostReportRows) ? productCostReportRows : [],
       yearlyRegionalConsumption,
       selectedRegion: selectedRegionalConsumptionRegion,
       voyageDays: 14,
       bufferPercent: regionalParBufferPercent,
-    }),
-  [
-    productCostReportRows,
-    yearlyRegionalConsumption,
-    selectedRegionalConsumptionRegion,
-    regionalParBufferPercent,
-  ]
-);
+    }).map((item) => ({
+      ...item,
+      venues: Array.isArray(item.venues) ? item.venues : [],
+    }));
+  } catch (error) {
+    console.error("Could not enrich dashboard products with regional par:", error);
+
+    return (Array.isArray(productCostReportRows) ? productCostReportRows : []).map(
+      (item) => ({
+        ...item,
+        venues: Array.isArray(item.venues) ? item.venues : [],
+        regionalHasData: false,
+        regionalRegion: selectedRegionalConsumptionRegion || "",
+        regionalAvgDailyQty: 0,
+        regionalSuggestedParLevel: 0,
+        regionalSuggestedParDifference: 0,
+        regionalEvidenceBlocks: 0,
+        suggestionBasis: "Regional calculation error",
+      })
+    );
+  }
+}, [
+  productCostReportRows,
+  yearlyRegionalConsumption,
+  selectedRegionalConsumptionRegion,
+  regionalParBufferPercent,
+]);
 
 const dashboardRegionalMatchedCount = productCostReportRowsWithRegionalPar.filter(
   (item) => item.regionalHasData
@@ -6680,22 +6704,26 @@ const dashboardRegionalMatchedCount = productCostReportRowsWithRegionalPar.filte
 
 const filteredProductCostReportRows = useMemo(() => {
   const term = productCostReportSearch.toLowerCase().trim();
+  const sourceRows = Array.isArray(productCostReportRowsWithRegionalPar)
+    ? productCostReportRowsWithRegionalPar
+    : [];
 
-  if (!term) return productCostReportRowsWithRegionalPar;
+  if (!term) return sourceRows;
 
-  return productCostReportRowsWithRegionalPar.filter((item) => {
-    const venueText = item.venues.map((venue) => venue.location).join(" ");
+  return sourceRows.filter((item) => {
+    const venues = Array.isArray(item.venues) ? item.venues : [];
+    const venueText = venues.map((venue) => venue.location || "").join(" ");
 
     return (
-      item.product +
+      String(item.product || "") +
       " " +
-      (item.code || "") +
+      String(item.code || "") +
       " " +
       venueText +
       " " +
-      (item.regionalRegion || "") +
+      String(item.regionalRegion || "") +
       " " +
-      (item.suggestionBasis || "")
+      String(item.suggestionBasis || "")
     )
       .toLowerCase()
       .includes(term);
