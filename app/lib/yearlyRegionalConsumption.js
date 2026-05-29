@@ -462,12 +462,20 @@ export const parseYearlyRegionalConsumptionWorkbook = (workbook) => {
 
     if (!currentMonthInfo) continue;
 
-    const descriptorCandidates = [
-      shipRow[colIndex],
-      shipRow[colIndex + 1],
-      shipRow[colIndex + 2],
-    ].filter((value) => safeText(value));
-
+   const descriptorCandidates = [
+  shipRow[colIndex - 2],
+  shipRow[colIndex - 1],
+  shipRow[colIndex],
+  shipRow[colIndex + 1],
+  shipRow[colIndex + 2],
+  monthRow[colIndex - 2],
+  monthRow[colIndex - 1],
+  monthRow[colIndex],
+  monthRow[colIndex + 1],
+  monthRow[colIndex + 2],
+]
+  .map((value) => safeText(value))
+  .filter(Boolean);
     let parsed = null;
 
     for (let i = 0; i < descriptorCandidates.length; i += 1) {
