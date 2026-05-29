@@ -639,45 +639,6 @@ const combineAggregateRows = (rows = []) => {
   return combined;
 };
 
-export const findRegionalConsumptionForProduct = ({
-  yearlyRegionalConsumption,
-  productCode,
-  productName,
-  region,
-}) => {
-  if (!yearlyRegionalConsumption?.aggregates?.length) {
-    return null;
-  }
-
-  const codeKey = normalizeOrderCode(productCode);
-  const productKey = getProductReportKey(productName);
-  const selectedRegion = region || YEARLY_REGION_ALL;
-
-  let candidates = yearlyRegionalConsumption.aggregates;
-
-  if (selectedRegion !== YEARLY_REGION_ALL) {
-    candidates = candidates.filter((item) => item.region === selectedRegion);
-  }
-
-  let matches = [];
-
-  if (codeKey) {
-    matches = candidates.filter(
-      (item) => normalizeOrderCode(item.productCode) === codeKey
-    );
-  }
-
-  if (!matches.length && productKey) {
-    matches = candidates.filter((item) => item.productKey === productKey);
-  }
-
-  if (!matches.length) {
-    return null;
-  }
-
-  return combineAggregateRows(matches);
-};
-
 export const getRegionalParSuggestion = ({
   yearlyRegionalConsumption,
   productCode,
@@ -686,11 +647,13 @@ export const getRegionalParSuggestion = ({
   voyageDays,
   bufferPercent = 0,
 }) => {
+  const selectedRegion = String(region || "").trim();
+
   const match = findRegionalConsumptionForProduct({
     yearlyRegionalConsumption,
     productCode,
     productName,
-    region,
+    region: selectedRegion,
   });
 
   const days = Number(voyageDays || 0);
@@ -699,7 +662,7 @@ export const getRegionalParSuggestion = ({
   if (!match || !days) {
     return {
       hasRegionalData: false,
-      region: region || YEARLY_REGION_ALL,
+      region: selectedRegion,
       totalQty: 0,
       totalDays: 0,
       avgDailyQty: 0,
@@ -711,12 +674,18 @@ export const getRegionalParSuggestion = ({
     };
   }
 
+  // Important:
+  // match.totalDays is only the active sailing days for the selected region.
+  // Example:
+  // ATHENS appears in May, June, July only.
+  // totalDays = 31 + 30 + 31 = 92.
+  // It will not use 360/365 days unless ALL_REGIONS is selected manually.
   const suggestedParLevel =
     Number(match.avgDailyQty || 0) * days * bufferMultiplier;
 
   return {
     hasRegionalData: Number(match.totalDays || 0) > 0,
-    region: region || YEARLY_REGION_ALL,
+    region: selectedRegion,
     totalQty: Number(match.totalQty || 0),
     totalDays: Number(match.totalDays || 0),
     avgDailyQty: Number(match.avgDailyQty || 0),
