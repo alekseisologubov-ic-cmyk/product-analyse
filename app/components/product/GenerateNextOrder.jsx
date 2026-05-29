@@ -2061,7 +2061,8 @@ export default function GenerateNextOrder({
             }}
             style={styles.searchInput}
           >
-            <option value={YEARLY_REGION_ALL}>All regions</option>
+            <option value="">Select region / origin</option>
+<option value={YEARLY_REGION_ALL}>All regions</option>
 
             {(yearlyRegionalConsumption?.regionOptions || []).map((region) => (
               <option key={region} value={region}>
