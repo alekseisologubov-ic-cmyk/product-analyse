@@ -8680,18 +8680,94 @@ setCurrentInventoryItem({
 )}
 
           <label style={styles.label}>Optional: Replace template file</label>
-          <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadTemplateFile} style={styles.fileInput} />
+<input
+  type="file"
+  accept=".xlsx,.xls,.xlsm"
+  onChange={uploadTemplateFile}
+  style={styles.fileInput}
+/>
 
-          {message && <p style={styles.message}>{message}</p>}
+<label style={styles.label}>
+  Optional: Yearly regional consumption file May 2025 - April 2026
+</label>
 
-          <div style={styles.infoBox}>
-            <div>📦 Products loaded: <strong>{products.length}</strong></div>
-            <div>📘 Recipe rows loaded: <strong>{Math.max(recipeRows.length - 1, 0)}</strong></div>
-            <div>📋 Template: <strong>{templateStatus}</strong></div>
-            <div style={{ color: "#b00020" }}>Red = recipe/location or template charge location expects usage, but consumption is 0 for visible ship(s).</div>
-            <div style={{ color: "#0057b8" }}>Blue = product is in recipe/location, but missing from the matching venue template.</div>
-          </div>
-        </div>
+<input
+  type="file"
+  accept=".xlsx,.xls,.xlsm"
+  onChange={uploadYearlyRegionalConsumptionFile}
+  style={styles.fileInput}
+/>
+
+<label style={styles.label}>Region / home port</label>
+
+<select
+  value={selectedRegionalConsumptionRegion}
+  onChange={(e) => setSelectedRegionalConsumptionRegion(e.target.value)}
+  style={styles.searchInput}
+>
+  <option value={YEARLY_REGION_ALL}>All regions</option>
+
+  {(yearlyRegionalConsumption?.regionOptions || []).map((region) => (
+    <option key={region} value={region}>
+      {region}
+    </option>
+  ))}
+</select>
+
+<label style={styles.label}>Regional par buffer %</label>
+
+<input
+  type="number"
+  min="0"
+  step="1"
+  value={regionalParBufferPercent}
+  onChange={(e) => setRegionalParBufferPercent(Number(e.target.value || 0))}
+  style={styles.searchInput}
+/>
+
+{message && <p style={styles.message}>{message}</p>}
+
+<div style={styles.infoBox}>
+  <div>📦 Products loaded: <strong>{products.length}</strong></div>
+  <div>📘 Recipe rows loaded: <strong>{Math.max(recipeRows.length - 1, 0)}</strong></div>
+  <div>📋 Template: <strong>{templateStatus}</strong></div>
+
+  <div>
+    🌎 Yearly regional file:{" "}
+    <strong>{yearlyRegionalFileName || "Not uploaded"}</strong>
+  </div>
+
+  <div>
+    🧭 Selected region:{" "}
+    <strong>
+      {selectedRegionalConsumptionRegion === YEARLY_REGION_ALL
+        ? "All regions"
+        : selectedRegionalConsumptionRegion}
+    </strong>
+  </div>
+
+  <div>
+    📈 Regional matches:{" "}
+    <strong>
+      {dashboardRegionalMatchedCount} / {productCostReportRowsWithRegionalPar.length}
+    </strong>
+  </div>
+
+  <div>
+    🧮 Regional buffer:{" "}
+    <strong>{formatQty(regionalParBufferPercent)}%</strong>
+  </div>
+
+  <div>{yearlyRegionalMessage}</div>
+
+  <div style={{ color: "#b00020" }}>
+    Red = recipe/location or template charge location expects usage, but consumption is 0 for visible ship(s).
+  </div>
+
+  <div style={{ color: "#0057b8" }}>
+    Blue = product is in recipe/location, but missing from the matching venue template.
+  </div>
+</div>
 
         <div style={styles.card}>
           <h2 style={styles.cardTitle}>🧭 Product Report View</h2>
