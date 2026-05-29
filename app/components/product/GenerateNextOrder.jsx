@@ -3294,6 +3294,182 @@ const parLevelByRegionExportRows = parLevelByRegionRows.map((row, index) => ({
         </section>
       )}
 
+      {nextOrderView === "parregion" && (
+  <section style={styles.card}>
+    <h2 style={styles.productTitle}>📏 Par Level by Region</h2>
+
+    {parLevelByRegionRows.length === 0 && (
+      <p style={styles.emptyText}>
+        Upload the latest order file to compare current par level against Miami,
+        LA, and Barcelona suggested regional par levels.
+      </p>
+    )}
+
+    <div style={styles.infoBox}>
+      <div>
+        📄 Order file: <strong>{nextOrderFileName || "Not uploaded"}</strong>
+      </div>
+      <div>
+        🌎 Yearly regional file:{" "}
+        <strong>{yearlyRegionalFileName || "Not loaded"}</strong>
+      </div>
+      <div>
+        🗓️ Voyage days B6 used for regional par:{" "}
+        <strong>{formatQty(nextOrderMeta.voyageDays || 14)}</strong>
+      </div>
+      <div>
+        🧮 Buffer: <strong>{formatQty(regionalParBufferPercent)}%</strong>
+      </div>
+    </div>
+
+    <div style={localStyles.compactGrid}>
+      {visibleParLevelByRegionRows.map((row, index) => {
+        const getDifferenceStyle = (hasData, difference) => {
+          if (!hasData) return localStyles.metricBox;
+          if (Number(difference || 0) > 0) return localStyles.metricBoxWarning;
+          if (Number(difference || 0) < 0) return localStyles.metricBoxBad;
+          return localStyles.metricBox;
+        };
+
+        return (
+          <div
+            key={row.excelRow + "-" + row.product + "-par-region"}
+            style={localStyles.orderedVsSuggestedCard}
+          >
+            <div style={localStyles.cardTopLine}>
+              <span>#{index + 1}</span>
+              <span>Row {row.excelRow}</span>
+            </div>
+
+            <div style={localStyles.productName}>{row.product}</div>
+            <div style={styles.recipeMeta}>Code: {row.code || "N/A"}</div>
+            <div style={styles.recipeMeta}>U/M: {row.unit || "N/A"}</div>
+
+            <div style={localStyles.metricGrid}>
+              <div style={localStyles.metricBox}>
+                <span>Current Par Q</span>
+                <strong>{formatQty(row.currentParLevel)}</strong>
+              </div>
+
+              <div style={localStyles.metricBox}>
+                <span>Voyage Days</span>
+                <strong>{formatQty(row.voyageDays)}</strong>
+              </div>
+
+              <div style={localStyles.metricBox}>
+                <span>Buffer</span>
+                <strong>{formatQty(row.bufferPercent)}%</strong>
+              </div>
+            </div>
+
+            <div style={localStyles.metricGrid}>
+              <div style={row.miamiHasData ? localStyles.metricBox : localStyles.metricBox}>
+                <span>Miami Par</span>
+                <strong>
+                  {row.miamiHasData ? formatRegionalQty(row.miamiParLevel) : "No data"}
+                </strong>
+              </div>
+
+              <div style={getDifferenceStyle(row.miamiHasData, row.miamiDifference)}>
+                <span>Miami Diff</span>
+                <strong>
+                  {row.miamiHasData ? formatQty(row.miamiDifference) : "N/A"}
+                </strong>
+              </div>
+
+              <div style={localStyles.metricBox}>
+                <span>Miami Daily</span>
+                <strong>
+                  {row.miamiHasData ? formatRegionalQty(row.miamiDaily) : "N/A"}
+                </strong>
+              </div>
+            </div>
+
+            <div style={localStyles.metricGrid}>
+              <div style={localStyles.metricBox}>
+                <span>LA Par</span>
+                <strong>
+                  {row.laHasData ? formatRegionalQty(row.laParLevel) : "No data"}
+                </strong>
+              </div>
+
+              <div style={getDifferenceStyle(row.laHasData, row.laDifference)}>
+                <span>LA Diff</span>
+                <strong>
+                  {row.laHasData ? formatQty(row.laDifference) : "N/A"}
+                </strong>
+              </div>
+
+              <div style={localStyles.metricBox}>
+                <span>LA Daily</span>
+                <strong>
+                  {row.laHasData ? formatRegionalQty(row.laDaily) : "N/A"}
+                </strong>
+              </div>
+            </div>
+
+            <div style={localStyles.metricGrid}>
+              <div style={localStyles.metricBox}>
+                <span>Barcelona Par</span>
+                <strong>
+                  {row.barcelonaHasData
+                    ? formatRegionalQty(row.barcelonaParLevel)
+                    : "No data"}
+                </strong>
+              </div>
+
+              <div
+                style={getDifferenceStyle(
+                  row.barcelonaHasData,
+                  row.barcelonaDifference
+                )}
+              >
+                <span>Barcelona Diff</span>
+                <strong>
+                  {row.barcelonaHasData
+                    ? formatQty(row.barcelonaDifference)
+                    : "N/A"}
+                </strong>
+              </div>
+
+              <div style={localStyles.metricBox}>
+                <span>Barcelona Daily</span>
+                <strong>
+                  {row.barcelonaHasData
+                    ? formatRegionalQty(row.barcelonaDaily)
+                    : "N/A"}
+                </strong>
+              </div>
+            </div>
+
+            {row.hasAnyRegionalData ? (
+              <div style={localStyles.regionalBadge}>
+                Highest regional par: {row.highestRegion || "N/A"} —{" "}
+                {formatRegionalQty(row.highestParLevel)}
+              </div>
+            ) : (
+              <div style={localStyles.noRegionalBadge}>
+                No regional yearly data found for this item.
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+
+    {hasMoreParLevelByRegionRows && (
+      <button
+        style={styles.backButton}
+        onClick={() =>
+          setReportDisplayLimit((value) => value + REPORT_RENDER_BATCH)
+        }
+      >
+        Show more ({visibleParLevelByRegionRows.length} /{" "}
+        {parLevelByRegionRows.length})
+      </button>
+    )}
+  </section>
+)}
       {nextOrderView === "increase1" && (
         <section style={styles.card}>
           <h2 style={styles.productTitle}>📈 Consumption Increase - Last 1 Voyage</h2>
