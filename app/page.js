@@ -6859,6 +6859,342 @@ const filteredProductCostReportRows = useMemo(() => {
       .includes(term);
   });
 }, [productCostReportRowsWithRegionalPar, productCostReportSearch]);
+  const yearlyRegionalMonthOptions = useMemo(() => {
+  const monthMap = new Map();
+
+  (yearlyRegionalConsumption?.rows || []).forEach((row) => {
+    const monthKey = String(row.monthKey || "").trim();
+    const monthName = String(row.monthName || monthKey || "").trim();
+
+    if (!monthKey) return;
+
+    monthMap.set(monthKey, monthName || monthKey);
+  });
+
+  return Array.from(monthMap.entries())
+    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+    .map(([monthKey, monthName]) => ({
+      monthKey,
+      monthName,
+    }));
+}, [yearlyRegionalConsumption]);
+
+const yearlyRegionalActiveMonthKeys = useMemo(() => {
+  if (yearlyRegionalReportMonths.length) {
+    return yearlyRegionalReportMonths;
+  }
+
+  return yearlyRegionalMonthOptions.map((month) => month.monthKey);
+}, [yearlyRegionalReportMonths, yearlyRegionalMonthOptions]);
+
+const toggleYearlyRegionalReportMonth = (monthKey) => {
+  setYearlyRegionalReportMonths((current) => {
+    if (current.includes(monthKey)) {
+      return current.filter((key) => key !== monthKey);
+    }
+
+    return [...current, monthKey].sort();
+  });
+};
+
+const yearlyRegionalConsumptionReportRows = useMemo(() => {
+  const sourceRows = Array.isArray(yearlyRegionalConsumption?.rows)
+    ? yearlyRegionalConsumption.rows
+    : [];
+
+  const selectedMonthSet = yearlyRegionalReportMonths.length
+    ? new Set(yearlyRegionalReportMonths)
+    : null;
+
+  const query = yearlyRegionalReportSearch.toLowerCase().trim();
+  const grouped = new Map();
+
+  sourceRows.forEach((row) => {
+    const region = String(row.region || "").trim();
+    const ship = String(row.ship || "").trim();
+    const monthKey = String(row.monthKey || "").trim();
+
+    if (!monthKey) return;
+
+    if (
+      yearlyRegionalReportRegion !== YEARLY_REGION_ALL &&
+      region !== yearlyRegionalReportRegion
+    ) {
+      return;
+    }
+
+    if (
+      yearlyRegionalReportShip !== YEARLY_REPORT_ALL_SHIPS &&
+      ship !== yearlyRegionalReportShip
+    ) {
+      return;
+    }
+
+    if (selectedMonthSet && !selectedMonthSet.has(monthKey)) {
+      return;
+    }
+
+    const qty = Number(row.qty || 0);
+    const value = Number(row.value || 0);
+    const price = Number(row.price || 0);
+    const days = Number(row.days || 0);
+
+    if (!qty && !value) return;
+
+    const productCode = String(row.productCode || "").trim();
+    const productName = String(row.productName || "").replace(/\s+/g, " ").trim();
+    const productKey =
+      productCode ||
+      String(row.productKey || "").trim() ||
+      cleanText(productName);
+
+    if (!productKey && !productName) return;
+
+    const groupKey = productCode || productKey || cleanText(productName);
+
+    if (!grouped.has(groupKey)) {
+      grouped.set(groupKey, {
+        productCode,
+        productName,
+        productKey,
+        unitMeasure: row.unitMeasure || "",
+        categoryName: row.categoryName || "",
+        subCategoryName: row.subCategoryName || "",
+        totalQty: 0,
+        totalValue: 0,
+        totalDays: 0,
+        priceSum: 0,
+        priceCount: 0,
+        months: {},
+        regions: {},
+        ships: {},
+        blocks: 0,
+      });
+    }
+
+    const item = grouped.get(groupKey);
+
+    item.totalQty += qty;
+    item.totalValue += value;
+    item.totalDays += days;
+    item.blocks += 1;
+
+    if (price > 0) {
+      item.priceSum += price;
+      item.priceCount += 1;
+    }
+
+    if (!item.months[monthKey]) {
+      item.months[monthKey] = {
+        monthKey,
+        monthName: row.monthName || monthKey,
+        qty: 0,
+        value: 0,
+        days: 0,
+        blocks: 0,
+        regions: new Set(),
+        ships: new Set(),
+      };
+    }
+
+    item.months[monthKey].qty += qty;
+    item.months[monthKey].value += value;
+    item.months[monthKey].days += days;
+    item.months[monthKey].blocks += 1;
+    if (region) item.months[monthKey].regions.add(region);
+    if (ship) item.months[monthKey].ships.add(ship);
+
+    if (region) {
+      if (!item.regions[region]) {
+        item.regions[region] = {
+          region,
+          qty: 0,
+          value: 0,
+          days: 0,
+          blocks: 0,
+        };
+      }
+
+      item.regions[region].qty += qty;
+      item.regions[region].value += value;
+      item.regions[region].days += days;
+      item.regions[region].blocks += 1;
+    }
+
+    if (ship) {
+      if (!item.ships[ship]) {
+        item.ships[ship] = {
+          ship,
+          qty: 0,
+          value: 0,
+          days: 0,
+          blocks: 0,
+        };
+      }
+
+      item.ships[ship].qty += qty;
+      item.ships[ship].value += value;
+      item.ships[ship].days += days;
+      item.ships[ship].blocks += 1;
+    }
+  });
+
+  return Array.from(grouped.values())
+    .map((item) => {
+      const months = {};
+
+      Object.entries(item.months || {}).forEach(([monthKey, monthData]) => {
+        months[monthKey] = {
+          ...monthData,
+          regions: Array.from(monthData.regions || []).sort(),
+          ships: Array.from(monthData.ships || []).sort(),
+          avgDailyQty:
+            Number(monthData.days || 0) > 0
+              ? Number(monthData.qty || 0) / Number(monthData.days || 0)
+              : 0,
+        };
+      });
+
+      const regionRows = Object.values(item.regions || {})
+        .map((regionRow) => ({
+          ...regionRow,
+          avgDailyQty:
+            Number(regionRow.days || 0) > 0
+              ? Number(regionRow.qty || 0) / Number(regionRow.days || 0)
+              : 0,
+        }))
+        .sort((a, b) => Number(b.qty || 0) - Number(a.qty || 0));
+
+      const shipRows = Object.values(item.ships || {})
+        .map((shipRow) => ({
+          ...shipRow,
+          avgDailyQty:
+            Number(shipRow.days || 0) > 0
+              ? Number(shipRow.qty || 0) / Number(shipRow.days || 0)
+              : 0,
+        }))
+        .sort((a, b) => Number(b.qty || 0) - Number(a.qty || 0));
+
+      return {
+        ...item,
+        months,
+        regionRows,
+        shipRows,
+        avgDailyQty:
+          Number(item.totalDays || 0) > 0
+            ? Number(item.totalQty || 0) / Number(item.totalDays || 0)
+            : 0,
+        avgPrice:
+          Number(item.priceCount || 0) > 0
+            ? Number(item.priceSum || 0) / Number(item.priceCount || 0)
+            : Number(item.totalQty || 0) > 0
+            ? Number(item.totalValue || 0) / Number(item.totalQty || 0)
+            : 0,
+      };
+    })
+    .filter((item) => {
+      if (!query) return true;
+
+      return [
+        item.productCode,
+        item.productName,
+        item.unitMeasure,
+        item.categoryName,
+        item.subCategoryName,
+        item.regionRows.map((regionRow) => regionRow.region).join(" "),
+        item.shipRows.map((shipRow) => shipRow.ship).join(" "),
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+    })
+    .sort((a, b) => {
+      if (yearlyRegionalReportSort === "value") {
+        return Number(b.totalValue || 0) - Number(a.totalValue || 0);
+      }
+
+      if (yearlyRegionalReportSort === "daily") {
+        return Number(b.avgDailyQty || 0) - Number(a.avgDailyQty || 0);
+      }
+
+      if (yearlyRegionalReportSort === "product") {
+        return String(a.productName || "").localeCompare(String(b.productName || ""));
+      }
+
+      return Number(b.totalQty || 0) - Number(a.totalQty || 0);
+    });
+}, [
+  yearlyRegionalConsumption,
+  yearlyRegionalReportRegion,
+  yearlyRegionalReportShip,
+  yearlyRegionalReportMonths,
+  yearlyRegionalReportSearch,
+  yearlyRegionalReportSort,
+]);
+
+const exportYearlyRegionalConsumptionReportToExcel = () => {
+  if (!yearlyRegionalConsumptionReportRows.length) {
+    window.alert("No yearly regional consumption rows to export.");
+    return;
+  }
+
+  const activeMonthSet = new Set(yearlyRegionalActiveMonthKeys);
+  const visibleMonthOptions = yearlyRegionalMonthOptions.filter((month) =>
+    activeMonthSet.has(month.monthKey)
+  );
+
+  const exportRows = yearlyRegionalConsumptionReportRows.map((item, index) => {
+    const row = {
+      Number: index + 1,
+      Code: item.productCode || "",
+      Product: item.productName || "",
+      UM: item.unitMeasure || "",
+      Category: item.categoryName || "",
+      SubCategory: item.subCategoryName || "",
+      RegionFilter:
+        yearlyRegionalReportRegion === YEARLY_REGION_ALL
+          ? "All regions"
+          : yearlyRegionalReportRegion,
+      ShipFilter:
+        yearlyRegionalReportShip === YEARLY_REPORT_ALL_SHIPS
+          ? "All ships"
+          : yearlyRegionalReportShip,
+      TotalQty: Number(item.totalQty || 0),
+      TotalValue: Number(item.totalValue || 0),
+      TotalDays: Number(item.totalDays || 0),
+      AverageDailyQty: Number(item.avgDailyQty || 0),
+      AveragePrice: Number(item.avgPrice || 0),
+      Blocks: Number(item.blocks || 0),
+      Regions: item.regionRows.map((regionRow) => regionRow.region).join(", "),
+      Ships: item.shipRows.map((shipRow) => shipRow.ship).join(", "),
+    };
+
+    visibleMonthOptions.forEach((month) => {
+      const monthData = item.months?.[month.monthKey] || {};
+
+      row[month.monthName + " Qty"] = Number(monthData.qty || 0);
+      row[month.monthName + " Value"] = Number(monthData.value || 0);
+      row[month.monthName + " Days"] = Number(monthData.days || 0);
+      row[month.monthName + " Daily"] = Number(monthData.avgDailyQty || 0);
+      row[month.monthName + " Blocks"] = Number(monthData.blocks || 0);
+      row[month.monthName + " Regions"] = (monthData.regions || []).join(", ");
+      row[month.monthName + " Ships"] = (monthData.ships || []).join(", ");
+    });
+
+    return row;
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(exportRows);
+  const workbook = XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(
+    workbook,
+    worksheet,
+    "Yearly Regional Consumption"
+  );
+
+  XLSX.writeFile(workbook, "yearly-regional-consumption-report.xlsx");
+};
 
   const sendAccessCode = () => {
     const email = normalizeAppEmail(userEmail);
