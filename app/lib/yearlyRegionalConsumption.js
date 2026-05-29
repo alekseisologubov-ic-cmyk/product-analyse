@@ -155,6 +155,7 @@ export const normalizeRegionName = (value) => {
     originalText === "NA" ||
     originalText === "N/A" ||
     originalText === "NONE" ||
+    originalText.includes("TOTAL") ||
     originalText.includes("NOT IN OPERATION") ||
     originalText.includes("NOT OPERATING") ||
     originalText.includes("NO OPERATION") ||
@@ -164,8 +165,28 @@ export const normalizeRegionName = (value) => {
   }
 
   const text = originalText
+    .replace(/\bBRILLIANT LADY\b/g, "")
+    .replace(/\bBRILLIANT\b/g, "")
+    .replace(/\bBRL\b/g, "")
+    .replace(/\bBR\b/g, "")
+    .replace(/\bRESILIENT LADY\b/g, "")
+    .replace(/\bRESILIENT\b/g, "")
+    .replace(/\bRL\b/g, "")
+    .replace(/\bSCARLET LADY\b/g, "")
+    .replace(/\bSCARLET\b/g, "")
+    .replace(/\bSCL\b/g, "")
+    .replace(/\bSC\b/g, "")
+    .replace(/\bVALIANT LADY\b/g, "")
+    .replace(/\bVALIANT\b/g, "")
+    .replace(/\bVAL\b/g, "")
+    .replace(/\bVL\b/g, "")
+    .replace(/\bV1\b/g, "")
     .replace(/\bHOME\s*PORT\b/g, "")
     .replace(/\bPORT\b/g, "")
+    .replace(/\bPRICE\b/g, "")
+    .replace(/\bQTY\b/g, "")
+    .replace(/\bQUANTITY\b/g, "")
+    .replace(/\bVALUE\b/g, "")
     .replace(/\bDAYS?\b/g, "")
     .replace(/\bDYAS\b/g, "")
     .replace(/\bDYAS?\b/g, "")
@@ -183,6 +204,7 @@ export const normalizeRegionName = (value) => {
     text === "NA" ||
     text === "N A" ||
     text === "NONE" ||
+    text.includes("TOTAL") ||
     text.includes("NOT IN OPERATION") ||
     text.includes("NOT OPERATING")
   ) {
@@ -215,20 +237,16 @@ const MONTH_INFO = {
   APRIL: { monthName: "April", monthKey: "2026-04", days: 30 },
 };
 
-const getMonthInfoFromHeader = (value, currentMonthInfo) => {
+const getMonthInfoFromText = (value) => {
   const text = cleanText(value);
 
-  if (!text || /^\d+$/.test(text)) {
-    return currentMonthInfo;
-  }
+  if (!text) return null;
 
   const monthKey = Object.keys(MONTH_INFO).find((monthName) =>
     text.includes(monthName)
   );
 
-  if (monthKey) return MONTH_INFO[monthKey];
-
-  return currentMonthInfo;
+  return monthKey ? MONTH_INFO[monthKey] : null;
 };
 
 const extractDaysOverride = (value) => {
@@ -322,11 +340,9 @@ const parseShipRegionHeader = ({ descriptor, fallbackShip, monthInfo }) => {
     }
   }
 
-  if (!ship) return null;
-
   if (!regionText) {
     const fallbackPrefix = extractShipPrefix(fallbackRaw);
-    regionText = fallbackPrefix?.rest || "";
+    regionText = fallbackPrefix?.rest || raw || fallbackRaw;
   }
 
   const region = normalizeRegionName(regionText);
@@ -342,11 +358,149 @@ const parseShipRegionHeader = ({ descriptor, fallbackShip, monthInfo }) => {
   if (!days) return null;
 
   return {
-    ship,
+    ship: ship || "UNKNOWN",
     region,
     days,
     descriptor: raw || fallbackRaw,
   };
+};
+
+const fillMergedHeaderRows = (worksheet, rows) => {
+  const filledRows = rows.map((row) => [...row]);
+  const merges = worksheet?.["!merges"] || [];
+
+  merges.forEach((merge) => {
+    const sourceValue = filledRows[merge.s.r]?.[merge.s.c];
+
+    if (sourceValue === undefined || sourceValue === null || sourceValue === "") {
+      return;
+    }
+
+    for (let r = merge.s.r; r <= merge.e.r; r += 1) {
+      if (!filledRows[r]) filledRows[r] = [];
+
+      for (let c = merge.s.c; c <= merge.e.c; c += 1) {
+        if (
+          filledRows[r][c] === undefined ||
+          filledRows[r][c] === null ||
+          filledRows[r][c] === ""
+        ) {
+          filledRows[r][c] = sourceValue;
+        }
+      }
+    }
+  });
+
+  return filledRows;
+};
+
+const findMetricRowIndex = (rows) => {
+  let bestRowIndex = 2;
+  let bestScore = 0;
+
+  const maxRowsToSearch = Math.min(rows.length, 12);
+
+  for (let rowIndex = 0; rowIndex < maxRowsToSearch; rowIndex += 1) {
+    const row = rows[rowIndex] || [];
+    let score = 0;
+
+    for (let colIndex = 0; colIndex < row.length - 2; colIndex += 1) {
+      const metric = cleanText(row[colIndex]);
+      const nextMetric = cleanText(row[colIndex + 1]);
+      const valueMetric = cleanText(row[colIndex + 2]);
+
+      if (
+        metric === "PRICE" &&
+        (nextMetric === "QTY" || nextMetric === "QUANTITY") &&
+        valueMetric === "VALUE"
+      ) {
+        score += 1;
+      }
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestRowIndex = rowIndex;
+    }
+  }
+
+  return bestRowIndex;
+};
+
+const findMonthForBlock = ({ rows, metricRowIndex, colIndex, currentMonthInfo }) => {
+  const searchValues = [];
+
+  for (let r = 0; r < metricRowIndex; r += 1) {
+    for (let c = Math.max(0, colIndex - 2); c <= colIndex + 2; c += 1) {
+      searchValues.push(rows[r]?.[c]);
+    }
+  }
+
+  const found = searchValues
+    .map((value) => getMonthInfoFromText(value))
+    .find(Boolean);
+
+  return found || currentMonthInfo;
+};
+
+const getHeaderCandidatesForBlock = ({ rows, metricRowIndex, colIndex }) => {
+  const candidates = [];
+
+  for (let r = 0; r < metricRowIndex; r += 1) {
+    for (let c = Math.max(0, colIndex - 2); c <= colIndex + 2; c += 1) {
+      const text = safeText(rows[r]?.[c]);
+
+      if (!text) continue;
+      if (cleanText(text).includes("TOTAL")) continue;
+
+      candidates.push(text);
+    }
+  }
+
+  const unique = [];
+  const seen = new Set();
+
+  candidates.forEach((item) => {
+    const key = cleanText(item);
+
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    unique.push(item);
+  });
+
+  return unique;
+};
+
+const getParsedBlockFromCandidates = ({ candidates, monthInfo }) => {
+  const cleanCandidates = (candidates || []).filter((item) => {
+    const text = cleanText(item);
+
+    if (!text) return false;
+    if (getMonthInfoFromText(text)) return false;
+    if (text === "PRICE" || text === "QTY" || text === "QUANTITY" || text === "VALUE") {
+      return false;
+    }
+
+    return true;
+  });
+
+  for (let i = 0; i < cleanCandidates.length; i += 1) {
+    const parsed = parseShipRegionHeader({
+      descriptor: cleanCandidates[i],
+      fallbackShip: cleanCandidates[i + 1] || cleanCandidates[i - 1] || "",
+      monthInfo,
+    });
+
+    if (parsed) return parsed;
+  }
+
+  const combined = cleanCandidates.join(" ");
+
+  return parseShipRegionHeader({
+    descriptor: combined,
+    fallbackShip: "",
+    monthInfo,
+  });
 };
 
 const makeAggregateKey = ({ region, productCode, productKey }) =>
@@ -422,10 +576,12 @@ export const parseYearlyRegionalConsumptionWorkbook = (workbook) => {
     };
   }
 
-  const rows = XLSX.utils.sheet_to_json(worksheet, {
+  const rawRows = XLSX.utils.sheet_to_json(worksheet, {
     header: 1,
     defval: "",
   });
+
+  const rows = fillMergedHeaderRows(worksheet, rawRows);
 
   if (rows.length < 4) {
     return {
@@ -438,10 +594,9 @@ export const parseYearlyRegionalConsumptionWorkbook = (workbook) => {
     };
   }
 
-  const monthRow = rows[0] || [];
-  const shipRow = rows[1] || [];
-  const metricRow = rows[2] || [];
-  const productRows = rows.slice(3);
+  const metricRowIndex = findMetricRowIndex(rows);
+  const metricRow = rows[metricRowIndex] || [];
+  const productRows = rows.slice(metricRowIndex + 1);
 
   let currentMonthInfo = null;
   const shipRegionBlocks = [];
@@ -451,52 +606,40 @@ export const parseYearlyRegionalConsumptionWorkbook = (workbook) => {
     const nextMetric = cleanText(metricRow[colIndex + 1]);
     const valueMetric = cleanText(metricRow[colIndex + 2]);
 
-    if (metric !== "PRICE" || nextMetric !== "QTY" || valueMetric !== "VALUE") {
+    if (
+      metric !== "PRICE" ||
+      (nextMetric !== "QTY" && nextMetric !== "QUANTITY") ||
+      valueMetric !== "VALUE"
+    ) {
       continue;
     }
 
-    currentMonthInfo = getMonthInfoFromHeader(
-      monthRow[colIndex],
-      currentMonthInfo
-    );
+    currentMonthInfo = findMonthForBlock({
+      rows,
+      metricRowIndex,
+      colIndex,
+      currentMonthInfo,
+    });
 
-    if (!currentMonthInfo) continue;
-
-   const descriptorCandidates = [
-  shipRow[colIndex - 2],
-  shipRow[colIndex - 1],
-  shipRow[colIndex],
-  shipRow[colIndex + 1],
-  shipRow[colIndex + 2],
-  monthRow[colIndex - 2],
-  monthRow[colIndex - 1],
-  monthRow[colIndex],
-  monthRow[colIndex + 1],
-  monthRow[colIndex + 2],
-]
-  .map((value) => safeText(value))
-  .filter(Boolean);
-    let parsed = null;
-
-    for (let i = 0; i < descriptorCandidates.length; i += 1) {
-      parsed = parseShipRegionHeader({
-        descriptor: descriptorCandidates[i],
-        fallbackShip: descriptorCandidates[i + 1] || "",
-        monthInfo: currentMonthInfo,
-      });
-
-      if (parsed) break;
+    if (!currentMonthInfo) {
+      continue;
     }
+
+    const candidates = getHeaderCandidatesForBlock({
+      rows,
+      metricRowIndex,
+      colIndex,
+    });
+
+    const parsed = getParsedBlockFromCandidates({
+      candidates,
+      monthInfo: currentMonthInfo,
+    });
 
     if (!parsed) {
-      parsed = parseShipRegionHeader({
-        descriptor: shipRow[colIndex],
-        fallbackShip: shipRow[colIndex + 1],
-        monthInfo: currentMonthInfo,
-      });
+      colIndex += 2;
+      continue;
     }
-
-    if (!parsed) continue;
 
     shipRegionBlocks.push({
       ...parsed,
@@ -505,7 +648,10 @@ export const parseYearlyRegionalConsumptionWorkbook = (workbook) => {
       priceColIndex: colIndex,
       qtyColIndex: colIndex + 1,
       valueColIndex: colIndex + 2,
+      headerCandidates: candidates,
     });
+
+    colIndex += 2;
   }
 
   const aggregateMap = new Map();
@@ -531,7 +677,7 @@ export const parseYearlyRegionalConsumptionWorkbook = (workbook) => {
       const price = toNumber(row[block.priceColIndex]);
 
       const detail = {
-        sourceRow: rowIndex + 4,
+        sourceRow: rowIndex + metricRowIndex + 2,
         categoryCode,
         categoryName,
         subCategoryCode,
@@ -586,6 +732,7 @@ export const parseYearlyRegionalConsumptionWorkbook = (workbook) => {
     regionOptions,
     shipRegionBlocks,
     productCount: productRows.length,
+    metricRowIndex,
   };
 };
 
@@ -647,6 +794,50 @@ const combineAggregateRows = (rows = []) => {
   return combined;
 };
 
+export const findRegionalConsumptionForProduct = ({
+  yearlyRegionalConsumption,
+  productCode,
+  productName,
+  region,
+}) => {
+  if (!yearlyRegionalConsumption?.aggregates?.length) {
+    return null;
+  }
+
+  const selectedRegion = String(region || "").trim();
+
+  if (!selectedRegion) {
+    return null;
+  }
+
+  const codeKey = normalizeOrderCode(productCode);
+  const productKey = getProductReportKey(productName);
+
+  let candidates = yearlyRegionalConsumption.aggregates;
+
+  if (selectedRegion !== YEARLY_REGION_ALL) {
+    candidates = candidates.filter((item) => item.region === selectedRegion);
+  }
+
+  let matches = [];
+
+  if (codeKey) {
+    matches = candidates.filter(
+      (item) => normalizeOrderCode(item.productCode) === codeKey
+    );
+  }
+
+  if (!matches.length && productKey) {
+    matches = candidates.filter((item) => item.productKey === productKey);
+  }
+
+  if (!matches.length) {
+    return null;
+  }
+
+  return combineAggregateRows(matches);
+};
+
 export const getRegionalParSuggestion = ({
   yearlyRegionalConsumption,
   productCode,
@@ -682,12 +873,6 @@ export const getRegionalParSuggestion = ({
     };
   }
 
-  // Important:
-  // match.totalDays is only the active sailing days for the selected region.
-  // Example:
-  // ATHENS appears in May, June, July only.
-  // totalDays = 31 + 30 + 31 = 92.
-  // It will not use 360/365 days unless ALL_REGIONS is selected manually.
   const suggestedParLevel =
     Number(match.avgDailyQty || 0) * days * bufferMultiplier;
 
