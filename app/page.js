@@ -8682,186 +8682,225 @@ setCurrentInventoryItem({
       </div>
 
       <section style={styles.grid}>
-        <div style={styles.card}>
-          <h2 style={styles.cardTitle}>📤 Upload Files</h2>
+  <div style={styles.card}>
+    <h2 style={styles.cardTitle}>📤 Upload Files</h2>
 
-          <label style={styles.label}>Step 1: Consumption file</label>
-          <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadConsumptionFile} style={styles.fileInput} />
-
-          <label style={styles.label}>Step 2: Permanent Ingredient by Location file</label>
-
-<div style={styles.infoBox}>
-  <div>
-    📄 Ingredient by Location file loads automatically for all users.
-  </div>
-  <div>
-    🔒 Only admins can replace the permanent file.
-  </div>
-</div>
-
-<button
-  type="button"
-  style={styles.backButton}
-  onClick={() => loadPermanentIngredientByLocationForProductDashboard()}
->
-  🔄 Reload Permanent Ingredient by Location
-</button>
-
-{isAdmin && (
-  <>
-    <label style={styles.label}>Admin only: replace permanent Ingredient by Location file</label>
+    <label style={styles.label}>Step 1: Consumption file</label>
     <input
       type="file"
       accept=".xlsx,.xls,.xlsm"
-      onChange={uploadRecipeFile}
+      onChange={uploadConsumptionFile}
       style={styles.fileInput}
     />
-  </>
-)}
 
-          <label style={styles.label}>Optional: Replace template file</label>
-<input
-  type="file"
-  accept=".xlsx,.xls,.xlsm"
-  onChange={uploadTemplateFile}
-  style={styles.fileInput}
-/>
+    <label style={styles.label}>Step 2: Permanent Ingredient by Location file</label>
 
-<label style={styles.label}>
-  Optional: Yearly regional consumption file May 2025 - April 2026
-</label>
+    <div style={styles.infoBox}>
+      <div>
+        📄 Ingredient by Location file loads automatically for all users.
+      </div>
+      <div>
+        🔒 Only admins can replace the permanent file.
+      </div>
+    </div>
 
-<input
-  type="file"
-  accept=".xlsx,.xls,.xlsm"
-  onChange={uploadYearlyRegionalConsumptionFile}
-  style={styles.fileInput}
-/>
+    <button
+      type="button"
+      style={styles.backButton}
+      onClick={() => loadPermanentIngredientByLocationForProductDashboard()}
+    >
+      🔄 Reload Permanent Ingredient by Location
+    </button>
 
-<label style={styles.label}>Region / home port</label>
+    {isAdmin && (
+      <>
+        <label style={styles.label}>
+          Admin only: replace permanent Ingredient by Location file
+        </label>
 
-<select
-  value={selectedRegionalConsumptionRegion}
-  onChange={(e) => setSelectedRegionalConsumptionRegion(e.target.value)}
-  style={styles.searchInput}
->
-  <option value={YEARLY_REGION_ALL}>All regions</option>
+        <input
+          type="file"
+          accept=".xlsx,.xls,.xlsm"
+          onChange={uploadRecipeFile}
+          style={styles.fileInput}
+        />
+      </>
+    )}
 
-  {(yearlyRegionalConsumption?.regionOptions || []).map((region) => (
-    <option key={region} value={region}>
-      {region}
-    </option>
-  ))}
-</select>
+    <label style={styles.label}>Optional: Replace template file</label>
 
-<label style={styles.label}>Regional par buffer %</label>
+    <input
+      type="file"
+      accept=".xlsx,.xls,.xlsm"
+      onChange={uploadTemplateFile}
+      style={styles.fileInput}
+    />
 
-<input
-  type="number"
-  min="0"
-  step="1"
-  value={regionalParBufferPercent}
-  onChange={(e) => setRegionalParBufferPercent(Number(e.target.value || 0))}
-  style={styles.searchInput}
-/>
+    <label style={styles.label}>
+      Optional: Yearly regional consumption file May 2025 - April 2026
+    </label>
 
-{message && <p style={styles.message}>{message}</p>}
+    <input
+      type="file"
+      accept=".xlsx,.xls,.xlsm"
+      onChange={uploadYearlyRegionalConsumptionFile}
+      style={styles.fileInput}
+    />
 
-<div style={styles.infoBox}>
-  <div>📦 Products loaded: <strong>{products.length}</strong></div>
-  <div>📘 Recipe rows loaded: <strong>{Math.max(recipeRows.length - 1, 0)}</strong></div>
-  <div>📋 Template: <strong>{templateStatus}</strong></div>
+    <label style={styles.label}>Region / home port</label>
 
-  <div>
-    🌎 Yearly regional file:{" "}
-    <strong>{yearlyRegionalFileName || "Not uploaded"}</strong>
+    <select
+      value={selectedRegionalConsumptionRegion}
+      onChange={(e) => setSelectedRegionalConsumptionRegion(e.target.value)}
+      style={styles.searchInput}
+    >
+      <option value={YEARLY_REGION_ALL}>All regions</option>
+
+      {(yearlyRegionalConsumption?.regionOptions || []).map((region) => (
+        <option key={region} value={region}>
+          {region}
+        </option>
+      ))}
+    </select>
+
+    <label style={styles.label}>Regional par buffer %</label>
+
+    <input
+      type="number"
+      min="0"
+      step="1"
+      value={regionalParBufferPercent}
+      onChange={(e) => setRegionalParBufferPercent(Number(e.target.value || 0))}
+      style={styles.searchInput}
+    />
+
+    {message && <p style={styles.message}>{message}</p>}
+
+    <div style={styles.infoBox}>
+      <div>
+        📦 Products loaded: <strong>{products.length}</strong>
+      </div>
+
+      <div>
+        📘 Recipe rows loaded:{" "}
+        <strong>{Math.max(recipeRows.length - 1, 0)}</strong>
+      </div>
+
+      <div>
+        📋 Template: <strong>{templateStatus}</strong>
+      </div>
+
+      <div>
+        🌎 Yearly regional file:{" "}
+        <strong>{yearlyRegionalFileName || "Not uploaded"}</strong>
+      </div>
+
+      <div>
+        🧭 Selected region:{" "}
+        <strong>
+          {selectedRegionalConsumptionRegion === YEARLY_REGION_ALL
+            ? "All regions"
+            : selectedRegionalConsumptionRegion}
+        </strong>
+      </div>
+
+      <div>
+        📈 Regional matches:{" "}
+        <strong>
+          {dashboardRegionalMatchedCount} / {productCostReportRowsWithRegionalPar.length}
+        </strong>
+      </div>
+
+      <div>
+        🧮 Regional buffer:{" "}
+        <strong>{formatQty(regionalParBufferPercent)}%</strong>
+      </div>
+
+      <div>{yearlyRegionalMessage}</div>
+
+      <div style={{ color: "#b00020" }}>
+        Red = recipe/location or template charge location expects usage, but consumption is 0 for visible ship(s).
+      </div>
+
+      <div style={{ color: "#0057b8" }}>
+        Blue = product is in recipe/location, but missing from the matching venue template.
+      </div>
+    </div>
   </div>
 
-  <div>
-    🧭 Selected region:{" "}
-    <strong>
-      {selectedRegionalConsumptionRegion === YEARLY_REGION_ALL
-        ? "All regions"
-        : selectedRegionalConsumptionRegion}
-    </strong>
+  <div style={styles.card}>
+    <h2 style={styles.cardTitle}>🧭 Product Report View</h2>
+    <p style={styles.emptyText}>Choose the report you want to work with.</p>
+
+    <div style={styles.reportModeGrid}>
+      <button
+        style={{
+          ...styles.reportModeButton,
+          ...(productReportView === "main" ? styles.reportModeButtonActive : {}),
+        }}
+        onClick={() => setProductReportView("main")}
+      >
+        <strong>💰 Main Report</strong>
+        <span>Consumption and cost by product, venue and ship</span>
+      </button>
+
+      <button
+        style={{
+          ...styles.reportModeButton,
+          ...(productReportView === "consumption"
+            ? styles.reportModeButtonActive
+            : {}),
+        }}
+        onClick={() => setProductReportView("consumption")}
+      >
+        <strong>📊 Consumption Report</strong>
+        <span>Consumption vs locations and template</span>
+      </button>
+
+      <button
+        style={{
+          ...styles.reportModeButton,
+          ...(productReportView === "reports" ? styles.reportModeButtonActive : {}),
+        }}
+        onClick={() => setProductReportView("reports")}
+      >
+        <strong>📋 Generate Report</strong>
+        <span>Top 50 items not in use by location</span>
+      </button>
+    </div>
   </div>
 
-  <div>
-    📈 Regional matches:{" "}
-    <strong>
-      {dashboardRegionalMatchedCount} / {productCostReportRowsWithRegionalPar.length}
-    </strong>
-  </div>
+  {productReportView === "consumption" && (
+    <div style={styles.card}>
+      <h2 style={styles.cardTitle}>🔍 Select Product</h2>
 
-  <div>
-    🧮 Regional buffer:{" "}
-    <strong>{formatQty(regionalParBufferPercent)}%</strong>
-  </div>
+      <input
+        placeholder="Search product..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        style={styles.searchInput}
+      />
 
-  <div>{yearlyRegionalMessage}</div>
-
-  <div style={{ color: "#b00020" }}>
-    Red = recipe/location or template charge location expects usage, but consumption is 0 for visible ship(s).
-  </div>
-
-  <div style={{ color: "#0057b8" }}>
-    Blue = product is in recipe/location, but missing from the matching venue template.
-  </div>
-</div>
-
-        <div style={styles.card}>
-          <h2 style={styles.cardTitle}>🧭 Product Report View</h2>
-          <p style={styles.emptyText}>Choose the report you want to work with.</p>
-
-          <div style={styles.reportModeGrid}>
-            <button
-              style={{ ...styles.reportModeButton, ...(productReportView === "main" ? styles.reportModeButtonActive : {}) }}
-              onClick={() => setProductReportView("main")}
-            >
-              <strong>💰 Main Report</strong>
-              <span>Consumption and cost by product, venue and ship</span>
-            </button>
-
-            <button
-              style={{ ...styles.reportModeButton, ...(productReportView === "consumption" ? styles.reportModeButtonActive : {}) }}
-              onClick={() => setProductReportView("consumption")}
-            >
-              <strong>📊 Consumption Report</strong>
-              <span>Consumption vs locations and template</span>
-            </button>
-
-            <button
-              style={{ ...styles.reportModeButton, ...(productReportView === "reports" ? styles.reportModeButtonActive : {}) }}
-              onClick={() => setProductReportView("reports")}
-            >
-              <strong>📋 Generate Report</strong>
-              <span>Top 50 items not in use by location</span>
-            </button>
-          </div>
-        </div>
-
-        {productReportView === "consumption" && (
-          <div style={styles.card}>
-            <h2 style={styles.cardTitle}>🔍 Select Product</h2>
-            <input placeholder="Search product..." value={search} onChange={(e) => setSearch(e.target.value)} style={styles.searchInput} />
-
-            <div style={styles.productList}>
-              {filteredProducts.map((product, i) => (
-                <button
-                  key={i}
-                  onClick={() => {
-                    setSelectedProduct(product);
-                    setSelectedRecipe(null);
-                  }}
-                  style={{ ...styles.productItem, ...(selectedProduct === product ? styles.productItemActive : {}) }}
-                >
-                  {product}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </section>
+      <div style={styles.productList}>
+        {filteredProducts.map((product, i) => (
+          <button
+            key={i}
+            onClick={() => {
+              setSelectedProduct(product);
+              setSelectedRecipe(null);
+            }}
+            style={{
+              ...styles.productItem,
+              ...(selectedProduct === product ? styles.productItemActive : {}),
+            }}
+          >
+            {product}
+          </button>
+        ))}
+      </div>
+    </div>
+  )}
+</section>
 
       {productReportView === "main" && (
       <section style={styles.card}>
