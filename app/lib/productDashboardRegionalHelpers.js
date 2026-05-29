@@ -122,8 +122,7 @@ export const enrichDashboardProductsWithRegionalPar = ({
       currentParLevel,
 
       regionalHasData: Boolean(regionalPar.hasRegionalData),
-      regionalRegion: selectedRegion || YEARLY_REGION_ALL,
-
+      regionalRegion: selectedRegion || "",
       regionalTotalQty: Number(regionalPar.totalQty || 0),
       regionalTotalDays: Number(regionalPar.totalDays || 0),
       regionalAvgDailyQty: Number(regionalPar.avgDailyQty || 0),
