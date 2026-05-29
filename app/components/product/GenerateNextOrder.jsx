@@ -2,11 +2,19 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
+import {
+  YEARLY_REGION_ALL,
+  parseYearlyRegionalConsumptionWorkbook,
+  getRegionalParSuggestion,
+  formatRegionalQty,
+} from "../lib/yearlyRegionalConsumption";
 
 const SHIPS = ["BRL", "RL", "SC", "VL"];
 const REPORT_RENDER_BATCH = 120;
 const HISTORICAL_CONSUMPTION_COLUMNS = [35, 36, 37, 38, 39, 40]; // AJ:AO, 0-based indexes
 const CONSUMPTION_INCREASE_THRESHOLD_PERCENT = 25;
+const DEFAULT_REGIONAL_MESSAGE =
+  "Upload yearly May 2025 - April 2026 consumption file to enable regional par suggestions.";
 
 const cleanText = (value) =>
   String(value || "")
@@ -62,10 +70,10 @@ const normalizeShipCode = (value) => {
   const text = cleanText(value).replace(/RESILIANT/g, "RESILIENT");
 
   if (!text) return "";
-  if (text === "BRL" || text.includes("BRILLIANT")) return "BRL";
+  if (text === "BR" || text === "BRL" || text.includes("BRILLIANT")) return "BRL";
   if (text === "RL" || text.includes("RESILIENT")) return "RL";
   if (text === "SC" || text.includes("SCARLET") || text.includes("SCL")) return "SC";
-  if (text === "VL" || text.includes("VALIANT") || text.includes("VAL")) return "VL";
+  if (text === "VL" || text === "VAL" || text.includes("VALIANT") || text.includes("VAL")) return "VL";
 
   return "";
 };
@@ -284,22 +292,18 @@ const isOrderCategoryHeaderText = (value) => {
 const getConsumptionIncreaseCategoryGroup = ({ product, category, subCategory }) => {
   const text = cleanText([category, subCategory, product].filter(Boolean).join(" "));
 
-  // Priority 1: show meat and fish first because these are the most important
-  // high-risk/high-value items for this report.
   if (
     /\b(BEEF|VEAL|PORK|LAMB|POULT|POULTRY|CHICKEN|TURKEY|DUCK|KOSH|GAME|MEAT|MEATS|HAM|BACON|SAUSAGE|SAUSAGES|PROC\.? MEATS?|PROCESSED MEATS?|FISH|SEAFOOD|CAVIAR|SALMON|TUNA|COD|HALIBUT|MAHI|SNAPPER|BASS|SOLE|GROUPER|SHRIMP|PRAWN|CRAB|LOBSTER|SCALLOP|MUSSEL|OYSTER|CLAM|SQUID|OCTOPUS)\b/.test(text)
   ) {
     return "MEAT_FISH";
   }
 
-  // Priority 2: dairy/egg products.
   if (
     /\b(DAIRY|MILK|CREAM|CHEESE|BUTTER|MARGARINE|YOGURT|YOGHURT|ICE CREAM|EGG|EGGS|MASCARPONE|RICOTTA|MOZZARELLA|PARMESAN|CHEDDAR|FETA|BRIE|GOAT CHEESE|FINE CHEESE)\b/.test(text)
   ) {
     return "DAIRY";
   }
 
-  // Priority 3: dry products / grocery / pantry items.
   if (
     /\b(DRY|GROCERY|DRY STORE|DRY STORES|BAKERY|COOKIE|COOKIES|BISCUIT|BISCUITS|MIX|MIXES|PASTA|RICE|FLOUR|SUGAR|SPICE|SPICES|HERB|HERBS|OIL|VINEGAR|SAUCE|SAUCES|CONDIMENT|CONDIMENTS|CANNED|TINNED|BEAN|BEANS|LENTIL|LENTILS|CEREAL|CEREALS|OAT|OATS|NUT|NUTS|SEED|SEEDS|CHOCOLATE|CRACKER|CRACKERS|BREAD|JELLO|JAM|JAMS|SYRUP|COFFEE|TEA|HOT CHOCOLATE|SNACK|SNACKS|SWEETS|PICKLE|PICKLES|OLIVE|OLIVES|ONION|ONIONS|SHORTENING|SALT|PEPPER)\b/.test(text)
   ) {
@@ -350,7 +354,6 @@ const groupConsumptionIncreaseRowsForDisplay = (rows) => {
       rows: grouped.get(category) || [],
     }));
 };
-
 
 const productNamesMatch = (left, right) => {
   const a = compactText(left);
@@ -833,6 +836,213 @@ const parseOrderFile = async (file) => {
   };
 };
 
+const recalculateOrderComparisonFields = (row) => {
+  const suggestedQty = Number(row.suggestedOrder || 0);
+  const orderedQty = Number(row.orderedByShip || row.orderedQty || 0);
+  const orderDifference = orderedQty - suggestedQty;
+
+  let orderDifferencePercent = 0;
+  let orderComparisonStatus = "green";
+  let orderComparisonLabel = "Within +/- 10%";
+
+  if (suggestedQty > 0) {
+    orderDifferencePercent = (orderDifference / suggestedQty) * 100;
+
+    if (orderDifferencePercent > 10) {
+      orderComparisonStatus = "red";
+      orderComparisonLabel = "Ordered over suggested by more than 10%";
+    } else if (orderDifferencePercent < -10) {
+      orderComparisonStatus = "blue";
+      orderComparisonLabel = "Ordered under suggested by more than 10%";
+    }
+  } else if (orderedQty > 0) {
+    orderDifferencePercent = 100;
+    orderComparisonStatus = "red";
+    orderComparisonLabel = "Ordered but suggested quantity is 0";
+  }
+
+  return {
+    ...row,
+    orderedQty,
+    suggestedQty,
+    orderDifference,
+    orderDifferencePercent,
+    orderComparisonStatus,
+    orderComparisonLabel,
+  };
+};
+
+const getRegionalAlertFields = (row) => {
+  const stock = Number(row.stock || 0);
+  const pastConsumption = Number(row.pastConsumption || 0);
+  const suggestedOrder = Number(row.suggestedOrder || 0);
+
+  if (suggestedOrder > 0) {
+    return {
+      alertType: "needs-order",
+      alertLabel: "Needs order",
+    };
+  }
+
+  if (stock === 0 && pastConsumption === 0 && !row.regionalHasData) {
+    return {
+      alertType: "no-stock-no-consumption",
+      alertLabel: "No stock / no consumption",
+    };
+  }
+
+  if (stock > 0 && pastConsumption === 0 && !row.regionalHasData) {
+    return {
+      alertType: "stock-no-consumption",
+      alertLabel: "Stock but no consumption",
+    };
+  }
+
+  return {
+    alertType: "normal",
+    alertLabel: "Review",
+  };
+};
+
+const getRegionalizedOrderRows = ({
+  orderRows,
+  yearlyRegionalConsumption,
+  selectedRegion,
+  voyageDays,
+  daysUntilArrival,
+  bufferPercent,
+}) => {
+  return (orderRows || []).map((row) => {
+    const regionalPar = getRegionalParSuggestion({
+      yearlyRegionalConsumption,
+      productCode: row.code,
+      productName: row.product,
+      region: selectedRegion,
+      voyageDays,
+      bufferPercent,
+    });
+
+    const hasRegionalData = Boolean(regionalPar?.hasRegionalData);
+
+    if (!hasRegionalData) {
+      return recalculateOrderComparisonFields({
+        ...row,
+        standardAveragePerDay: Number(row.averagePerDay || 0),
+        standardUsageUntilArrival: Number(row.usageUntilArrival || 0),
+        standardAvailableAtArrival: Number(row.availableAtArrival || 0),
+        standardProjectedVoyageNeed: Number(row.projectedVoyageNeed || 0),
+        standardRawSuggested: Number(row.rawSuggested || 0),
+        standardSuggestedOrder: Number(row.suggestedOrder || 0),
+
+        regionalHasData: false,
+        regionalRegion: selectedRegion || YEARLY_REGION_ALL,
+        regionalTotalQty: 0,
+        regionalTotalDays: 0,
+        regionalAvgDailyQty: 0,
+        regionalSuggestedParLevel: 0,
+        regionalSuggestedOrder: 0,
+        regionalEvidenceBlocks: 0,
+        regionalMatchedProductName: "",
+        regionalMatchedProductCode: "",
+        regionalByShip: [],
+        suggestionBasis: "Current order file history",
+      });
+    }
+
+    const activeDaysUntilArrival = Number(daysUntilArrival || 0);
+    const regionalAveragePerDay = Number(regionalPar.avgDailyQty || 0);
+
+    const regionalUsageUntilArrival = regionalAveragePerDay * activeDaysUntilArrival;
+    const regionalSuggestedParLevel = Number(regionalPar.suggestedParLevel || 0);
+    const regionalAvailableAtArrival =
+      Number(row.stock || 0) + Number(row.futureOrders || 0) - regionalUsageUntilArrival;
+
+    const regionalSuggestedOrder = Math.max(
+      regionalSuggestedParLevel - regionalAvailableAtArrival,
+      0
+    );
+
+    const regionalizedRow = {
+      ...row,
+
+      standardAveragePerDay: Number(row.averagePerDay || 0),
+      standardUsageUntilArrival: Number(row.usageUntilArrival || 0),
+      standardAvailableAtArrival: Number(row.availableAtArrival || 0),
+      standardProjectedVoyageNeed: Number(row.projectedVoyageNeed || 0),
+      standardRawSuggested: Number(row.rawSuggested || 0),
+      standardSuggestedOrder: Number(row.suggestedOrder || 0),
+
+      regionalHasData: true,
+      regionalRegion: selectedRegion || YEARLY_REGION_ALL,
+      regionalTotalQty: Number(regionalPar.totalQty || 0),
+      regionalTotalDays: Number(regionalPar.totalDays || 0),
+      regionalAvgDailyQty: regionalAveragePerDay,
+      regionalSuggestedParLevel,
+      regionalSuggestedOrder,
+      regionalEvidenceBlocks: Number(regionalPar.evidenceBlocks || 0),
+      regionalMatchedProductName: regionalPar.matchedProductName || "",
+      regionalMatchedProductCode: regionalPar.matchedProductCode || "",
+      regionalByShip: regionalPar.byShip || [],
+
+      averagePerDay: regionalAveragePerDay,
+      usageUntilArrival: regionalUsageUntilArrival,
+      availableAtArrival: regionalAvailableAtArrival,
+      projectedVoyageNeed: regionalSuggestedParLevel,
+      rawSuggested: regionalSuggestedOrder,
+      suggestedOrder: regionalSuggestedOrder,
+
+      parCapApplied: false,
+      parCapLimit: 0,
+      suggestionBasis: "Yearly regional consumption",
+    };
+
+    return recalculateOrderComparisonFields({
+      ...regionalizedRow,
+      ...getRegionalAlertFields(regionalizedRow),
+    });
+  });
+};
+
+const buildOrderByCodeFromRows = (rows) => {
+  const result = {};
+
+  (rows || []).forEach((item) => {
+    if (!item?.code) return;
+
+    result[cleanText(item.code)] = item;
+    result[getFmlOrderCodeKey(item.code)] = item;
+  });
+
+  return result;
+};
+
+const applyRegionalRowsToOrderedNotFmlRows = (orderedNotFmlRows, regionalRows) => {
+  const byExcelRow = new Map((regionalRows || []).map((row) => [Number(row.excelRow || 0), row]));
+
+  return (orderedNotFmlRows || []).map((row) => {
+    const match = byExcelRow.get(Number(row.excelRow || 0));
+
+    if (!match) return row;
+
+    return {
+      ...row,
+      stock: Number(match.stock || 0),
+      futureOrders: Number(match.futureOrders || 0),
+      orderedByShip: Number(match.orderedByShip || 0),
+      suggestedOrder: Number(match.suggestedOrder || 0),
+      pastConsumption: Number(match.pastConsumption || 0),
+      averagePerDay: Number(match.averagePerDay || 0),
+      availableAtArrival: Number(match.availableAtArrival || 0),
+      regionalHasData: Boolean(match.regionalHasData),
+      regionalRegion: match.regionalRegion,
+      regionalAvgDailyQty: Number(match.regionalAvgDailyQty || 0),
+      regionalSuggestedParLevel: Number(match.regionalSuggestedParLevel || 0),
+      regionalEvidenceBlocks: Number(match.regionalEvidenceBlocks || 0),
+      suggestionBasis: match.suggestionBasis,
+    };
+  });
+};
+
 const buildFmlReportAsync = async ({
   mode,
   fmlRows,
@@ -906,6 +1116,12 @@ const buildFmlReportAsync = async ({
       averagePerDay: orderMatch.averagePerDay,
       availableAtArrival: orderMatch.availableAtArrival,
       suggestedOrder: orderMatch.suggestedOrder,
+      regionalHasData: Boolean(orderMatch.regionalHasData),
+      regionalRegion: orderMatch.regionalRegion,
+      regionalAvgDailyQty: Number(orderMatch.regionalAvgDailyQty || 0),
+      regionalSuggestedParLevel: Number(orderMatch.regionalSuggestedParLevel || 0),
+      regionalEvidenceBlocks: Number(orderMatch.regionalEvidenceBlocks || 0),
+      suggestionBasis: orderMatch.suggestionBasis || "Current order file history",
       venues: fmlItem.venues,
       venuesText: fmlItem.venuesText,
       templateMatches,
@@ -979,11 +1195,19 @@ export default function GenerateNextOrder({
   userShip,
   onBack,
   logUsageEvent = () => {},
+
+  yearlyRegionalConsumption: externalYearlyRegionalConsumption,
+  setYearlyRegionalConsumption: externalSetYearlyRegionalConsumption,
+  yearlyRegionalFileName: externalYearlyRegionalFileName,
+  setYearlyRegionalFileName: externalSetYearlyRegionalFileName,
+  selectedRegionalConsumptionRegion: externalSelectedRegionalConsumptionRegion,
+  setSelectedRegionalConsumptionRegion: externalSetSelectedRegionalConsumptionRegion,
+  regionalParBufferPercent: externalRegionalParBufferPercent,
+  setRegionalParBufferPercent: externalSetRegionalParBufferPercent,
 }) {
   const [templateEntries, setTemplateEntries] = useState([]);
   const [templateStatus, setTemplateStatus] = useState("Loading attached ERP template...");
-  const [nextOrderRows, setNextOrderRows] = useState([]);
-  const [orderByCode, setOrderByCode] = useState({});
+  const [baseNextOrderRows, setBaseNextOrderRows] = useState([]);
   const [fmlSourceRows, setFmlSourceRows] = useState([]);
   const [fmlNotUsedRows, setFmlNotUsedRows] = useState([]);
   const [fmlRunningLowRows, setFmlRunningLowRows] = useState([]);
@@ -1003,6 +1227,68 @@ export default function GenerateNextOrder({
   const [fmlRunningLowPrepared, setFmlRunningLowPrepared] = useState(false);
   const [nextOrderMessage, setNextOrderMessage] = useState("");
   const [reportDisplayLimit, setReportDisplayLimit] = useState(REPORT_RENDER_BATCH);
+
+  const [internalYearlyRegionalConsumption, setInternalYearlyRegionalConsumption] = useState(null);
+  const [internalYearlyRegionalFileName, setInternalYearlyRegionalFileName] = useState("");
+  const [internalSelectedRegionalConsumptionRegion, setInternalSelectedRegionalConsumptionRegion] =
+    useState(YEARLY_REGION_ALL);
+  const [internalRegionalParBufferPercent, setInternalRegionalParBufferPercent] = useState(0);
+  const [yearlyRegionalMessage, setYearlyRegionalMessage] = useState(DEFAULT_REGIONAL_MESSAGE);
+
+  const yearlyRegionalConsumption =
+    externalYearlyRegionalConsumption !== undefined
+      ? externalYearlyRegionalConsumption
+      : internalYearlyRegionalConsumption;
+  const setYearlyRegionalConsumption =
+    externalSetYearlyRegionalConsumption || setInternalYearlyRegionalConsumption;
+
+  const yearlyRegionalFileName =
+    externalYearlyRegionalFileName !== undefined
+      ? externalYearlyRegionalFileName
+      : internalYearlyRegionalFileName;
+  const setYearlyRegionalFileName = externalSetYearlyRegionalFileName || setInternalYearlyRegionalFileName;
+
+  const selectedRegionalConsumptionRegion =
+    externalSelectedRegionalConsumptionRegion !== undefined
+      ? externalSelectedRegionalConsumptionRegion
+      : internalSelectedRegionalConsumptionRegion;
+  const setSelectedRegionalConsumptionRegion =
+    externalSetSelectedRegionalConsumptionRegion || setInternalSelectedRegionalConsumptionRegion;
+
+  const regionalParBufferPercent =
+    externalRegionalParBufferPercent !== undefined
+      ? externalRegionalParBufferPercent
+      : internalRegionalParBufferPercent;
+  const setRegionalParBufferPercent = externalSetRegionalParBufferPercent || setInternalRegionalParBufferPercent;
+
+  const nextOrderRows = useMemo(
+    () =>
+      getRegionalizedOrderRows({
+        orderRows: baseNextOrderRows,
+        yearlyRegionalConsumption,
+        selectedRegion: selectedRegionalConsumptionRegion,
+        voyageDays: nextOrderMeta.voyageDays,
+        daysUntilArrival: nextOrderMeta.daysUntilArrival,
+        bufferPercent: regionalParBufferPercent,
+      }),
+    [
+      baseNextOrderRows,
+      yearlyRegionalConsumption,
+      selectedRegionalConsumptionRegion,
+      nextOrderMeta.voyageDays,
+      nextOrderMeta.daysUntilArrival,
+      regionalParBufferPercent,
+    ]
+  );
+
+  const orderByCode = useMemo(() => buildOrderByCodeFromRows(nextOrderRows), [nextOrderRows]);
+
+  const regionalMatchedCount = nextOrderRows.filter((row) => row.regionalHasData).length;
+
+  const regionalizedFmlOrderedNotFmlRows = useMemo(
+    () => applyRegionalRowsToOrderedNotFmlRows(fmlOrderedNotFmlRows, nextOrderRows),
+    [fmlOrderedNotFmlRows, nextOrderRows]
+  );
 
   useEffect(() => {
     const loadDefaultTemplate = async () => {
@@ -1037,7 +1323,38 @@ export default function GenerateNextOrder({
     fmlSearch,
     fmlLowSearch,
     fmlOrderedNotFmlSearch,
+    selectedRegionalConsumptionRegion,
+    regionalParBufferPercent,
   ]);
+
+  useEffect(() => {
+    if (!baseNextOrderRows.length) return;
+
+    setFmlNotUsedRows([]);
+    setFmlRunningLowRows([]);
+    setFmlNotUsedPrepared(false);
+    setFmlRunningLowPrepared(false);
+  }, [
+    baseNextOrderRows.length,
+    yearlyRegionalConsumption,
+    selectedRegionalConsumptionRegion,
+    regionalParBufferPercent,
+  ]);
+
+  const resetPreparedFmlReports = () => {
+    setFmlNotUsedRows([]);
+    setFmlRunningLowRows([]);
+    setFmlNotUsedPrepared(false);
+    setFmlRunningLowPrepared(false);
+  };
+
+  const resetFmlReports = () => {
+    setFmlNotUsedRows([]);
+    setFmlRunningLowRows([]);
+    setFmlOrderedNotFmlRows([]);
+    setFmlNotUsedPrepared(false);
+    setFmlRunningLowPrepared(false);
+  };
 
   const uploadErpTemplate = (event) => {
     const file = event.target.files?.[0];
@@ -1066,12 +1383,62 @@ export default function GenerateNextOrder({
     reader.readAsBinaryString(file);
   };
 
-  const resetFmlReports = () => {
-    setFmlNotUsedRows([]);
-    setFmlRunningLowRows([]);
-    setFmlOrderedNotFmlRows([]);
-    setFmlNotUsedPrepared(false);
-    setFmlRunningLowPrepared(false);
+  const uploadYearlyRegionalConsumptionFile = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setYearlyRegionalMessage("Preparing yearly regional consumption file...");
+
+    try {
+      await yieldToBrowser();
+
+      const arrayBuffer = await file.arrayBuffer();
+      await yieldToBrowser();
+
+      const workbook = XLSX.read(arrayBuffer, {
+        type: "array",
+        cellDates: true,
+      });
+
+      const parsed = parseYearlyRegionalConsumptionWorkbook(workbook);
+
+      setYearlyRegionalConsumption(parsed);
+      setYearlyRegionalFileName(file.name);
+
+      if (!parsed.regionOptions?.length) {
+        setSelectedRegionalConsumptionRegion(YEARLY_REGION_ALL);
+        setYearlyRegionalMessage(
+          "Yearly file loaded, but no regional ship blocks were detected. Check the header rows."
+        );
+      } else {
+        setYearlyRegionalMessage(
+          "Yearly regional file loaded. " +
+            parsed.aggregates.length +
+            " regional product records found across " +
+            parsed.regionOptions.length +
+            " region(s)."
+        );
+      }
+
+      resetPreparedFmlReports();
+
+      logUsageEvent("yearly_regional_consumption_uploaded", {
+        module: "generate_next_order",
+        fileName: file.name,
+        sourceSheet: parsed.sourceSheet,
+        regions: parsed.regionOptions || [],
+        aggregates: parsed.aggregates.length,
+        shipRegionBlocks: parsed.shipRegionBlocks.length,
+      });
+    } catch (error) {
+      setYearlyRegionalConsumption(null);
+      setYearlyRegionalFileName("");
+      setYearlyRegionalMessage(
+        error?.message || "Could not prepare yearly regional consumption file."
+      );
+    } finally {
+      event.target.value = "";
+    }
   };
 
   const uploadNextOrderFile = async (event) => {
@@ -1088,8 +1455,7 @@ export default function GenerateNextOrder({
 
       const parsed = await parseOrderFile(file);
 
-      setNextOrderRows(parsed.orderRows);
-      setOrderByCode(parsed.orderByCode || {});
+      setBaseNextOrderRows(parsed.orderRows);
       setFmlSourceRows(parsed.fmlRows || []);
       setFmlNotUsedRows([]);
       setFmlRunningLowRows([]);
@@ -1109,9 +1475,9 @@ export default function GenerateNextOrder({
           parsed.meta.totalItems +
           " product rows found. " +
           parsed.meta.itemsNeedingOrder +
-          " need order. " +
+          " need order by the original order-file calculation. " +
           parsed.meta.fmlOrderedNotFml +
-          " ordered item(s) are not in FML. Calculated using B2/B3 days to arrival, B5 sailors, B6 voyage days, F:N future orders, Y ordered by ship, AI:AN past consumption, and Q par where applicable. FML reports are preparing in the background."
+          " ordered item(s) are not in FML. Regional yearly consumption will be used for suggested order when a matching product and region are found. If no yearly regional match exists, the current order-file history remains the fallback."
       );
 
       logUsageEvent("next_order_file_uploaded", {
@@ -1127,13 +1493,24 @@ export default function GenerateNextOrder({
         (async () => {
           try {
             setFmlReportLoading(true);
-            setFmlReportMessage("Preparing FML reports in the background...");
+            setFmlReportMessage("Preparing FML reports...");
+
+            const regionalRowsForFml = getRegionalizedOrderRows({
+              orderRows: parsed.orderRows || [],
+              yearlyRegionalConsumption,
+              selectedRegion: selectedRegionalConsumptionRegion,
+              voyageDays: parsed.meta.voyageDays,
+              daysUntilArrival: parsed.meta.daysUntilArrival,
+              bufferPercent: regionalParBufferPercent,
+            });
+
+            const regionalOrderByCodeForFml = buildOrderByCodeFromRows(regionalRowsForFml);
 
             const notUsedRows = await buildFmlReportAsync({
               mode: "notUsed",
               fmlRows: parsed.fmlRows || [],
-              orderRows: parsed.orderRows || [],
-              orderByCode: parsed.orderByCode || {},
+              orderRows: regionalRowsForFml,
+              orderByCode: regionalOrderByCodeForFml,
               templateEntries,
               shipCode: parsed.meta.shipCode,
               onProgress: setFmlReportMessage,
@@ -1146,8 +1523,8 @@ export default function GenerateNextOrder({
             const runningLowRows = await buildFmlReportAsync({
               mode: "runningLow",
               fmlRows: parsed.fmlRows || [],
-              orderRows: parsed.orderRows || [],
-              orderByCode: parsed.orderByCode || {},
+              orderRows: regionalRowsForFml,
+              orderByCode: regionalOrderByCodeForFml,
               templateEntries,
               shipCode: parsed.meta.shipCode,
               onProgress: setFmlReportMessage,
@@ -1173,8 +1550,7 @@ export default function GenerateNextOrder({
         })();
       }, 50);
     } catch (error) {
-      setNextOrderRows([]);
-      setOrderByCode({});
+      setBaseNextOrderRows([]);
       setFmlSourceRows([]);
       resetFmlReports();
       setNextOrderMessage(error?.message || "Could not prepare order file.");
@@ -1234,7 +1610,9 @@ export default function GenerateNextOrder({
         (nextOrderFilter === "needs" && row.suggestedOrder > 0) ||
         (nextOrderFilter === "runningLow" && Number(row.availableAtArrival || 0) < 0) ||
         (nextOrderFilter === "noConsumption" && row.pastConsumption === 0) ||
-        (nextOrderFilter === "noStock" && row.stock === 0);
+        (nextOrderFilter === "noStock" && row.stock === 0) ||
+        (nextOrderFilter === "regional" && row.regionalHasData) ||
+        (nextOrderFilter === "noRegional" && !row.regionalHasData);
 
       if (!filterOk) return false;
       if (!query) return true;
@@ -1244,6 +1622,8 @@ export default function GenerateNextOrder({
         row.code,
         row.unit,
         row.alertLabel,
+        row.suggestionBasis,
+        row.regionalRegion,
         String(row.excelRow),
         String(row.excelOrder),
       ]
@@ -1270,41 +1650,7 @@ export default function GenerateNextOrder({
     const query = nextOrderSearch.toLowerCase().trim();
 
     return nextOrderRows
-      .map((row) => {
-        const orderedQty = Number(row.orderedByShip || 0);
-        const suggestedQty = Number(row.suggestedOrder || 0);
-        const orderDifference = orderedQty - suggestedQty;
-
-        let orderDifferencePercent = 0;
-        let orderComparisonStatus = "green";
-        let orderComparisonLabel = "Within +/- 10%";
-
-        if (suggestedQty > 0) {
-          orderDifferencePercent = (orderDifference / suggestedQty) * 100;
-
-          if (orderDifferencePercent > 10) {
-            orderComparisonStatus = "red";
-            orderComparisonLabel = "Ordered over suggested by more than 10%";
-          } else if (orderDifferencePercent < -10) {
-            orderComparisonStatus = "blue";
-            orderComparisonLabel = "Ordered under suggested by more than 10%";
-          }
-        } else if (orderedQty > 0) {
-          orderDifferencePercent = 100;
-          orderComparisonStatus = "red";
-          orderComparisonLabel = "Ordered but suggested quantity is 0";
-        }
-
-        return {
-          ...row,
-          orderedQty,
-          suggestedQty,
-          orderDifference,
-          orderDifferencePercent,
-          orderComparisonStatus,
-          orderComparisonLabel,
-        };
-      })
+      .map((row) => recalculateOrderComparisonFields(row))
       .filter((row) => Number(row.orderedQty || 0) > 0 || Number(row.suggestedQty || 0) > 0)
       .filter((row) => {
         if (!query) return true;
@@ -1314,6 +1660,8 @@ export default function GenerateNextOrder({
           row.code,
           row.unit,
           row.orderComparisonLabel,
+          row.suggestionBasis,
+          row.regionalRegion,
           String(row.excelRow),
           String(row.excelOrder),
           String(row.orderedQty),
@@ -1400,7 +1748,7 @@ export default function GenerateNextOrder({
     if (!query) return fmlNotUsedRows;
 
     return fmlNotUsedRows.filter((row) =>
-      [row.product, row.code, row.unit, row.venuesText, row.templateLocation, row.scopeText]
+      [row.product, row.code, row.unit, row.venuesText, row.templateLocation, row.scopeText, row.suggestionBasis]
         .join(" ")
         .toLowerCase()
         .includes(query)
@@ -1412,7 +1760,7 @@ export default function GenerateNextOrder({
     if (!query) return fmlRunningLowRows;
 
     return fmlRunningLowRows.filter((row) =>
-      [row.product, row.code, row.unit, row.venuesText, row.templateLocation, row.scopeText]
+      [row.product, row.code, row.unit, row.venuesText, row.templateLocation, row.scopeText, row.suggestionBasis]
         .join(" ")
         .toLowerCase()
         .includes(query)
@@ -1422,9 +1770,9 @@ export default function GenerateNextOrder({
   const filteredFmlOrderedNotFmlRows = useMemo(() => {
     const query = fmlOrderedNotFmlSearch.toLowerCase().trim();
 
-    if (!query) return fmlOrderedNotFmlRows;
+    if (!query) return regionalizedFmlOrderedNotFmlRows;
 
-    return fmlOrderedNotFmlRows.filter((row) =>
+    return regionalizedFmlOrderedNotFmlRows.filter((row) =>
       [
         row.product,
         row.code,
@@ -1432,6 +1780,7 @@ export default function GenerateNextOrder({
         row.excelRow,
         row.matchType,
         row.reason,
+        row.suggestionBasis,
         String(row.orderedByShip),
         String(row.suggestedOrder),
       ]
@@ -1439,7 +1788,7 @@ export default function GenerateNextOrder({
         .toLowerCase()
         .includes(query)
     );
-  }, [fmlOrderedNotFmlRows, fmlOrderedNotFmlSearch]);
+  }, [regionalizedFmlOrderedNotFmlRows, fmlOrderedNotFmlSearch]);
 
   const orderedVsSuggestedExportRows = orderedVsSuggestedRows.map((row, index) => ({
     Number: index + 1,
@@ -1447,9 +1796,14 @@ export default function GenerateNextOrder({
     Code: row.code,
     Product: row.product,
     UM: row.unit,
+    Region: row.regionalRegion === YEARLY_REGION_ALL ? "All regions" : row.regionalRegion || "",
+    SuggestionBasis: row.suggestionBasis,
     CurrentQuantityOnHand: row.stock,
     UpcomingOrder: row.futureOrders,
     DailyConsumption: row.averagePerDay,
+    RegionalDailyConsumption: row.regionalAvgDailyQty,
+    CurrentParLevel: row.parLevel,
+    SuggestedRegionalParLevel: row.regionalSuggestedParLevel,
     OrderedByShipColumnY: row.orderedQty,
     SuggestedOrder: row.suggestedQty,
     Difference: row.orderDifference,
@@ -1499,17 +1853,28 @@ export default function GenerateNextOrder({
     Code: row.code,
     Product: row.product,
     UM: row.unit,
+    Region: row.regionalRegion === YEARLY_REGION_ALL ? "All regions" : row.regionalRegion || "",
+    SuggestionBasis: row.suggestionBasis,
     Stock: row.stock,
     FutureOrders: row.futureOrders,
-    ParLevel: row.parLevel,
-    PastConsumption: row.pastConsumption,
-    HistoricalSailorDays: row.historicalSailorDays,
-    AveragePerDay: row.averagePerDay,
+    CurrentParLevel: row.parLevel,
+    RegionalDailyConsumption: row.regionalAvgDailyQty,
+    RegionalTotalQty: row.regionalTotalQty,
+    RegionalTotalDays: row.regionalTotalDays,
+    RegionalEvidenceBlocks: row.regionalEvidenceBlocks,
+    SuggestedRegionalParLevel: row.regionalSuggestedParLevel,
+    SuggestedParDifference: Number(row.regionalSuggestedParLevel || 0) - Number(row.parLevel || 0),
+    StandardDailyConsumption: row.standardAveragePerDay,
+    StandardSuggestedOrder: row.standardSuggestedOrder,
+    ActiveDailyConsumption: row.averagePerDay,
     UsageUntilArrival: row.usageUntilArrival,
     AvailableAtArrival: row.availableAtArrival,
     ProjectedVoyageNeed: row.projectedVoyageNeed,
     RawSuggested: row.rawSuggested,
     SuggestedOrder: row.suggestedOrder,
+    OrderedByShipColumnY: row.orderedByShip,
+    MatchedRegionalProductCode: row.regionalMatchedProductCode,
+    MatchedRegionalProductName: row.regionalMatchedProductName,
     ParCapApplied: row.parCapApplied ? "Yes" : "No",
     Alert: row.alertLabel,
   }));
@@ -1521,10 +1886,14 @@ export default function GenerateNextOrder({
       Code: row.code,
       Product: row.product,
       UM: row.unit,
+      Region: row.regionalRegion === YEARLY_REGION_ALL ? "All regions" : row.regionalRegion || "",
+      SuggestionBasis: row.suggestionBasis,
       Stock: row.stock,
       FutureOrders: row.futureOrders,
       PastConsumption: row.pastConsumption,
       AveragePerDay: row.averagePerDay,
+      RegionalDailyConsumption: row.regionalAvgDailyQty,
+      SuggestedRegionalParLevel: row.regionalSuggestedParLevel,
       AvailableAtArrival: row.availableAtArrival,
       SuggestedOrder: row.suggestedOrder,
       Venues: row.venuesText,
@@ -1539,12 +1908,16 @@ export default function GenerateNextOrder({
     Code: row.code,
     Product: row.product,
     UM: row.unit,
+    Region: row.regionalRegion === YEARLY_REGION_ALL ? "All regions" : row.regionalRegion || "",
+    SuggestionBasis: row.suggestionBasis,
     Stock: row.stock,
     FutureOrders: row.futureOrders,
     OrderedByShipColumnY: row.orderedByShip,
     SuggestedOrder: row.suggestedOrder,
     PastConsumption: row.pastConsumption,
     AveragePerDay: row.averagePerDay,
+    RegionalDailyConsumption: row.regionalAvgDailyQty,
+    SuggestedRegionalParLevel: row.regionalSuggestedParLevel,
     AvailableAtArrival: row.availableAtArrival,
     MatchType: row.matchType,
     Reason: row.reason,
@@ -1554,6 +1927,8 @@ export default function GenerateNextOrder({
   const countRunningLowBeforeLoading = nextOrderRows.filter((row) => Number(row.availableAtArrival || 0) < 0).length;
   const countNoConsumption = nextOrderRows.filter((row) => row.pastConsumption === 0).length;
   const countNoStock = nextOrderRows.filter((row) => row.stock === 0).length;
+  const countRegionalData = nextOrderRows.filter((row) => row.regionalHasData).length;
+  const countNoRegionalData = nextOrderRows.filter((row) => !row.regionalHasData).length;
 
   const visibleNextOrderRows = filteredNextOrderRows.slice(0, reportDisplayLimit);
   const visibleOrderedVsSuggestedRows = orderedVsSuggestedRows.slice(0, reportDisplayLimit);
@@ -1655,7 +2030,7 @@ export default function GenerateNextOrder({
           style={{ ...styles.viewModeButton, ...(nextOrderView === "fmlordered" ? styles.viewModeButtonActive : {}) }}
           onClick={() => setNextOrderView("fmlordered")}
         >
-          🧾 Ordered Not In FML ({fmlOrderedNotFmlRows.length})
+          🧾 Ordered Not In FML ({regionalizedFmlOrderedNotFmlRows.length})
         </button>
       </div>
 
@@ -1669,15 +2044,63 @@ export default function GenerateNextOrder({
           <label style={styles.label}>Step 1: Upload latest order file</label>
           <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadNextOrderFile} style={styles.fileInput} />
 
+          <label style={styles.label}>Optional: upload yearly regional consumption file May 2025 - April 2026</label>
+          <input
+            type="file"
+            accept=".xlsx,.xls,.xlsm"
+            onChange={uploadYearlyRegionalConsumptionFile}
+            style={styles.fileInput}
+          />
+
+          <label style={styles.label}>Region / home port for next order</label>
+          <select
+            value={selectedRegionalConsumptionRegion}
+            onChange={(event) => {
+              setSelectedRegionalConsumptionRegion(event.target.value);
+              resetPreparedFmlReports();
+            }}
+            style={styles.searchInput}
+          >
+            <option value={YEARLY_REGION_ALL}>All regions</option>
+
+            {(yearlyRegionalConsumption?.regionOptions || []).map((region) => (
+              <option key={region} value={region}>
+                {region}
+              </option>
+            ))}
+          </select>
+
+          <label style={styles.label}>Regional par buffer %</label>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={regionalParBufferPercent}
+            onChange={(event) => {
+              setRegionalParBufferPercent(toNumber(event.target.value));
+              resetPreparedFmlReports();
+            }}
+            style={styles.searchInput}
+          />
+
           <div style={styles.infoBox}>
             <div>📋 ERP template: <strong>{templateStatus}</strong></div>
             <div>📄 Order file: <strong>{nextOrderFileName || "Not uploaded"}</strong></div>
+            <div>🌎 Yearly regional file: <strong>{yearlyRegionalFileName || "Not uploaded"}</strong></div>
             <div>🚢 Ship from B1: <strong>{getShipDisplayName(nextOrderMeta.shipCode) || "Not loaded"}</strong></div>
+            <div>🧭 Selected region: <strong>{selectedRegionalConsumptionRegion === YEARLY_REGION_ALL ? "All regions" : selectedRegionalConsumptionRegion}</strong></div>
             <div>📅 Order day B2: <strong>{formatDate(nextOrderMeta.orderDate)}</strong></div>
             <div>📦 Arrival day B3: <strong>{formatDate(nextOrderMeta.arrivalDate)}</strong></div>
             <div>👥 Sailors B5: <strong>{formatQty(nextOrderMeta.sailors)}</strong></div>
             <div>🗓️ Voyage days B6: <strong>{formatQty(nextOrderMeta.voyageDays)}</strong></div>
             <div>⏱️ Days until arrival: <strong>{formatQty(nextOrderMeta.daysUntilArrival)}</strong></div>
+            <div>📈 Regional matches: <strong>{regionalMatchedCount} / {nextOrderRows.length}</strong></div>
+            <div>🧮 Regional buffer: <strong>{formatQty(regionalParBufferPercent)}%</strong></div>
+            {yearlyRegionalMessage && (
+              <div style={{ color: yearlyRegionalMessage.includes("Could not") ? "#b00020" : "#555" }}>
+                {yearlyRegionalMessage}
+              </div>
+            )}
             {nextOrderMessage && (
               <div style={{ color: nextOrderMessage.includes("Could not") ? "#b00020" : "#555" }}>
                 {nextOrderMessage}
@@ -1692,7 +2115,7 @@ export default function GenerateNextOrder({
           {nextOrderView === "order" && (
             <>
               <input
-                placeholder="Search item, code, U/M, alert, or Excel row..."
+                placeholder="Search item, code, U/M, alert, region, basis, or Excel row..."
                 value={nextOrderSearch}
                 onChange={(event) => setNextOrderSearch(event.target.value)}
                 style={styles.searchInput}
@@ -1721,6 +2144,20 @@ export default function GenerateNextOrder({
                 </button>
 
                 <button
+                  style={{ ...styles.viewModeButton, ...(nextOrderFilter === "regional" ? styles.viewModeButtonActive : {}) }}
+                  onClick={() => setNextOrderFilter("regional")}
+                >
+                  Regional Match ({countRegionalData})
+                </button>
+
+                <button
+                  style={{ ...styles.viewModeButton, ...(nextOrderFilter === "noRegional" ? styles.viewModeButtonActive : {}) }}
+                  onClick={() => setNextOrderFilter("noRegional")}
+                >
+                  No Regional Match ({countNoRegionalData})
+                </button>
+
+                <button
                   style={{ ...styles.viewModeButton, ...(nextOrderFilter === "noConsumption" ? styles.viewModeButtonActive : {}) }}
                   onClick={() => setNextOrderFilter("noConsumption")}
                 >
@@ -1735,6 +2172,13 @@ export default function GenerateNextOrder({
                 </button>
               </div>
 
+              <div style={styles.infoBox}>
+                <div>🌎 Regional source: <strong>Yearly May 2025 - April 2026 Qty columns</strong></div>
+                <div>📊 Regional daily: <strong>total regional Qty / total region sailing days</strong></div>
+                <div>📦 Suggested par: <strong>regional daily × voyage days × buffer</strong></div>
+                <div>🛒 Suggested order: <strong>suggested par - projected quantity available at arrival</strong></div>
+              </div>
+
               <div style={styles.headerActions}>
                 <button
                   style={styles.backButton}
@@ -1745,8 +2189,13 @@ export default function GenerateNextOrder({
                       { key: "Code", label: "Code" },
                       { key: "Product", label: "Product" },
                       { key: "UM", label: "U/M" },
+                      { key: "Region", label: "Region" },
+                      { key: "SuggestionBasis", label: "Basis" },
                       { key: "Stock", label: "Stock" },
                       { key: "FutureOrders", label: "Future" },
+                      { key: "CurrentParLevel", label: "Current Par" },
+                      { key: "RegionalDailyConsumption", label: "Regional Daily" },
+                      { key: "SuggestedRegionalParLevel", label: "Suggested Par" },
                       { key: "AvailableAtArrival", label: "At Arrival" },
                       { key: "SuggestedOrder", label: "Order" },
                       { key: "Alert", label: "Alert" },
@@ -1769,7 +2218,7 @@ export default function GenerateNextOrder({
           {nextOrderView === "orderedVsSuggested" && (
             <>
               <input
-                placeholder="Search ordered vs suggested item, code, U/M, or status..."
+                placeholder="Search ordered vs suggested item, code, U/M, status, region, or basis..."
                 value={nextOrderSearch}
                 onChange={(event) => setNextOrderSearch(event.target.value)}
                 style={styles.searchInput}
@@ -1779,7 +2228,7 @@ export default function GenerateNextOrder({
                 <div>📘 Ordered by ship source: <strong>Column Y</strong></div>
                 <div>📦 Current quantity on hand: <strong>Stock column D</strong></div>
                 <div>🚚 Upcoming order: <strong>Future orders F:N</strong></div>
-                <div>📊 Daily consumption: <strong>average daily usage from past consumption</strong></div>
+                <div>🌎 Suggested order can be based on: <strong>yearly regional consumption when matched</strong></div>
                 <div>🔴 Red: <strong>ordered more than suggested by over 10%</strong></div>
                 <div>🔵 Blue: <strong>ordered less than suggested by over 10%</strong></div>
                 <div>🟢 Green: <strong>within -10% to +10%</strong></div>
@@ -1795,9 +2244,12 @@ export default function GenerateNextOrder({
                       { key: "Code", label: "Code" },
                       { key: "Product", label: "Product" },
                       { key: "UM", label: "U/M" },
+                      { key: "Region", label: "Region" },
+                      { key: "SuggestionBasis", label: "Basis" },
                       { key: "CurrentQuantityOnHand", label: "On Hand" },
                       { key: "UpcomingOrder", label: "Upcoming Order" },
                       { key: "DailyConsumption", label: "Daily Consumption" },
+                      { key: "SuggestedRegionalParLevel", label: "Suggested Par" },
                       { key: "OrderedByShipColumnY", label: "Ordered Y" },
                       { key: "SuggestedOrder", label: "Suggested" },
                       { key: "Difference", label: "Difference" },
@@ -1824,7 +2276,6 @@ export default function GenerateNextOrder({
               </div>
             </>
           )}
-
 
           {nextOrderView === "increase1" && (
             <>
@@ -1932,11 +2383,10 @@ export default function GenerateNextOrder({
             </>
           )}
 
-
           {nextOrderView === "fml" && (
             <>
               <input
-                placeholder="Search FML item, code, venue, or template location..."
+                placeholder="Search FML item, code, venue, template location, or basis..."
                 value={fmlSearch}
                 onChange={(event) => setFmlSearch(event.target.value)}
                 style={styles.searchInput}
@@ -1951,6 +2401,8 @@ export default function GenerateNextOrder({
                       { key: "FmlRow", label: "FML Row" },
                       { key: "Code", label: "Code" },
                       { key: "Product", label: "Product" },
+                      { key: "Region", label: "Region" },
+                      { key: "SuggestionBasis", label: "Basis" },
                       { key: "Venues", label: "Venues" },
                       { key: "TemplateLocation", label: "Template" },
                       { key: "TemplateScope", label: "Scope" },
@@ -1974,7 +2426,7 @@ export default function GenerateNextOrder({
           {nextOrderView === "fmllow" && (
             <>
               <input
-                placeholder="Search running-low FML item, code, venue, or template location..."
+                placeholder="Search running-low FML item, code, venue, template location, or basis..."
                 value={fmlLowSearch}
                 onChange={(event) => setFmlLowSearch(event.target.value)}
                 style={styles.searchInput}
@@ -1989,8 +2441,11 @@ export default function GenerateNextOrder({
                       { key: "FmlRow", label: "FML Row" },
                       { key: "Code", label: "Code" },
                       { key: "Product", label: "Product" },
+                      { key: "Region", label: "Region" },
+                      { key: "SuggestionBasis", label: "Basis" },
                       { key: "Stock", label: "Stock" },
                       { key: "AveragePerDay", label: "Avg/Day" },
+                      { key: "SuggestedRegionalParLevel", label: "Suggested Par" },
                       { key: "AvailableAtArrival", label: "At Arrival" },
                       { key: "Venues", label: "Venues" },
                       { key: "TemplateLocation", label: "Template" },
@@ -2014,7 +2469,7 @@ export default function GenerateNextOrder({
           {nextOrderView === "fmlordered" && (
             <>
               <input
-                placeholder="Search ordered item missing from FML, code, row, or reason..."
+                placeholder="Search ordered item missing from FML, code, row, reason, or basis..."
                 value={fmlOrderedNotFmlSearch}
                 onChange={(event) => setFmlOrderedNotFmlSearch(event.target.value)}
                 style={styles.searchInput}
@@ -2023,6 +2478,7 @@ export default function GenerateNextOrder({
               <div style={styles.infoBox}>
                 <div>📘 Report logic: <strong>Column Y ordered by ship is greater than 0</strong></div>
                 <div>🧾 FML match: <strong>checks FML by code and product name</strong></div>
+                <div>🌎 Suggested quantities update with: <strong>selected regional yearly consumption when matched</strong></div>
                 <div>🔴 Shows: <strong>ordered items that are not found in FML</strong></div>
               </div>
 
@@ -2036,6 +2492,8 @@ export default function GenerateNextOrder({
                       { key: "Code", label: "Code" },
                       { key: "Product", label: "Product" },
                       { key: "UM", label: "U/M" },
+                      { key: "Region", label: "Region" },
+                      { key: "SuggestionBasis", label: "Basis" },
                       { key: "OrderedByShipColumnY", label: "Ordered Y" },
                       { key: "SuggestedOrder", label: "Suggested" },
                       { key: "Stock", label: "Stock" },
@@ -2062,7 +2520,7 @@ export default function GenerateNextOrder({
       {nextOrderLoading && (
         <section style={styles.card}>
           <h2 style={styles.cardTitle}>Preparing report...</h2>
-          <p style={styles.emptyText}>Please wait while the workbook is processed.</p>
+          <p style={styles.emptyText}>Workbook is being processed.</p>
         </section>
       )}
 
@@ -2083,7 +2541,8 @@ export default function GenerateNextOrder({
           <div style={localStyles.compactGrid}>
             {visibleNextOrderRows.map((row) => {
               const negativeArrival = Number(row.availableAtArrival || 0) < 0;
-              const showPar = Number(nextOrderMeta.voyageDays || 0) === 14 && Number(row.parLevel || 0) > 0;
+              const showPar = Number(row.parLevel || 0) > 0 || Number(row.regionalSuggestedParLevel || 0) > 0;
+              const selectedRegionLabel = row.regionalRegion === YEARLY_REGION_ALL ? "All regions" : row.regionalRegion || "N/A";
 
               return (
                 <div key={row.excelRow + "-" + row.product} style={localStyles.nextOrderCard}>
@@ -2096,10 +2555,38 @@ export default function GenerateNextOrder({
                   <div style={styles.recipeMeta}>Code: {row.code || "N/A"}</div>
                   <div style={styles.recipeMeta}>U/M: {row.unit || "N/A"}</div>
 
+                  <div style={row.regionalHasData ? localStyles.regionalBadge : localStyles.noRegionalBadge}>
+                    {row.regionalHasData ? "Regional yearly data matched" : "Using order-file history"}
+                  </div>
+
                   <div style={localStyles.calcStrip}>
-                    <div>Past: <strong>{formatQty(row.pastConsumption)}</strong> · Avg/day: <strong>{formatQty(row.averagePerDay)}</strong></div>
+                    <div>Basis: <strong>{row.suggestionBasis}</strong></div>
+                    <div>Region: <strong>{selectedRegionLabel}</strong></div>
+
+                    {row.regionalHasData ? (
+                      <>
+                        <div>
+                          Regional qty: <strong>{formatRegionalQty(row.regionalTotalQty)}</strong> · Days: <strong>{formatQty(row.regionalTotalDays)}</strong> · Blocks: <strong>{row.regionalEvidenceBlocks}</strong>
+                        </div>
+
+                        <div>
+                          Regional daily: <strong>{formatRegionalQty(row.regionalAvgDailyQty)}</strong> · Suggested par: <strong>{formatRegionalQty(row.regionalSuggestedParLevel)}</strong>
+                        </div>
+
+                        <div>
+                          Current par Q: <strong>{formatQty(row.parLevel)}</strong> · Suggested par difference: <strong>{formatQty(row.regionalSuggestedParLevel - row.parLevel)}</strong>
+                        </div>
+
+                        <div>
+                          Original file daily: <strong>{formatQty(row.standardAveragePerDay)}</strong> · Original suggested: <strong>{formatQty(row.standardSuggestedOrder)}</strong>
+                        </div>
+                      </>
+                    ) : (
+                      <div>No yearly regional match found. Using current order-file history.</div>
+                    )}
+
                     <div>Days to arrival: <strong>{formatQty(nextOrderMeta.daysUntilArrival)}</strong> · Use until arrival: <strong>{formatQty(row.usageUntilArrival)}</strong></div>
-                    <div>Voyage need: <strong>{formatQty(row.projectedVoyageNeed)}</strong> · Raw order: <strong>{formatQty(row.rawSuggested)}</strong></div>
+                    <div>Voyage need / suggested par: <strong>{formatQty(row.projectedVoyageNeed)}</strong> · Raw order: <strong>{formatQty(row.rawSuggested)}</strong></div>
                     {row.parCapApplied && <div style={localStyles.parCapNote}>Par cap applied: max {formatQty(row.parCapLimit)}</div>}
                   </div>
 
@@ -2120,9 +2607,23 @@ export default function GenerateNextOrder({
                     </div>
 
                     {showPar && (
-                      <div style={row.parCapApplied ? localStyles.metricBoxWarning : localStyles.metricBox}>
-                        <span>Par Q</span>
+                      <div style={localStyles.metricBox}>
+                        <span>Current Par Q</span>
                         <strong>{formatQty(row.parLevel)}</strong>
+                      </div>
+                    )}
+
+                    {row.regionalHasData && (
+                      <div style={localStyles.metricBoxWarning}>
+                        <span>Suggested Par</span>
+                        <strong>{formatRegionalQty(row.regionalSuggestedParLevel)}</strong>
+                      </div>
+                    )}
+
+                    {row.regionalHasData && (
+                      <div style={localStyles.metricBox}>
+                        <span>Reg Daily</span>
+                        <strong>{formatRegionalQty(row.regionalAvgDailyQty)}</strong>
                       </div>
                     )}
                   </div>
@@ -2198,6 +2699,9 @@ export default function GenerateNextOrder({
                   <div style={localStyles.productName}>{row.product}</div>
                   <div style={styles.recipeMeta}>Code: {row.code || "N/A"}</div>
                   <div style={styles.recipeMeta}>U/M: {row.unit || "N/A"}</div>
+                  <div style={row.regionalHasData ? localStyles.regionalBadge : localStyles.noRegionalBadge}>
+                    {row.suggestionBasis}
+                  </div>
 
                   <div style={localStyles.metricGrid}>
                     <div style={localStyles.metricBox}>
@@ -2233,6 +2737,13 @@ export default function GenerateNextOrder({
                     </div>
                   </div>
 
+                  {row.regionalHasData && (
+                    <div style={localStyles.calcStrip}>
+                      <div>Region: <strong>{row.regionalRegion === YEARLY_REGION_ALL ? "All regions" : row.regionalRegion}</strong></div>
+                      <div>Regional daily: <strong>{formatRegionalQty(row.regionalAvgDailyQty)}</strong> · Suggested par: <strong>{formatRegionalQty(row.regionalSuggestedParLevel)}</strong></div>
+                    </div>
+                  )}
+
                   <div style={localStyles.calcStrip}>
                     <div>
                       Difference %: <strong>{formatQty(row.orderDifferencePercent)}%</strong>
@@ -2257,7 +2768,6 @@ export default function GenerateNextOrder({
           )}
         </section>
       )}
-
 
       {nextOrderView === "increase1" && (
         <section style={styles.card}>
@@ -2401,7 +2911,6 @@ export default function GenerateNextOrder({
         </section>
       )}
 
-
       {nextOrderView === "fml" && (
         <section style={styles.card}>
           <h2 style={styles.productTitle}>📘 FML Not Ordered / Not Used</h2>
@@ -2426,6 +2935,9 @@ export default function GenerateNextOrder({
 
                 <div style={localStyles.productName}>{row.product}</div>
                 <div style={localStyles.miniMeta}>Code: {row.code || "N/A"} · U/M: {row.unit || "N/A"}</div>
+                <div style={row.regionalHasData ? localStyles.regionalBadge : localStyles.noRegionalBadge}>
+                  {row.suggestionBasis}
+                </div>
 
                 <div style={localStyles.metricGrid}>
                   <div style={localStyles.metricBox}>
@@ -2441,6 +2953,13 @@ export default function GenerateNextOrder({
                     <strong>{formatQty(row.pastConsumption)}</strong>
                   </div>
                 </div>
+
+                {row.regionalHasData && (
+                  <div style={localStyles.calcStrip}>
+                    <div>Regional daily: <strong>{formatRegionalQty(row.regionalAvgDailyQty)}</strong></div>
+                    <div>Suggested par: <strong>{formatRegionalQty(row.regionalSuggestedParLevel)}</strong></div>
+                  </div>
+                )}
 
                 <div style={localStyles.blueBadge}>FML venues</div>
                 <div style={localStyles.compactTextBlock}>{row.venuesText}</div>
@@ -2486,6 +3005,9 @@ export default function GenerateNextOrder({
 
                 <div style={localStyles.productName}>{row.product}</div>
                 <div style={localStyles.miniMeta}>Code: {row.code || "N/A"} · U/M: {row.unit || "N/A"}</div>
+                <div style={row.regionalHasData ? localStyles.regionalBadge : localStyles.noRegionalBadge}>
+                  {row.suggestionBasis}
+                </div>
 
                 <div style={localStyles.metricGrid}>
                   <div style={localStyles.metricBox}>
@@ -2501,6 +3023,13 @@ export default function GenerateNextOrder({
                     <strong>{formatQty(row.availableAtArrival)}</strong>
                   </div>
                 </div>
+
+                {row.regionalHasData && (
+                  <div style={localStyles.calcStrip}>
+                    <div>Regional daily: <strong>{formatRegionalQty(row.regionalAvgDailyQty)}</strong></div>
+                    <div>Suggested par: <strong>{formatRegionalQty(row.regionalSuggestedParLevel)}</strong></div>
+                  </div>
+                )}
 
                 <div style={localStyles.blueBadge}>FML venues</div>
                 <div style={localStyles.compactTextBlock}>{row.venuesText}</div>
@@ -2542,6 +3071,9 @@ export default function GenerateNextOrder({
 
                 <div style={localStyles.productName}>{row.product}</div>
                 <div style={localStyles.miniMeta}>Code: {row.code || "N/A"} · U/M: {row.unit || "N/A"}</div>
+                <div style={row.regionalHasData ? localStyles.regionalBadge : localStyles.noRegionalBadge}>
+                  {row.suggestionBasis}
+                </div>
 
                 <div style={localStyles.metricGrid}>
                   <div style={localStyles.metricBox}>
@@ -2576,6 +3108,13 @@ export default function GenerateNextOrder({
                     <strong>{formatQty(row.averagePerDay)}</strong>
                   </div>
                 </div>
+
+                {row.regionalHasData && (
+                  <div style={localStyles.calcStrip}>
+                    <div>Regional daily: <strong>{formatRegionalQty(row.regionalAvgDailyQty)}</strong></div>
+                    <div>Suggested par: <strong>{formatRegionalQty(row.regionalSuggestedParLevel)}</strong></div>
+                  </div>
+                )}
 
                 <div style={localStyles.dangerBadge}>Not found in FML</div>
                 <div style={localStyles.reviewBadge}>{row.reason}</div>
@@ -2759,13 +3298,33 @@ const localStyles = {
     fontSize: 9.5,
     lineHeight: 1.1,
   },
-
+  regionalBadge: {
+    padding: "5px 6px",
+    borderRadius: 8,
+    background: "#e8f5e9",
+    color: "#2e7d32",
+    border: "1px solid #2e7d32",
+    fontWeight: "bold",
+    textAlign: "center",
+    fontSize: 9.5,
+    lineHeight: 1.1,
+  },
+  noRegionalBadge: {
+    padding: "5px 6px",
+    borderRadius: 8,
+    background: "#f7f7f7",
+    color: "#555",
+    border: "1px solid #ddd",
+    fontWeight: "bold",
+    textAlign: "center",
+    fontSize: 9.5,
+    lineHeight: 1.1,
+  },
   categorySection: {
     display: "grid",
     gap: 8,
     marginTop: 14,
   },
-
   categorySectionTitle: {
     margin: "6px 0 2px",
     padding: "8px 10px",
@@ -2776,7 +3335,6 @@ const localStyles = {
     fontSize: 13,
     fontWeight: "bold",
   },
-
   categoryBadge: {
     padding: "5px 6px",
     borderRadius: 999,
