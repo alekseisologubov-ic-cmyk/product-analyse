@@ -15,6 +15,7 @@ const HISTORICAL_CONSUMPTION_COLUMNS = [35, 36, 37, 38, 39, 40]; // AJ:AO, 0-bas
 const CONSUMPTION_INCREASE_THRESHOLD_PERCENT = 25;
 const DEFAULT_REGIONAL_MESSAGE =
   "Upload yearly May 2025 - April 2026 consumption file to enable regional par suggestions.";
+
 const makeParRegionKey = (region) =>
   String(region || "")
     .toUpperCase()
@@ -999,16 +1000,12 @@ const getRegionalizedOrderRows = ({
 
   if (!rows.length) return [];
 
-  // Very important:
-  // Latest order upload must not calculate regional data until a region is selected.
-  // This prevents the page from using all regions/full year by mistake.
   if (!selectedRegionKey) {
     return rows.map((row) =>
       makeFallbackRow(row, "Current order file history - no region selected")
     );
   }
 
-  // If yearly file is not loaded, keep normal order-file calculation.
   if (!hasYearlyRegionalData) {
     return rows.map((row) =>
       makeFallbackRow(row, "Current order file history - yearly file not loaded")
@@ -1105,6 +1102,7 @@ const getRegionalizedOrderRows = ({
     }
   });
 };
+
 const buildOrderByCodeFromRows = (rows) => {
   const result = {};
 
@@ -1329,6 +1327,8 @@ export default function GenerateNextOrder({
   const [fmlRunningLowPrepared, setFmlRunningLowPrepared] = useState(false);
   const [nextOrderMessage, setNextOrderMessage] = useState("");
   const [reportDisplayLimit, setReportDisplayLimit] = useState(REPORT_RENDER_BATCH);
+  const [selectedNextOrderDetailRow, setSelectedNextOrderDetailRow] = useState(null);
+  const [selectedParRegionDetailRow, setSelectedParRegionDetailRow] = useState(null);
 
   const [internalYearlyRegionalConsumption, setInternalYearlyRegionalConsumption] = useState(null);
   const [internalYearlyRegionalFileName, setInternalYearlyRegionalFileName] = useState("");
@@ -1364,52 +1364,52 @@ export default function GenerateNextOrder({
   const setRegionalParBufferPercent = externalSetRegionalParBufferPercent || setInternalRegionalParBufferPercent;
 
   const nextOrderRows = useMemo(() => {
-  try {
-    return getRegionalizedOrderRows({
-      orderRows: baseNextOrderRows,
-      yearlyRegionalConsumption,
-      selectedRegion: selectedRegionalConsumptionRegion,
-      voyageDays: nextOrderMeta.voyageDays,
-      daysUntilArrival: nextOrderMeta.daysUntilArrival,
-      bufferPercent: regionalParBufferPercent,
-    });
-  } catch (error) {
-    console.error("Could not prepare regionalized order rows:", error);
+    try {
+      return getRegionalizedOrderRows({
+        orderRows: baseNextOrderRows,
+        yearlyRegionalConsumption,
+        selectedRegion: selectedRegionalConsumptionRegion,
+        voyageDays: nextOrderMeta.voyageDays,
+        daysUntilArrival: nextOrderMeta.daysUntilArrival,
+        bufferPercent: regionalParBufferPercent,
+      });
+    } catch (error) {
+      console.error("Could not prepare regionalized order rows:", error);
 
-    return (Array.isArray(baseNextOrderRows) ? baseNextOrderRows : []).map((row) =>
-      recalculateOrderComparisonFields({
-        ...row,
-        standardAveragePerDay: Number(row.averagePerDay || 0),
-        standardUsageUntilArrival: Number(row.usageUntilArrival || 0),
-        standardAvailableAtArrival: Number(row.availableAtArrival || 0),
-        standardProjectedVoyageNeed: Number(row.projectedVoyageNeed || 0),
-        standardRawSuggested: Number(row.rawSuggested || 0),
-        standardSuggestedOrder: Number(row.suggestedOrder || 0),
+      return (Array.isArray(baseNextOrderRows) ? baseNextOrderRows : []).map((row) =>
+        recalculateOrderComparisonFields({
+          ...row,
+          standardAveragePerDay: Number(row.averagePerDay || 0),
+          standardUsageUntilArrival: Number(row.usageUntilArrival || 0),
+          standardAvailableAtArrival: Number(row.availableAtArrival || 0),
+          standardProjectedVoyageNeed: Number(row.projectedVoyageNeed || 0),
+          standardRawSuggested: Number(row.rawSuggested || 0),
+          standardSuggestedOrder: Number(row.suggestedOrder || 0),
 
-        regionalHasData: false,
-        regionalRegion: "",
-        regionalTotalQty: 0,
-        regionalTotalDays: 0,
-        regionalAvgDailyQty: 0,
-        regionalSuggestedParLevel: 0,
-        regionalSuggestedOrder: 0,
-        regionalEvidenceBlocks: 0,
-        regionalMatchedProductName: "",
-        regionalMatchedProductCode: "",
-        regionalByShip: [],
+          regionalHasData: false,
+          regionalRegion: "",
+          regionalTotalQty: 0,
+          regionalTotalDays: 0,
+          regionalAvgDailyQty: 0,
+          regionalSuggestedParLevel: 0,
+          regionalSuggestedOrder: 0,
+          regionalEvidenceBlocks: 0,
+          regionalMatchedProductName: "",
+          regionalMatchedProductCode: "",
+          regionalByShip: [],
 
-        suggestionBasis: "Current order file history - regional calculation error",
-      })
-    );
-  }
-}, [
-  baseNextOrderRows,
-  yearlyRegionalConsumption,
-  selectedRegionalConsumptionRegion,
-  nextOrderMeta.voyageDays,
-  nextOrderMeta.daysUntilArrival,
-  regionalParBufferPercent,
-]);
+          suggestionBasis: "Current order file history - regional calculation error",
+        })
+      );
+    }
+  }, [
+    baseNextOrderRows,
+    yearlyRegionalConsumption,
+    selectedRegionalConsumptionRegion,
+    nextOrderMeta.voyageDays,
+    nextOrderMeta.daysUntilArrival,
+    regionalParBufferPercent,
+  ]);
 
   const orderByCode = useMemo(() => buildOrderByCodeFromRows(nextOrderRows), [nextOrderRows]);
 
@@ -1419,155 +1419,157 @@ export default function GenerateNextOrder({
     () => applyRegionalRowsToOrderedNotFmlRows(fmlOrderedNotFmlRows, nextOrderRows),
     [fmlOrderedNotFmlRows, nextOrderRows]
   );
+
   const parLevelRegionColumns = useMemo(
-  () => getParLevelRegionColumns(yearlyRegionalConsumption),
-  [yearlyRegionalConsumption]
-);
+    () => getParLevelRegionColumns(yearlyRegionalConsumption),
+    [yearlyRegionalConsumption]
+  );
 
-const parLevelByRegionRows = useMemo(() => {
-  const query = nextOrderSearch.toLowerCase().trim();
-  const activeVoyageDays = Number(nextOrderMeta.voyageDays || 14);
-  const sourceRows = Array.isArray(baseNextOrderRows) ? baseNextOrderRows : [];
+  const parLevelByRegionRows = useMemo(() => {
+    const query = nextOrderSearch.toLowerCase().trim();
+    const activeVoyageDays = Number(nextOrderMeta.voyageDays || 14);
+    const sourceRows = Array.isArray(baseNextOrderRows) ? baseNextOrderRows : [];
 
-  const getSafeRegionalPar = ({ row, region }) => {
-    try {
-      return getRegionalParSuggestion({
-        yearlyRegionalConsumption,
-        productCode: row.code,
-        productName: row.product,
-        region,
-        voyageDays: activeVoyageDays,
-        bufferPercent: regionalParBufferPercent,
-      });
-    } catch {
-      return {
-        hasRegionalData: false,
-        totalQty: 0,
-        totalDays: 0,
-        avgDailyQty: 0,
-        suggestedParLevel: 0,
-        evidenceBlocks: 0,
-        matchedProductName: "",
-        matchedProductCode: "",
-        byShip: [],
-      };
-    }
-  };
-
-  const rows = sourceRows.map((row, index) => {
-    const currentParLevel = Number(row.parLevel || 0);
-
-    const regionResultsList = parLevelRegionColumns.map((regionColumn) => {
-      const regionalPar = getSafeRegionalPar({
-        row,
-        region: regionColumn.region,
-      });
-
-      const hasData = Boolean(regionalPar?.hasRegionalData);
-      const suggestedParLevel = Number(regionalPar?.suggestedParLevel || 0);
-
-      return {
-        key: regionColumn.key,
-        label: regionColumn.label,
-        region: regionColumn.region,
-        hasData,
-        suggestedParLevel,
-        difference: hasData ? suggestedParLevel - currentParLevel : 0,
-        avgDailyQty: Number(regionalPar?.avgDailyQty || 0),
-        totalQty: Number(regionalPar?.totalQty || 0),
-        totalDays: Number(regionalPar?.totalDays || 0),
-        evidenceBlocks: Number(regionalPar?.evidenceBlocks || 0),
-        matchedProductName: regionalPar?.matchedProductName || "",
-        matchedProductCode: regionalPar?.matchedProductCode || "",
-      };
-    });
-
-    const regionResults = {};
-    regionResultsList.forEach((item) => {
-      regionResults[item.key] = item;
-    });
-
-    const availableRegions = regionResultsList.filter((item) => item.hasData);
-
-    const highestRegion = availableRegions.reduce((best, item) => {
-      if (!best) return item;
-      return item.suggestedParLevel > best.suggestedParLevel ? item : best;
-    }, null);
-
-    const maxAbsoluteDifference = availableRegions.length
-      ? Math.max(
-          ...availableRegions.map((item) =>
-            Math.abs(Number(item.difference || 0))
-          )
-        )
-      : 0;
-
-    return {
-      number: index + 1,
-      excelRow: row.excelRow,
-      code: row.code || "",
-      product: row.product || "",
-      unit: row.unit || "N/A",
-      currentParLevel,
-      voyageDays: activeVoyageDays,
-      bufferPercent: Number(regionalParBufferPercent || 0),
-      hasAnyRegionalData: availableRegions.length > 0,
-      highestRegion: highestRegion?.label || "",
-      highestParLevel: Number(highestRegion?.suggestedParLevel || 0),
-      highestDifference: highestRegion
-        ? Number(highestRegion.suggestedParLevel || 0) - currentParLevel
-        : 0,
-      maxAbsoluteDifference,
-      regionResults,
-      regionResultsList,
-    };
-  });
-
-  return rows
-    .filter((row) => {
-      if (!query) return true;
-
-      const regionText = row.regionResultsList
-        .map(
-          (item) =>
-            `${item.label} ${item.region} ${item.suggestedParLevel} ${item.difference}`
-        )
-        .join(" ");
-
-      return [
-        row.code,
-        row.product,
-        row.unit,
-        row.excelRow,
-        row.highestRegion,
-        String(row.currentParLevel),
-        regionText,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(query);
-    })
-    .sort((a, b) => {
-      if (a.hasAnyRegionalData !== b.hasAnyRegionalData) {
-        return a.hasAnyRegionalData ? -1 : 1;
+    const getSafeRegionalPar = ({ row, region }) => {
+      try {
+        return getRegionalParSuggestion({
+          yearlyRegionalConsumption,
+          productCode: row.code,
+          productName: row.product,
+          region,
+          voyageDays: activeVoyageDays,
+          bufferPercent: regionalParBufferPercent,
+        });
+      } catch {
+        return {
+          hasRegionalData: false,
+          totalQty: 0,
+          totalDays: 0,
+          avgDailyQty: 0,
+          suggestedParLevel: 0,
+          evidenceBlocks: 0,
+          matchedProductName: "",
+          matchedProductCode: "",
+          byShip: [],
+        };
       }
+    };
 
-      const diff =
-        Number(b.maxAbsoluteDifference || 0) -
-        Number(a.maxAbsoluteDifference || 0);
+    const rows = sourceRows.map((row, index) => {
+      const currentParLevel = Number(row.parLevel || 0);
 
-      if (diff !== 0) return diff;
+      const regionResultsList = parLevelRegionColumns.map((regionColumn) => {
+        const regionalPar = getSafeRegionalPar({
+          row,
+          region: regionColumn.region,
+        });
 
-      return String(a.product || "").localeCompare(String(b.product || ""));
+        const hasData = Boolean(regionalPar?.hasRegionalData);
+        const suggestedParLevel = Number(regionalPar?.suggestedParLevel || 0);
+
+        return {
+          key: regionColumn.key,
+          label: regionColumn.label,
+          region: regionColumn.region,
+          hasData,
+          suggestedParLevel,
+          difference: hasData ? suggestedParLevel - currentParLevel : 0,
+          avgDailyQty: Number(regionalPar?.avgDailyQty || 0),
+          totalQty: Number(regionalPar?.totalQty || 0),
+          totalDays: Number(regionalPar?.totalDays || 0),
+          evidenceBlocks: Number(regionalPar?.evidenceBlocks || 0),
+          matchedProductName: regionalPar?.matchedProductName || "",
+          matchedProductCode: regionalPar?.matchedProductCode || "",
+        };
+      });
+
+      const regionResults = {};
+      regionResultsList.forEach((item) => {
+        regionResults[item.key] = item;
+      });
+
+      const availableRegions = regionResultsList.filter((item) => item.hasData);
+
+      const highestRegion = availableRegions.reduce((best, item) => {
+        if (!best) return item;
+        return item.suggestedParLevel > best.suggestedParLevel ? item : best;
+      }, null);
+
+      const maxAbsoluteDifference = availableRegions.length
+        ? Math.max(
+            ...availableRegions.map((item) =>
+              Math.abs(Number(item.difference || 0))
+            )
+          )
+        : 0;
+
+      return {
+        number: index + 1,
+        excelRow: row.excelRow,
+        code: row.code || "",
+        product: row.product || "",
+        unit: row.unit || "N/A",
+        currentParLevel,
+        voyageDays: activeVoyageDays,
+        bufferPercent: Number(regionalParBufferPercent || 0),
+        hasAnyRegionalData: availableRegions.length > 0,
+        highestRegion: highestRegion?.label || "",
+        highestParLevel: Number(highestRegion?.suggestedParLevel || 0),
+        highestDifference: highestRegion
+          ? Number(highestRegion.suggestedParLevel || 0) - currentParLevel
+          : 0,
+        maxAbsoluteDifference,
+        regionResults,
+        regionResultsList,
+      };
     });
-}, [
-  baseNextOrderRows,
-  yearlyRegionalConsumption,
-  parLevelRegionColumns,
-  nextOrderMeta.voyageDays,
-  regionalParBufferPercent,
-  nextOrderSearch,
-]);
+
+    return rows
+      .filter((row) => {
+        if (!query) return true;
+
+        const regionText = row.regionResultsList
+          .map(
+            (item) =>
+              `${item.label} ${item.region} ${item.suggestedParLevel} ${item.difference}`
+          )
+          .join(" ");
+
+        return [
+          row.code,
+          row.product,
+          row.unit,
+          row.excelRow,
+          row.highestRegion,
+          String(row.currentParLevel),
+          regionText,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
+      })
+      .sort((a, b) => {
+        if (a.hasAnyRegionalData !== b.hasAnyRegionalData) {
+          return a.hasAnyRegionalData ? -1 : 1;
+        }
+
+        const diff =
+          Number(b.maxAbsoluteDifference || 0) -
+          Number(a.maxAbsoluteDifference || 0);
+
+        if (diff !== 0) return diff;
+
+        return String(a.product || "").localeCompare(String(b.product || ""));
+      });
+  }, [
+    baseNextOrderRows,
+    yearlyRegionalConsumption,
+    parLevelRegionColumns,
+    nextOrderMeta.voyageDays,
+    regionalParBufferPercent,
+    nextOrderSearch,
+  ]);
+
   useEffect(() => {
     const loadDefaultTemplate = async () => {
       try {
@@ -1591,99 +1593,110 @@ const parLevelByRegionRows = useMemo(() => {
 
     loadDefaultTemplate();
   }, []);
+
   useEffect(() => {
-  let cancelled = false;
+    let cancelled = false;
 
-  const loadPermanentYearlyRegionalConsumptionFile = async () => {
-    const alreadyLoaded =
-      Boolean(yearlyRegionalConsumption?.aggregates?.length) ||
-      Boolean(yearlyRegionalFileName);
+    const loadPermanentYearlyRegionalConsumptionFile = async () => {
+      try {
+        const alreadyHasData =
+          yearlyRegionalConsumption &&
+          Array.isArray(yearlyRegionalConsumption.regionOptions) &&
+          yearlyRegionalConsumption.regionOptions.length > 0;
 
-    if (alreadyLoaded) return;
+        if (alreadyHasData) {
+          setYearlyRegionalMessage(
+            "Permanent yearly regional file already loaded. " +
+              yearlyRegionalConsumption.regionOptions.join(", ")
+          );
+          return;
+        }
 
-    try {
-      setYearlyRegionalMessage(
-        "Loading permanent yearly regional consumption file..."
-      );
+        setYearlyRegionalMessage(
+          "Loading permanent yearly regional consumption file..."
+        );
 
-      const response = await fetch("/yearly-regional-consumption.xlsx", {
-        cache: "no-store",
-      });
+        const response = await fetch(
+          "/yearly-regional-consumption.xlsx?v=" + Date.now(),
+          { cache: "no-store" }
+        );
 
-      if (!response.ok) {
+        if (!response.ok) {
+          if (cancelled) return;
+
+          setYearlyRegionalConsumption(null);
+          setYearlyRegionalFileName("");
+          setYearlyRegionalMessage(
+            "Permanent yearly regional file was not found at /yearly-regional-consumption.xlsx. Check that the file is inside the public folder and named exactly yearly-regional-consumption.xlsx."
+          );
+          return;
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+
+        if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+          throw new Error("Permanent yearly regional file downloaded empty.");
+        }
+
+        const workbook = XLSX.read(arrayBuffer, {
+          type: "array",
+          cellDates: true,
+        });
+
+        const parsed = parseYearlyRegionalConsumptionWorkbook(workbook);
+
+        if (cancelled) return;
+
+        setYearlyRegionalConsumption(parsed);
+        setYearlyRegionalFileName("yearly-regional-consumption.xlsx");
+
+        setSelectedRegionalConsumptionRegion((current) =>
+          current && current !== YEARLY_REGION_ALL ? current : ""
+        );
+
+        if (!parsed.regionOptions?.length) {
+          setYearlyRegionalMessage(
+            "Permanent yearly file loaded, but no regions were detected. The file opened correctly, but the header rows were not recognized."
+          );
+          return;
+        }
+
+        setYearlyRegionalMessage(
+          "Permanent yearly regional file loaded. Regions found: " +
+            parsed.regionOptions.join(", ") +
+            ". Region blocks: " +
+            parsed.shipRegionBlocks.length +
+            "."
+        );
+
+        logUsageEvent("permanent_yearly_regional_consumption_loaded", {
+          module: "generate_next_order",
+          fileName: "yearly-regional-consumption.xlsx",
+          sourceSheet: parsed.sourceSheet,
+          regions: parsed.regionOptions || [],
+          aggregates: parsed.aggregates.length,
+          shipRegionBlocks: parsed.shipRegionBlocks.length,
+        });
+      } catch (error) {
         if (cancelled) return;
 
         setYearlyRegionalConsumption(null);
         setYearlyRegionalFileName("");
         setYearlyRegionalMessage(
-          "Permanent yearly regional consumption file was not found. You can still upload it manually."
+          error?.message ||
+            "Could not load permanent yearly regional consumption file."
         );
-        return;
       }
+    };
 
-      const arrayBuffer = await response.arrayBuffer();
+    loadPermanentYearlyRegionalConsumptionFile();
 
-      const workbook = XLSX.read(arrayBuffer, {
-        type: "array",
-        cellDates: true,
-      });
+    return () => {
+      cancelled = true;
+    };
 
-      const parsed = parseYearlyRegionalConsumptionWorkbook(workbook);
-
-      if (cancelled) return;
-
-      setYearlyRegionalConsumption(parsed);
-      setYearlyRegionalFileName("yearly-regional-consumption.xlsx");
-
-      // Keep blank unless user already selected a real region.
-      // This prevents automatic All Regions / full-year calculation.
-      setSelectedRegionalConsumptionRegion((current) =>
-        current && current !== YEARLY_REGION_ALL ? current : ""
-      );
-
-      if (!parsed.regionOptions?.length) {
-        setYearlyRegionalMessage(
-          "Permanent yearly file loaded, but no regions were detected. Check the header rows."
-        );
-        return;
-      }
-
-      setYearlyRegionalMessage(
-        "Permanent yearly regional file loaded. " +
-          parsed.regionOptions.join(", ") +
-          ". " +
-          parsed.shipRegionBlocks.length +
-          " region block(s) found."
-      );
-
-      logUsageEvent("permanent_yearly_regional_consumption_loaded", {
-        module: "generate_next_order",
-        fileName: "yearly-regional-consumption.xlsx",
-        sourceSheet: parsed.sourceSheet,
-        regions: parsed.regionOptions || [],
-        aggregates: parsed.aggregates.length,
-        shipRegionBlocks: parsed.shipRegionBlocks.length,
-      });
-    } catch (error) {
-      if (cancelled) return;
-
-      setYearlyRegionalConsumption(null);
-      setYearlyRegionalFileName("");
-      setYearlyRegionalMessage(
-        error?.message ||
-          "Could not load permanent yearly regional consumption file."
-      );
-    }
-  };
-
-  loadPermanentYearlyRegionalConsumptionFile();
-
-  return () => {
-    cancelled = true;
-  };
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     setReportDisplayLimit(REPORT_RENDER_BATCH);
@@ -1813,155 +1826,155 @@ const parLevelByRegionRows = useMemo(() => {
   };
 
   const uploadNextOrderFile = async (event) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-  setNextOrderLoading(true);
-  setFmlReportLoading(false);
-  setNextOrderMessage("Preparing next order report...");
-  setFmlReportMessage("");
-
-  try {
-    await yieldToBrowser();
-
-    let parsed;
+    setNextOrderLoading(true);
+    setFmlReportLoading(false);
+    setNextOrderMessage("Preparing next order report...");
+    setFmlReportMessage("");
 
     try {
-      parsed = await parseOrderFile(file);
-    } catch (parseError) {
-      throw new Error(
-        parseError?.message ||
-          "Could not read this latest order file. Please check that it is a valid Standard Order workbook."
+      await yieldToBrowser();
+
+      let parsed;
+
+      try {
+        parsed = await parseOrderFile(file);
+      } catch (parseError) {
+        throw new Error(
+          parseError?.message ||
+            "Could not read this latest order file. Please check that it is a valid Standard Order workbook."
+        );
+      }
+
+      if (!parsed || !Array.isArray(parsed.orderRows)) {
+        throw new Error(
+          "The latest order file was read, but no valid product rows were found."
+        );
+      }
+
+      setBaseNextOrderRows(parsed.orderRows);
+      setFmlSourceRows(parsed.fmlRows || []);
+      setFmlNotUsedRows([]);
+      setFmlRunningLowRows([]);
+      setFmlOrderedNotFmlRows(parsed.fmlOrderedNotFmlRows || []);
+      setFmlNotUsedPrepared(false);
+      setFmlRunningLowPrepared(false);
+      setNextOrderMeta(parsed.meta || {});
+      setNextOrderFileName(file.name);
+      setNextOrderSearch("");
+      setFmlSearch("");
+      setFmlLowSearch("");
+      setFmlOrderedNotFmlSearch("");
+      setNextOrderFilter("all");
+      setNextOrderView("order");
+
+      setNextOrderMessage(
+        "Order file loaded. " +
+          Number(parsed.meta?.totalItems || parsed.orderRows.length || 0) +
+          " product rows found. " +
+          Number(parsed.meta?.itemsNeedingOrder || 0) +
+          " need order by the original order-file calculation. " +
+          Number(parsed.meta?.fmlOrderedNotFml || 0) +
+          " ordered item(s) are not in FML. Select a region to apply yearly regional par suggestions."
       );
-    }
 
-    if (!parsed || !Array.isArray(parsed.orderRows)) {
-      throw new Error(
-        "The latest order file was read, but no valid product rows were found."
+      logUsageEvent("next_order_file_uploaded", {
+        module: "generate_next_order",
+        fileName: file.name,
+        ship: parsed.meta?.shipCode || "",
+        totalItems: parsed.meta?.totalItems || parsed.orderRows.length || 0,
+        fmlRows: (parsed.fmlRows || []).length,
+        orderedNotInFml: parsed.meta?.fmlOrderedNotFml || 0,
+      });
+
+      window.setTimeout(() => {
+        (async () => {
+          try {
+            setFmlReportLoading(true);
+            setFmlReportMessage("Preparing FML reports...");
+
+            const regionalRowsForFml = getRegionalizedOrderRows({
+              orderRows: parsed.orderRows || [],
+              yearlyRegionalConsumption,
+              selectedRegion: selectedRegionalConsumptionRegion,
+              voyageDays: parsed.meta?.voyageDays || 0,
+              daysUntilArrival: parsed.meta?.daysUntilArrival || 0,
+              bufferPercent: regionalParBufferPercent,
+            });
+
+            const regionalOrderByCodeForFml =
+              buildOrderByCodeFromRows(regionalRowsForFml);
+
+            const notUsedRows = await buildFmlReportAsync({
+              mode: "notUsed",
+              fmlRows: parsed.fmlRows || [],
+              orderRows: regionalRowsForFml,
+              orderByCode: regionalOrderByCodeForFml,
+              templateEntries,
+              shipCode: parsed.meta?.shipCode || "",
+              onProgress: setFmlReportMessage,
+            });
+
+            setFmlNotUsedRows(notUsedRows);
+            setFmlNotUsedPrepared(true);
+            setNextOrderMeta((prev) => ({
+              ...prev,
+              fmlNotUsed: notUsedRows.length,
+            }));
+
+            const runningLowRows = await buildFmlReportAsync({
+              mode: "runningLow",
+              fmlRows: parsed.fmlRows || [],
+              orderRows: regionalRowsForFml,
+              orderByCode: regionalOrderByCodeForFml,
+              templateEntries,
+              shipCode: parsed.meta?.shipCode || "",
+              onProgress: setFmlReportMessage,
+            });
+
+            setFmlRunningLowRows(runningLowRows);
+            setFmlRunningLowPrepared(true);
+            setNextOrderMeta((prev) => ({
+              ...prev,
+              fmlRunningLow: runningLowRows.length,
+            }));
+
+            setFmlReportMessage(
+              "FML reports ready. Not used: " +
+                notUsedRows.length +
+                ", running low: " +
+                runningLowRows.length +
+                ", ordered not in FML: " +
+                (parsed.fmlOrderedNotFmlRows || []).length +
+                "."
+            );
+          } catch (error) {
+            console.error("Could not prepare FML reports:", error);
+            setFmlReportMessage(
+              error?.message || "Could not prepare FML reports."
+            );
+          } finally {
+            setFmlReportLoading(false);
+          }
+        })();
+      }, 50);
+    } catch (error) {
+      console.error("Could not prepare latest order file:", error);
+
+      setBaseNextOrderRows([]);
+      setFmlSourceRows([]);
+      resetFmlReports();
+
+      setNextOrderMessage(
+        error?.message || "Could not prepare order file."
       );
+    } finally {
+      setNextOrderLoading(false);
+      event.target.value = "";
     }
-
-    setBaseNextOrderRows(parsed.orderRows);
-    setFmlSourceRows(parsed.fmlRows || []);
-    setFmlNotUsedRows([]);
-    setFmlRunningLowRows([]);
-    setFmlOrderedNotFmlRows(parsed.fmlOrderedNotFmlRows || []);
-    setFmlNotUsedPrepared(false);
-    setFmlRunningLowPrepared(false);
-    setNextOrderMeta(parsed.meta || {});
-    setNextOrderFileName(file.name);
-    setNextOrderSearch("");
-    setFmlSearch("");
-    setFmlLowSearch("");
-    setFmlOrderedNotFmlSearch("");
-    setNextOrderFilter("all");
-    setNextOrderView("order");
-
-    setNextOrderMessage(
-      "Order file loaded. " +
-        Number(parsed.meta?.totalItems || parsed.orderRows.length || 0) +
-        " product rows found. " +
-        Number(parsed.meta?.itemsNeedingOrder || 0) +
-        " need order by the original order-file calculation. " +
-        Number(parsed.meta?.fmlOrderedNotFml || 0) +
-        " ordered item(s) are not in FML. Select a region to apply yearly regional par suggestions."
-    );
-
-    logUsageEvent("next_order_file_uploaded", {
-      module: "generate_next_order",
-      fileName: file.name,
-      ship: parsed.meta?.shipCode || "",
-      totalItems: parsed.meta?.totalItems || parsed.orderRows.length || 0,
-      fmlRows: (parsed.fmlRows || []).length,
-      orderedNotInFml: parsed.meta?.fmlOrderedNotFml || 0,
-    });
-
-    window.setTimeout(() => {
-      (async () => {
-        try {
-          setFmlReportLoading(true);
-          setFmlReportMessage("Preparing FML reports...");
-
-          const regionalRowsForFml = getRegionalizedOrderRows({
-            orderRows: parsed.orderRows || [],
-            yearlyRegionalConsumption,
-            selectedRegion: selectedRegionalConsumptionRegion,
-            voyageDays: parsed.meta?.voyageDays || 0,
-            daysUntilArrival: parsed.meta?.daysUntilArrival || 0,
-            bufferPercent: regionalParBufferPercent,
-          });
-
-          const regionalOrderByCodeForFml =
-            buildOrderByCodeFromRows(regionalRowsForFml);
-
-          const notUsedRows = await buildFmlReportAsync({
-            mode: "notUsed",
-            fmlRows: parsed.fmlRows || [],
-            orderRows: regionalRowsForFml,
-            orderByCode: regionalOrderByCodeForFml,
-            templateEntries,
-            shipCode: parsed.meta?.shipCode || "",
-            onProgress: setFmlReportMessage,
-          });
-
-          setFmlNotUsedRows(notUsedRows);
-          setFmlNotUsedPrepared(true);
-          setNextOrderMeta((prev) => ({
-            ...prev,
-            fmlNotUsed: notUsedRows.length,
-          }));
-
-          const runningLowRows = await buildFmlReportAsync({
-            mode: "runningLow",
-            fmlRows: parsed.fmlRows || [],
-            orderRows: regionalRowsForFml,
-            orderByCode: regionalOrderByCodeForFml,
-            templateEntries,
-            shipCode: parsed.meta?.shipCode || "",
-            onProgress: setFmlReportMessage,
-          });
-
-          setFmlRunningLowRows(runningLowRows);
-          setFmlRunningLowPrepared(true);
-          setNextOrderMeta((prev) => ({
-            ...prev,
-            fmlRunningLow: runningLowRows.length,
-          }));
-
-          setFmlReportMessage(
-            "FML reports ready. Not used: " +
-              notUsedRows.length +
-              ", running low: " +
-              runningLowRows.length +
-              ", ordered not in FML: " +
-              (parsed.fmlOrderedNotFmlRows || []).length +
-              "."
-          );
-        } catch (error) {
-          console.error("Could not prepare FML reports:", error);
-          setFmlReportMessage(
-            error?.message || "Could not prepare FML reports."
-          );
-        } finally {
-          setFmlReportLoading(false);
-        }
-      })();
-    }, 50);
-  } catch (error) {
-    console.error("Could not prepare latest order file:", error);
-
-    setBaseNextOrderRows([]);
-    setFmlSourceRows([]);
-    resetFmlReports();
-
-    setNextOrderMessage(
-      error?.message || "Could not prepare order file."
-    );
-  } finally {
-    setNextOrderLoading(false);
-    event.target.value = "";
-  }
-};
+  };
 
   const prepareFmlReport = async (mode) => {
     if (!fmlSourceRows.length || !nextOrderRows.length) {
@@ -2193,6 +2206,62 @@ const parLevelByRegionRows = useMemo(() => {
     );
   }, [regionalizedFmlOrderedNotFmlRows, fmlOrderedNotFmlSearch]);
 
+  const parLevelByRegionExportRows = parLevelByRegionRows.map((row, index) => {
+    const exportRow = {
+      Number: index + 1,
+      ExcelRow: row.excelRow,
+      Code: row.code,
+      Product: row.product,
+      UM: row.unit,
+
+      CurrentParLevelColumnQ: row.currentParLevel,
+      VoyageDaysB6: row.voyageDays,
+      BufferPercent: row.bufferPercent,
+
+      HighestRegionSuggested: row.highestRegion,
+      HighestSuggestedPar: row.highestParLevel,
+      HighestDifferenceVsCurrentPar: row.highestDifference,
+    };
+
+    row.regionResultsList.forEach((regionItem) => {
+      const prefix = regionItem.label.replace(/[^A-Za-z0-9]/g, "");
+
+      exportRow[`${prefix}HasData`] = regionItem.hasData ? "Yes" : "No";
+      exportRow[`${prefix}RegionalDaily`] = regionItem.avgDailyQty;
+      exportRow[`${prefix}TotalQty`] = regionItem.totalQty;
+      exportRow[`${prefix}TotalDays`] = regionItem.totalDays;
+      exportRow[`${prefix}EvidenceBlocks`] = regionItem.evidenceBlocks;
+      exportRow[`${prefix}SuggestedPar`] = regionItem.suggestedParLevel;
+      exportRow[`${prefix}DifferenceVsCurrentPar`] = regionItem.difference;
+
+      exportRow[`${regionItem.key}SuggestedPar`] = regionItem.suggestedParLevel;
+      exportRow[`${regionItem.key}DifferenceVsCurrentPar`] = regionItem.difference;
+    });
+
+    return exportRow;
+  });
+
+  const parLevelByRegionPrintColumns = [
+    { key: "Number", label: "#" },
+    { key: "ExcelRow", label: "Row" },
+    { key: "Code", label: "Code" },
+    { key: "Product", label: "Product" },
+    { key: "UM", label: "U/M" },
+    { key: "CurrentParLevelColumnQ", label: "Current Par Q" },
+    ...parLevelRegionColumns.flatMap((regionColumn) => [
+      {
+        key: `${regionColumn.key}SuggestedPar`,
+        label: `${regionColumn.label} Par`,
+      },
+      {
+        key: `${regionColumn.key}DifferenceVsCurrentPar`,
+        label: `${regionColumn.label} Diff`,
+      },
+    ]),
+    { key: "HighestRegionSuggested", label: "Highest Region" },
+    { key: "HighestSuggestedPar", label: "Highest Par" },
+  ];
+
   const orderedVsSuggestedExportRows = orderedVsSuggestedRows.map((row, index) => ({
     Number: index + 1,
     ExcelRow: row.excelRow,
@@ -2213,62 +2282,7 @@ const parLevelByRegionRows = useMemo(() => {
     DifferencePercent: row.orderDifferencePercent,
     Status: row.orderComparisonLabel,
   }));
-  
-const parLevelByRegionExportRows = parLevelByRegionRows.map((row, index) => {
-  const exportRow = {
-    Number: index + 1,
-    ExcelRow: row.excelRow,
-    Code: row.code,
-    Product: row.product,
-    UM: row.unit,
 
-    CurrentParLevelColumnQ: row.currentParLevel,
-    VoyageDaysB6: row.voyageDays,
-    BufferPercent: row.bufferPercent,
-
-    HighestRegionSuggested: row.highestRegion,
-    HighestSuggestedPar: row.highestParLevel,
-    HighestDifferenceVsCurrentPar: row.highestDifference,
-  };
-
-  row.regionResultsList.forEach((regionItem) => {
-    const prefix = regionItem.label.replace(/[^A-Za-z0-9]/g, "");
-
-    exportRow[`${prefix}HasData`] = regionItem.hasData ? "Yes" : "No";
-    exportRow[`${prefix}RegionalDaily`] = regionItem.avgDailyQty;
-    exportRow[`${prefix}TotalQty`] = regionItem.totalQty;
-    exportRow[`${prefix}TotalDays`] = regionItem.totalDays;
-    exportRow[`${prefix}EvidenceBlocks`] = regionItem.evidenceBlocks;
-    exportRow[`${prefix}SuggestedPar`] = regionItem.suggestedParLevel;
-    exportRow[`${prefix}DifferenceVsCurrentPar`] = regionItem.difference;
-
-    exportRow[`${regionItem.key}SuggestedPar`] = regionItem.suggestedParLevel;
-    exportRow[`${regionItem.key}DifferenceVsCurrentPar`] = regionItem.difference;
-  });
-
-  return exportRow;
-});
-
-const parLevelByRegionPrintColumns = [
-  { key: "Number", label: "#" },
-  { key: "ExcelRow", label: "Row" },
-  { key: "Code", label: "Code" },
-  { key: "Product", label: "Product" },
-  { key: "UM", label: "U/M" },
-  { key: "CurrentParLevelColumnQ", label: "Current Par Q" },
-  ...parLevelRegionColumns.flatMap((regionColumn) => [
-    {
-      key: `${regionColumn.key}SuggestedPar`,
-      label: `${regionColumn.label} Par`,
-    },
-    {
-      key: `${regionColumn.key}DifferenceVsCurrentPar`,
-      label: `${regionColumn.label} Diff`,
-    },
-  ]),
-  { key: "HighestRegionSuggested", label: "Highest Region" },
-  { key: "HighestSuggestedPar", label: "Highest Par" },
-];
   const getConsumptionIncreaseExportRows = (rows, modeLabel) =>
     rows.map((row, index) => ({
       Number: index + 1,
@@ -2391,8 +2405,6 @@ const parLevelByRegionPrintColumns = [
   const visibleNextOrderRows = filteredNextOrderRows.slice(0, reportDisplayLimit);
   const visibleOrderedVsSuggestedRows = orderedVsSuggestedRows.slice(0, reportDisplayLimit);
   const visibleParLevelByRegionRows = parLevelByRegionRows.slice(0, reportDisplayLimit);
-  const hasMoreParLevelByRegionRows =
-  parLevelByRegionRows.length > visibleParLevelByRegionRows.length;
   const visibleFmlNotUsedRows = filteredFmlNotUsedRows.slice(0, reportDisplayLimit);
   const visibleFmlRunningLowRows = filteredFmlRunningLowRows.slice(0, reportDisplayLimit);
   const visibleFmlOrderedNotFmlRows = filteredFmlOrderedNotFmlRows.slice(0, reportDisplayLimit);
@@ -2407,6 +2419,8 @@ const parLevelByRegionPrintColumns = [
 
   const hasMoreNextOrderRows = filteredNextOrderRows.length > visibleNextOrderRows.length;
   const hasMoreOrderedVsSuggestedRows = orderedVsSuggestedRows.length > visibleOrderedVsSuggestedRows.length;
+  const hasMoreParLevelByRegionRows =
+    parLevelByRegionRows.length > visibleParLevelByRegionRows.length;
   const hasMoreFmlNotUsedRows = filteredFmlNotUsedRows.length > visibleFmlNotUsedRows.length;
   const hasMoreFmlRunningLowRows = filteredFmlRunningLowRows.length > visibleFmlRunningLowRows.length;
   const hasMoreFmlOrderedNotFmlRows = filteredFmlOrderedNotFmlRows.length > visibleFmlOrderedNotFmlRows.length;
@@ -2446,15 +2460,16 @@ const parLevelByRegionPrintColumns = [
         >
           📊 Ordered vs Suggested ({orderedVsSuggestedRows.length})
         </button>
+
         <button
-  style={{
-    ...styles.viewModeButton,
-    ...(nextOrderView === "parregion" ? styles.viewModeButtonActive : {}),
-  }}
-  onClick={() => setNextOrderView("parregion")}
->
-  📏 Par by Region ({parLevelByRegionRows.length})
-</button>
+          style={{
+            ...styles.viewModeButton,
+            ...(nextOrderView === "parregion" ? styles.viewModeButtonActive : {}),
+          }}
+          onClick={() => setNextOrderView("parregion")}
+        >
+          📏 Par by Region ({parLevelByRegionRows.length})
+        </button>
 
         <button
           style={{
@@ -2531,8 +2546,7 @@ const parLevelByRegionPrintColumns = [
             }}
             style={styles.searchInput}
           >
-            <option value="">Select region / origin</option>
-<option value={YEARLY_REGION_ALL}>All regions</option>
+            <option value={YEARLY_REGION_ALL}>All regions</option>
 
             {(yearlyRegionalConsumption?.regionOptions || []).map((region) => (
               <option key={region} value={region}>
@@ -2559,29 +2573,28 @@ const parLevelByRegionPrintColumns = [
             <div>📄 Order file: <strong>{nextOrderFileName || "Not uploaded"}</strong></div>
             <div>🌎 Yearly regional file: <strong>{yearlyRegionalFileName || "Not uploaded"}</strong></div>
             <div>
-  🧭 Regions found:{" "}
-  <strong>
-    {(yearlyRegionalConsumption?.regionOptions || []).length
-      ? (yearlyRegionalConsumption?.regionOptions || []).join(", ")
-      : "No regions detected"}
-  </strong>
-</div>
-
-<div>
-  🧱 Region blocks found:{" "}
-  <strong>{yearlyRegionalConsumption?.shipRegionBlocks?.length || 0}</strong>
-</div>
+              🧭 Regions found: {" "}
+              <strong>
+                {(yearlyRegionalConsumption?.regionOptions || []).length
+                  ? (yearlyRegionalConsumption?.regionOptions || []).join(", ")
+                  : "No regions detected"}
+              </strong>
+            </div>
+            <div>
+              🧱 Region blocks found: {" "}
+              <strong>{yearlyRegionalConsumption?.shipRegionBlocks?.length || 0}</strong>
+            </div>
             <div>🚢 Ship from B1: <strong>{getShipDisplayName(nextOrderMeta.shipCode) || "Not loaded"}</strong></div>
             <div>
-  🧭 Selected region:{" "}
-  <strong>
-    {!selectedRegionalConsumptionRegion
-      ? "Not selected"
-      : selectedRegionalConsumptionRegion === YEARLY_REGION_ALL
-      ? "All regions"
-      : selectedRegionalConsumptionRegion}
-  </strong>
-</div>
+              🧭 Selected region: {" "}
+              <strong>
+                {!selectedRegionalConsumptionRegion
+                  ? "Not selected"
+                  : selectedRegionalConsumptionRegion === YEARLY_REGION_ALL
+                  ? "All regions"
+                  : selectedRegionalConsumptionRegion}
+              </strong>
+            </div>
             <div>📅 Order day B2: <strong>{formatDate(nextOrderMeta.orderDate)}</strong></div>
             <div>📦 Arrival day B3: <strong>{formatDate(nextOrderMeta.arrivalDate)}</strong></div>
             <div>👥 Sailors B5: <strong>{formatQty(nextOrderMeta.sailors)}</strong></div>
@@ -2771,69 +2784,66 @@ const parLevelByRegionPrintColumns = [
           )}
 
           {nextOrderView === "parregion" && (
-  <>
-    <input
-      placeholder="Search par by region item, code, U/M, row, or region..."
-      value={nextOrderSearch}
-      onChange={(event) => setNextOrderSearch(event.target.value)}
-      style={styles.searchInput}
-    />
+            <>
+              <input
+                placeholder="Search par by region item, code, U/M, row, or region..."
+                value={nextOrderSearch}
+                onChange={(event) => setNextOrderSearch(event.target.value)}
+                style={styles.searchInput}
+              />
 
-    <div style={styles.infoBox}>
-      <div>
-        📏 Report: <strong>Current Par vs Regional Suggested Par</strong>
-      </div>
-      <div>
-        📘 Current par source: <strong>Latest order file column Q</strong>
-      </div>
-      <div>
-        🌎 Regional par source:{" "}
-        <strong>Yearly regional consumption May 2025 - April 2026</strong>
-      </div>
-      <div>
-        🧮 Formula:{" "}
-        <strong>regional daily consumption × voyage days B6 × buffer %</strong>
-      </div>
-      <div>
-        ➕ Positive difference:{" "}
-        <strong>regional par is higher than current par</strong>
-      </div>
-      <div>
-        ➖ Negative difference:{" "}
-        <strong>current par is higher than regional suggested par</strong>
-      </div>
-    </div>
+              <div style={styles.infoBox}>
+                <div>
+                  📏 Report: <strong>Current Par vs Regional Suggested Par</strong>
+                </div>
+                <div>
+                  📘 Current par source: <strong>Latest order file column Q</strong>
+                </div>
+                <div>
+                  🌎 Regional par source: <strong>Yearly regional consumption May 2025 - April 2026</strong>
+                </div>
+                <div>
+                  🧮 Formula: <strong>regional daily consumption × voyage days B6 × buffer %</strong>
+                </div>
+                <div>
+                  ➕ Positive difference: <strong>regional par is higher than current par</strong>
+                </div>
+                <div>
+                  ➖ Negative difference: <strong>current par is higher than regional suggested par</strong>
+                </div>
+              </div>
 
-    <div style={styles.headerActions}>
-      <button
-        style={styles.backButton}
-        onClick={() =>
-          printRows(
-  "Par Level by Region",
-  parLevelByRegionExportRows,
-  parLevelByRegionPrintColumns
-)
-        }
-      >
-        🖨️ Print
-      </button>
+              <div style={styles.headerActions}>
+                <button
+                  style={styles.backButton}
+                  onClick={() =>
+                    printRows(
+                      "Par Level by Region",
+                      parLevelByRegionExportRows,
+                      parLevelByRegionPrintColumns
+                    )
+                  }
+                >
+                  🖨️ Print
+                </button>
 
-      <button
-        style={styles.primaryButton}
-        onClick={() =>
-          exportRowsToExcel(
-            parLevelByRegionExportRows,
-            "Par by Region",
-            "par-level-by-region.xlsx"
-          )
-        }
-      >
-        📥 Export Excel
-      </button>
-    </div>
-  </>
-)}
-          {nextOrderView === "increase1" && (
+                <button
+                  style={styles.primaryButton}
+                  onClick={() =>
+                    exportRowsToExcel(
+                      parLevelByRegionExportRows,
+                      "Par by Region",
+                      "par-level-by-region.xlsx"
+                    )
+                  }
+                >
+                  📥 Export Excel
+                </button>
+              </div>
+            </>
+          )}
+
+      {nextOrderView === "increase1" && (
             <>
               <input
                 placeholder="Search 1-voyage consumption increase item, code, U/M..."
@@ -3097,11 +3107,30 @@ const parLevelByRegionPrintColumns = [
           <div style={localStyles.compactGrid}>
             {visibleNextOrderRows.map((row) => {
               const negativeArrival = Number(row.availableAtArrival || 0) < 0;
-              const showPar = Number(row.parLevel || 0) > 0 || Number(row.regionalSuggestedParLevel || 0) > 0;
-              const selectedRegionLabel = row.regionalRegion === YEARLY_REGION_ALL ? "All regions" : row.regionalRegion || "N/A";
+              const selectedRegionLabel =
+                row.regionalRegion === YEARLY_REGION_ALL
+                  ? "All regions"
+                  : row.regionalRegion || "Not selected";
+
+              const displayedDaily = row.regionalHasData
+                ? Number(row.regionalAvgDailyQty || 0)
+                : Number(row.averagePerDay || 0);
+
+              const displayedDailyLabel = row.regionalHasData ? "Reg Daily" : "File Daily";
 
               return (
-                <div key={row.excelRow + "-" + row.product} style={localStyles.nextOrderCard}>
+                <div
+                  key={row.excelRow + "-" + row.product}
+                  style={{ ...localStyles.nextOrderCard, ...localStyles.clickableCard }}
+                  onClick={() => setSelectedNextOrderDetailRow(row)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      setSelectedNextOrderDetailRow(row);
+                    }
+                  }}
+                >
                   <div style={localStyles.cardTopLine}>
                     <span>#{row.excelOrder}</span>
                     <span>Row {row.excelRow}</span>
@@ -3111,39 +3140,16 @@ const parLevelByRegionPrintColumns = [
                   <div style={styles.recipeMeta}>Code: {row.code || "N/A"}</div>
                   <div style={styles.recipeMeta}>U/M: {row.unit || "N/A"}</div>
 
-                  <div style={row.regionalHasData ? localStyles.regionalBadge : localStyles.noRegionalBadge}>
-                    {row.regionalHasData ? "Regional yearly data matched" : "Using order-file history"}
-                  </div>
-
-                  <div style={localStyles.calcStrip}>
-                    <div>Basis: <strong>{row.suggestionBasis}</strong></div>
-                    <div>Region: <strong>{selectedRegionLabel}</strong></div>
-
-                    {row.regionalHasData ? (
-                      <>
-                        <div>
-                          Regional qty: <strong>{formatRegionalQty(row.regionalTotalQty)}</strong> · Days: <strong>{formatQty(row.regionalTotalDays)}</strong> · Blocks: <strong>{row.regionalEvidenceBlocks}</strong>
-                        </div>
-
-                        <div>
-                          Regional daily: <strong>{formatRegionalQty(row.regionalAvgDailyQty)}</strong> · Suggested par: <strong>{formatRegionalQty(row.regionalSuggestedParLevel)}</strong>
-                        </div>
-
-                        <div>
-                          Current par Q: <strong>{formatQty(row.parLevel)}</strong> · Suggested par difference: <strong>{formatQty(row.regionalSuggestedParLevel - row.parLevel)}</strong>
-                        </div>
-
-                        <div>
-                          Original file daily: <strong>{formatQty(row.standardAveragePerDay)}</strong> · Original suggested: <strong>{formatQty(row.standardSuggestedOrder)}</strong>
-                        </div>
-                      </>
-                    ) : (
-                      <div>No yearly regional match found. Using current order-file history.</div>
-                    )}
-
-                    <div>Days to arrival: <strong>{formatQty(nextOrderMeta.daysUntilArrival)}</strong> · Use until arrival: <strong>{formatQty(row.usageUntilArrival)}</strong></div>
-                    <div>Voyage need / suggested par: <strong>{formatQty(row.projectedVoyageNeed)}</strong> · Raw order: <strong>{formatQty(row.rawSuggested)}</strong></div>
-                    {row.parCapApplied && <div style={localStyles.parCapNote}>Par cap applied: max {formatQty(row.parCapLimit)}</div>}
+                  <div
+                    style={
+                      row.regionalHasData
+                        ? localStyles.regionalBadge
+                        : localStyles.noRegionalBadge
+                    }
+                  >
+                    {row.regionalHasData
+                      ? `Regional match: ${selectedRegionLabel}`
+                      : "Using order-file history"}
                   </div>
 
                   <div style={localStyles.metricGrid}>
@@ -3161,31 +3167,31 @@ const parLevelByRegionPrintColumns = [
                       <span>{negativeArrival ? "⚠️ At arrival" : "At arrival"}</span>
                       <strong>{formatQty(row.availableAtArrival)}</strong>
                     </div>
+                  </div>
 
-                    {showPar && (
-                      <div style={localStyles.metricBox}>
-                        <span>Current Par Q</span>
-                        <strong>{formatQty(row.parLevel)}</strong>
-                      </div>
-                    )}
+                  <div style={localStyles.metricGrid}>
+                    <div style={localStyles.metricBox}>
+                      <span>Current Par Q</span>
+                      <strong>{formatQty(row.parLevel)}</strong>
+                    </div>
 
-                    {row.regionalHasData && (
-                      <div style={localStyles.metricBoxWarning}>
-                        <span>Suggested Par</span>
-                        <strong>{formatRegionalQty(row.regionalSuggestedParLevel)}</strong>
-                      </div>
-                    )}
+                    <div style={row.regionalHasData ? localStyles.metricBoxWarning : localStyles.metricBox}>
+                      <span>Suggested Par</span>
+                      <strong>
+                        {row.regionalHasData
+                          ? formatRegionalQty(row.regionalSuggestedParLevel)
+                          : formatQty(row.projectedVoyageNeed)}
+                      </strong>
+                    </div>
 
-                    {row.regionalHasData && (
-                      <div style={localStyles.metricBox}>
-                        <span>Reg Daily</span>
-                        <strong>{formatRegionalQty(row.regionalAvgDailyQty)}</strong>
-                      </div>
-                    )}
+                    <div style={localStyles.metricBox}>
+                      <span>{displayedDailyLabel}</span>
+                      <strong>{formatQty(displayedDaily)}</strong>
+                    </div>
                   </div>
 
                   <div style={row.suggestedOrder > 0 ? localStyles.orderBadge : styles.statusGood}>
-                    Order: {formatQty(row.suggestedOrder)}
+                    Suggested Order: {formatQty(row.suggestedOrder)}
                   </div>
 
                   <div
@@ -3200,6 +3206,10 @@ const parLevelByRegionPrintColumns = [
                     }
                   >
                     {row.alertLabel}
+                  </div>
+
+                  <div style={localStyles.tapHint}>
+                    Click to open full regional details
                   </div>
                 </div>
               );
@@ -3326,179 +3336,107 @@ const parLevelByRegionPrintColumns = [
       )}
 
       {nextOrderView === "parregion" && (
-  <section style={styles.card}>
-    <h2 style={styles.productTitle}>📏 Par Level by Region</h2>
+        <section style={styles.card}>
+          <h2 style={styles.productTitle}>📏 Par Level by Region</h2>
 
-    {parLevelByRegionRows.length === 0 && (
-      <p style={styles.emptyText}>
-        Upload the latest order file to compare current par level against all
-        yearly regions.
-      </p>
-    )}
+          {parLevelByRegionRows.length === 0 && (
+            <p style={styles.emptyText}>
+              Upload the latest order file to compare current par level against all yearly regions.
+            </p>
+          )}
 
-    <div style={styles.infoBox}>
-      <div>
-        📄 Order file: <strong>{nextOrderFileName || "Not uploaded"}</strong>
-      </div>
-
-      <div>
-        🌎 Yearly regional file:{" "}
-        <strong>{yearlyRegionalFileName || "Not loaded"}</strong>
-      </div>
-
-      <div>
-        🧭 Regions in report:{" "}
-        <strong>
-          {parLevelRegionColumns.length
-            ? parLevelRegionColumns.map((item) => item.label).join(", ")
-            : "No regions detected"}
-        </strong>
-      </div>
-
-      <div>
-        🗓️ Voyage days B6 used for regional par:{" "}
-        <strong>{formatQty(nextOrderMeta.voyageDays || 14)}</strong>
-      </div>
-
-      <div>
-        🧮 Buffer: <strong>{formatQty(regionalParBufferPercent)}%</strong>
-      </div>
-    </div>
-
-    <div style={localStyles.compactGrid}>
-      {visibleParLevelByRegionRows.map((row, index) => {
-        const getDifferenceStyle = (hasData, difference) => {
-          if (!hasData) return localStyles.metricBox;
-          if (Number(difference || 0) > 0) return localStyles.metricBoxWarning;
-          if (Number(difference || 0) < 0) return localStyles.metricBoxBad;
-          return localStyles.metricBox;
-        };
-
-        return (
-          <div
-            key={row.excelRow + "-" + row.product + "-par-region"}
-            style={localStyles.orderedVsSuggestedCard}
-          >
-            <div style={localStyles.cardTopLine}>
-              <span>#{index + 1}</span>
-              <span>Row {row.excelRow}</span>
+          <div style={styles.infoBox}>
+            <div>
+              📄 Order file: <strong>{nextOrderFileName || "Not uploaded"}</strong>
             </div>
-
-            <div style={localStyles.productName}>{row.product}</div>
-            <div style={styles.recipeMeta}>Code: {row.code || "N/A"}</div>
-            <div style={styles.recipeMeta}>U/M: {row.unit || "N/A"}</div>
-
-            <div style={localStyles.metricGrid}>
-              <div style={localStyles.metricBox}>
-                <span>Current Par Q</span>
-                <strong>{formatQty(row.currentParLevel)}</strong>
-              </div>
-
-              <div style={localStyles.metricBox}>
-                <span>Voyage Days</span>
-                <strong>{formatQty(row.voyageDays)}</strong>
-              </div>
-
-              <div style={localStyles.metricBox}>
-                <span>Buffer</span>
-                <strong>{formatQty(row.bufferPercent)}%</strong>
-              </div>
+            <div>
+              🌎 Yearly regional file: <strong>{yearlyRegionalFileName || "Not loaded"}</strong>
             </div>
+            <div>
+              🧭 Regions in report: <strong>{parLevelRegionColumns.length ? parLevelRegionColumns.map((item) => item.label).join(", ") : "No regions detected"}</strong>
+            </div>
+            <div>
+              🗓️ Voyage days B6 used for regional par: <strong>{formatQty(nextOrderMeta.voyageDays || 14)}</strong>
+            </div>
+            <div>
+              🧮 Buffer: <strong>{formatQty(regionalParBufferPercent)}%</strong>
+            </div>
+          </div>
 
-            <div style={{ display: "grid", gap: 6 }}>
-              {row.regionResultsList.map((regionItem) => (
+          <div style={localStyles.compactGrid}>
+            {visibleParLevelByRegionRows.map((row, index) => {
+              const matchedRegionCount = (row.regionResultsList || []).filter(
+                (item) => item.hasData
+              ).length;
+
+              return (
                 <div
-                  key={regionItem.key}
-                  style={{
-                    border: "1px solid #ddd",
-                    borderRadius: 10,
-                    padding: 6,
-                    background: "#fff",
-                    display: "grid",
-                    gap: 5,
+                  key={row.excelRow + "-" + row.product + "-par-region"}
+                  style={{ ...localStyles.orderedVsSuggestedCard, ...localStyles.clickableCard }}
+                  onClick={() => setSelectedParRegionDetailRow(row)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      setSelectedParRegionDetailRow(row);
+                    }
                   }}
                 >
-                  <div style={localStyles.categoryBadge}>
-                    {regionItem.label}
+                  <div style={localStyles.cardTopLine}>
+                    <span>#{index + 1}</span>
+                    <span>Row {row.excelRow}</span>
                   </div>
+
+                  <div style={localStyles.productName}>{row.product}</div>
+                  <div style={styles.recipeMeta}>Code: {row.code || "N/A"}</div>
+                  <div style={styles.recipeMeta}>U/M: {row.unit || "N/A"}</div>
 
                   <div style={localStyles.metricGrid}>
                     <div style={localStyles.metricBox}>
-                      <span>Suggested Par</span>
-                      <strong>
-                        {regionItem.hasData
-                          ? formatRegionalQty(regionItem.suggestedParLevel)
-                          : "No data"}
-                      </strong>
+                      <span>Current Par Q</span>
+                      <strong>{formatQty(row.currentParLevel)}</strong>
                     </div>
 
-                    <div
-                      style={getDifferenceStyle(
-                        regionItem.hasData,
-                        regionItem.difference
-                      )}
-                    >
-                      <span>Diff vs Q</span>
-                      <strong>
-                        {regionItem.hasData
-                          ? formatQty(regionItem.difference)
-                          : "N/A"}
-                      </strong>
+                    <div style={localStyles.metricBoxWarning}>
+                      <span>Highest Par</span>
+                      <strong>{formatRegionalQty(row.highestParLevel)}</strong>
                     </div>
 
                     <div style={localStyles.metricBox}>
-                      <span>Daily</span>
-                      <strong>
-                        {regionItem.hasData
-                          ? formatRegionalQty(regionItem.avgDailyQty)
-                          : "N/A"}
-                      </strong>
+                      <span>Regions</span>
+                      <strong>{matchedRegionCount}</strong>
                     </div>
                   </div>
 
-                  {regionItem.hasData && (
-                    <div style={localStyles.calcStrip}>
-                      <div>
-                        Qty:{" "}
-                        <strong>{formatRegionalQty(regionItem.totalQty)}</strong>{" "}
-                        · Days:{" "}
-                        <strong>{formatQty(regionItem.totalDays)}</strong> ·
-                        Blocks: <strong>{regionItem.evidenceBlocks}</strong>
-                      </div>
+                  {row.hasAnyRegionalData ? (
+                    <div style={localStyles.regionalBadge}>
+                      Highest: {row.highestRegion || "N/A"} · Diff: {formatQty(row.highestDifference)}
+                    </div>
+                  ) : (
+                    <div style={localStyles.noRegionalBadge}>
+                      No regional yearly data found
                     </div>
                   )}
+
+                  <div style={localStyles.tapHint}>
+                    Click to view all region par levels
+                  </div>
                 </div>
-              ))}
-            </div>
-
-            {row.hasAnyRegionalData ? (
-              <div style={localStyles.regionalBadge}>
-                Highest regional par: {row.highestRegion || "N/A"} —{" "}
-                {formatRegionalQty(row.highestParLevel)}
-              </div>
-            ) : (
-              <div style={localStyles.noRegionalBadge}>
-                No regional yearly data found for this item.
-              </div>
-            )}
+              );
+            })}
           </div>
-        );
-      })}
-    </div>
 
-    {hasMoreParLevelByRegionRows && (
-      <button
-        style={styles.backButton}
-        onClick={() =>
-          setReportDisplayLimit((value) => value + REPORT_RENDER_BATCH)
-        }
-      >
-        Show more ({visibleParLevelByRegionRows.length} /{" "}
-        {parLevelByRegionRows.length})
-      </button>
-    )}
-  </section>
-)}
+          {hasMoreParLevelByRegionRows && (
+            <button
+              style={styles.backButton}
+              onClick={() => setReportDisplayLimit((value) => value + REPORT_RENDER_BATCH)}
+            >
+              Show more ({visibleParLevelByRegionRows.length} / {parLevelByRegionRows.length})
+            </button>
+          )}
+        </section>
+      )}
+
       {nextOrderView === "increase1" && (
         <section style={styles.card}>
           <h2 style={styles.productTitle}>📈 Consumption Increase - Last 1 Voyage</h2>
@@ -3862,6 +3800,313 @@ const parLevelByRegionPrintColumns = [
           )}
         </section>
       )}
+      {selectedNextOrderDetailRow && (() => {
+        const row = selectedNextOrderDetailRow;
+
+        const regionLabel =
+          row.regionalRegion === YEARLY_REGION_ALL
+            ? "All regions"
+            : row.regionalRegion || "Not selected";
+
+        const suggestedParDifference =
+          Number(row.regionalSuggestedParLevel || 0) - Number(row.parLevel || 0);
+
+        return (
+          <div
+            style={localStyles.modalBackdrop}
+            onClick={() => setSelectedNextOrderDetailRow(null)}
+          >
+            <div
+              style={localStyles.modalCard}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div style={localStyles.modalHeader}>
+                <div>
+                  <h2 style={localStyles.modalTitle}>{row.product}</h2>
+                  <div style={styles.recipeMeta}>
+                    Code: {row.code || "N/A"} · U/M: {row.unit || "N/A"} · Row {row.excelRow}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  style={localStyles.modalCloseButton}
+                  onClick={() => setSelectedNextOrderDetailRow(null)}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div
+                style={
+                  row.regionalHasData
+                    ? localStyles.regionalBadge
+                    : localStyles.noRegionalBadge
+                }
+              >
+                {row.suggestionBasis}
+              </div>
+
+              <div style={localStyles.modalMetricGrid}>
+                <div style={localStyles.metricBox}>
+                  <span>Stock</span>
+                  <strong>{formatQty(row.stock)}</strong>
+                </div>
+
+                <div style={localStyles.metricBox}>
+                  <span>Future</span>
+                  <strong>{formatQty(row.futureOrders)}</strong>
+                </div>
+
+                <div style={localStyles.metricBox}>
+                  <span>At Arrival</span>
+                  <strong>{formatQty(row.availableAtArrival)}</strong>
+                </div>
+
+                <div style={localStyles.metricBox}>
+                  <span>Current Par Q</span>
+                  <strong>{formatQty(row.parLevel)}</strong>
+                </div>
+
+                <div style={row.regionalHasData ? localStyles.metricBoxWarning : localStyles.metricBox}>
+                  <span>Suggested Par</span>
+                  <strong>
+                    {row.regionalHasData
+                      ? formatRegionalQty(row.regionalSuggestedParLevel)
+                      : formatQty(row.projectedVoyageNeed)}
+                  </strong>
+                </div>
+
+                <div style={localStyles.metricBox}>
+                  <span>Suggested Order</span>
+                  <strong>{formatQty(row.suggestedOrder)}</strong>
+                </div>
+              </div>
+
+              <div style={localStyles.detailSection}>
+                <h3 style={localStyles.detailTitle}>Current order-file information</h3>
+
+                <div style={localStyles.calcStrip}>
+                  <div>
+                    File daily consumption: <strong>{formatQty(row.standardAveragePerDay ?? row.averagePerDay)}</strong>
+                  </div>
+                  <div>
+                    File suggested order: <strong>{formatQty(row.standardSuggestedOrder ?? row.suggestedOrder)}</strong>
+                  </div>
+                  <div>
+                    Days to arrival: <strong>{formatQty(nextOrderMeta.daysUntilArrival)}</strong> · Use until arrival: <strong>{formatQty(row.usageUntilArrival)}</strong>
+                  </div>
+                  <div>
+                    Voyage need / suggested par: <strong>{formatQty(row.projectedVoyageNeed)}</strong> · Raw order: <strong>{formatQty(row.rawSuggested)}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div style={localStyles.detailSection}>
+                <h3 style={localStyles.detailTitle}>Selected regional information</h3>
+
+                {row.regionalHasData ? (
+                  <div style={localStyles.regionDetailCard}>
+                    <div style={localStyles.categoryBadge}>{regionLabel}</div>
+
+                    <div style={localStyles.modalMetricGrid}>
+                      <div style={localStyles.metricBox}>
+                        <span>Regional Qty</span>
+                        <strong>{formatRegionalQty(row.regionalTotalQty)}</strong>
+                      </div>
+
+                      <div style={localStyles.metricBox}>
+                        <span>Regional Days</span>
+                        <strong>{formatQty(row.regionalTotalDays)}</strong>
+                      </div>
+
+                      <div style={localStyles.metricBox}>
+                        <span>Blocks</span>
+                        <strong>{row.regionalEvidenceBlocks}</strong>
+                      </div>
+
+                      <div style={localStyles.metricBox}>
+                        <span>Regional Daily</span>
+                        <strong>{formatRegionalQty(row.regionalAvgDailyQty)}</strong>
+                      </div>
+
+                      <div style={localStyles.metricBoxWarning}>
+                        <span>Suggested Par</span>
+                        <strong>{formatRegionalQty(row.regionalSuggestedParLevel)}</strong>
+                      </div>
+
+                      <div
+                        style={
+                          suggestedParDifference > 0
+                            ? localStyles.metricBoxWarning
+                            : suggestedParDifference < 0
+                            ? localStyles.metricBoxBad
+                            : localStyles.metricBox
+                        }
+                      >
+                        <span>Diff vs Q</span>
+                        <strong>{formatQty(suggestedParDifference)}</strong>
+                      </div>
+                    </div>
+
+                    <div style={localStyles.calcStrip}>
+                      <div>
+                        Matched product: <strong>{row.regionalMatchedProductName || "N/A"}</strong>
+                      </div>
+                      <div>
+                        Matched code: <strong>{row.regionalMatchedProductCode || "N/A"}</strong>
+                      </div>
+                      <div>Formula: regional daily × voyage days × buffer = suggested par</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={localStyles.noRegionalBadge}>
+                    No regional yearly match found for selected region. This product is using current order-file history.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {selectedParRegionDetailRow && (() => {
+        const row = selectedParRegionDetailRow;
+        const regionRows = Array.isArray(row.regionResultsList)
+          ? row.regionResultsList
+          : [];
+
+        const getDifferenceStyle = (hasData, difference) => {
+          if (!hasData) return localStyles.metricBox;
+          if (Number(difference || 0) > 0) return localStyles.metricBoxWarning;
+          if (Number(difference || 0) < 0) return localStyles.metricBoxBad;
+          return localStyles.metricBox;
+        };
+
+        return (
+          <div
+            style={localStyles.modalBackdrop}
+            onClick={() => setSelectedParRegionDetailRow(null)}
+          >
+            <div
+              style={localStyles.modalCard}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div style={localStyles.modalHeader}>
+                <div>
+                  <h2 style={localStyles.modalTitle}>{row.product}</h2>
+                  <div style={styles.recipeMeta}>
+                    Code: {row.code || "N/A"} · U/M: {row.unit || "N/A"} · Row {row.excelRow}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  style={localStyles.modalCloseButton}
+                  onClick={() => setSelectedParRegionDetailRow(null)}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div style={localStyles.modalMetricGrid}>
+                <div style={localStyles.metricBox}>
+                  <span>Current Par Q</span>
+                  <strong>{formatQty(row.currentParLevel)}</strong>
+                </div>
+
+                <div style={localStyles.metricBox}>
+                  <span>Voyage Days</span>
+                  <strong>{formatQty(row.voyageDays)}</strong>
+                </div>
+
+                <div style={localStyles.metricBox}>
+                  <span>Buffer</span>
+                  <strong>{formatQty(row.bufferPercent)}%</strong>
+                </div>
+
+                <div style={localStyles.metricBoxWarning}>
+                  <span>Highest Region</span>
+                  <strong>{row.highestRegion || "N/A"}</strong>
+                </div>
+
+                <div style={localStyles.metricBoxWarning}>
+                  <span>Highest Par</span>
+                  <strong>{formatRegionalQty(row.highestParLevel)}</strong>
+                </div>
+
+                <div
+                  style={
+                    Number(row.highestDifference || 0) > 0
+                      ? localStyles.metricBoxWarning
+                      : Number(row.highestDifference || 0) < 0
+                      ? localStyles.metricBoxBad
+                      : localStyles.metricBox
+                  }
+                >
+                  <span>Highest Diff</span>
+                  <strong>{formatQty(row.highestDifference)}</strong>
+                </div>
+              </div>
+
+              <div style={localStyles.detailSection}>
+                <h3 style={localStyles.detailTitle}>All regional par levels</h3>
+
+                <div style={localStyles.regionListGrid}>
+                  {regionRows.map((regionItem) => (
+                    <div key={regionItem.key} style={localStyles.regionDetailCard}>
+                      <div style={localStyles.categoryBadge}>{regionItem.label}</div>
+
+                      <div style={localStyles.metricGrid}>
+                        <div style={localStyles.metricBox}>
+                          <span>Suggested Par</span>
+                          <strong>
+                            {regionItem.hasData
+                              ? formatRegionalQty(regionItem.suggestedParLevel)
+                              : "No data"}
+                          </strong>
+                        </div>
+
+                        <div
+                          style={getDifferenceStyle(
+                            regionItem.hasData,
+                            regionItem.difference
+                          )}
+                        >
+                          <span>Diff vs Q</span>
+                          <strong>
+                            {regionItem.hasData
+                              ? formatQty(regionItem.difference)
+                              : "N/A"}
+                          </strong>
+                        </div>
+
+                        <div style={localStyles.metricBox}>
+                          <span>Daily</span>
+                          <strong>
+                            {regionItem.hasData
+                              ? formatRegionalQty(regionItem.avgDailyQty)
+                              : "N/A"}
+                          </strong>
+                        </div>
+                      </div>
+
+                      {regionItem.hasData && (
+                        <div style={localStyles.calcStrip}>
+                          <div>
+                            Qty: <strong>{formatRegionalQty(regionItem.totalQty)}</strong> · Days: <strong>{formatQty(regionItem.totalDays)}</strong> · Blocks: <strong>{regionItem.evidenceBlocks}</strong>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
     </main>
   );
 }
@@ -4133,4 +4378,96 @@ const localStyles = {
     fontSize: 10,
     lineHeight: 1.1,
   },
+  clickableCard: {
+    cursor: "pointer",
+    transition: "transform 0.12s ease, box-shadow 0.12s ease",
+  },
+  tapHint: {
+    padding: "4px 6px",
+    borderRadius: 7,
+    background: "#f7f7f7",
+    color: "#555",
+    border: "1px dashed #bbb",
+    textAlign: "center",
+    fontSize: 9.5,
+    fontWeight: "bold",
+    lineHeight: 1.1,
+  },
+  modalBackdrop: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 9999,
+    background: "rgba(0,0,0,0.55)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 14,
+  },
+  modalCard: {
+    width: "min(920px, 100%)",
+    maxHeight: "92vh",
+    overflowY: "auto",
+    background: "#fff",
+    borderRadius: 18,
+    padding: 14,
+    boxShadow: "0 20px 60px rgba(0,0,0,0.30)",
+    display: "grid",
+    gap: 10,
+  },
+  modalHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 10,
+    borderBottom: "1px solid #eee",
+    paddingBottom: 10,
+  },
+  modalTitle: {
+    margin: 0,
+    fontSize: 18,
+    lineHeight: 1.15,
+  },
+  modalCloseButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 999,
+    border: 0,
+    background: "#111",
+    color: "#fff",
+    fontWeight: "bold",
+    cursor: "pointer",
+    flexShrink: 0,
+  },
+  modalMetricGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(115px, 1fr))",
+    gap: 6,
+  },
+  detailSection: {
+    display: "grid",
+    gap: 8,
+    padding: 10,
+    borderRadius: 12,
+    background: "#f7f7f7",
+    border: "1px solid #e5e5e5",
+  },
+  detailTitle: {
+    margin: 0,
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  regionListGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+    gap: 8,
+  },
+  regionDetailCard: {
+    display: "grid",
+    gap: 6,
+    border: "1px solid #ddd",
+    borderRadius: 12,
+    padding: 8,
+    background: "#fff",
+  },
+
 };
