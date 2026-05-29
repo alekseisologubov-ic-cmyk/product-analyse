@@ -8893,12 +8893,28 @@ setCurrentInventoryItem({
           {filteredProductCostReportRows.map((item) => (
             <div key={item.productKey} style={styles.costReportLine}>
               <div style={styles.costLineMain}>
-                <div style={styles.costLineProduct}>{item.product}</div>
-                <div style={styles.costLineMeta}>
-                  {item.code ? "Code: " + item.code + " • " : ""}
-                  {item.venues.length} venue{item.venues.length === 1 ? "" : "s"}
-                </div>
-              </div>
+  <div style={styles.costLineProduct}>{item.product}</div>
+
+  <div style={styles.costLineMeta}>
+    {item.code ? "Code: " + item.code + " • " : ""}
+    {item.venues.length} venue{item.venues.length === 1 ? "" : "s"}
+  </div>
+
+  {item.regionalHasData ? (
+    <div style={styles.statusGood}>
+      Region:{" "}
+      {item.regionalRegion === YEARLY_REGION_ALL
+        ? "All regions"
+        : item.regionalRegion}{" "}
+      • Daily: {formatRegionalQty(item.regionalAvgDailyQty)} • Suggested Par:{" "}
+      {formatRegionalQty(item.regionalSuggestedParLevel)}
+    </div>
+  ) : yearlyRegionalConsumption ? (
+    <div style={styles.statusNeutral}>
+      No regional yearly match
+    </div>
+  ) : null}
+</div>
 
               <div style={styles.costLineTotals}>
                 <span>Total</span>
