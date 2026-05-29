@@ -6866,10 +6866,35 @@ const filteredProductCostReportRows = useMemo(() => {
           </label>
 
           <div style={styles.infoBox}>
-            <div>🔒 Only emails ending with <strong>@virginvoyages.com</strong> are allowed.</div>
-            <div>🔐 Access code is required to continue.</div>
-            <div>📊 Usage tracking will be connected to your verified email.</div>
-          </div>
+  <div>
+    📦 Products in report:{" "}
+    <strong>{filteredProductCostReportRows.length}</strong> / {productCostReportRows.length}
+  </div>
+
+  <div>
+    🚢 View: <strong>{viewMode === "single" ? userShip : "All Ships"}</strong>
+  </div>
+
+  <div>
+    🌎 Regional par region:{" "}
+    <strong>
+      {selectedRegionalConsumptionRegion === YEARLY_REGION_ALL
+        ? "All regions"
+        : selectedRegionalConsumptionRegion}
+    </strong>
+  </div>
+
+  <div>
+    📈 Regional matches:{" "}
+    <strong>
+      {dashboardRegionalMatchedCount} / {productCostReportRowsWithRegionalPar.length}
+    </strong>
+  </div>
+
+  <div>
+    📘 Source columns: C Venue, I/L/O/R Quantity, J/M/P/S Total Cost, H/K/N/Q Unit Price.
+  </div>
+</div>
 
           {!emailCodeSent ? (
             <button style={styles.primaryButton} onClick={sendAccessCode} disabled={otpLoading}>
