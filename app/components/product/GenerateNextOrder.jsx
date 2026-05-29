@@ -1486,7 +1486,7 @@ export default function GenerateNextOrder({
       setYearlyRegionalFileName(file.name);
 
       if (!parsed.regionOptions?.length) {
-        setSelectedRegionalConsumptionRegion(YEARLY_REGION_ALL);
+        setSelectedRegionalConsumptionRegion("");
         setYearlyRegionalMessage(
           "Yearly file loaded, but no regional ship blocks were detected. Check the header rows."
         );
