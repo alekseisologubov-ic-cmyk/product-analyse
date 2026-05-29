@@ -566,7 +566,7 @@ const [yearlyRegionalMessage, setYearlyRegionalMessage] = useState(
   "Upload yearly May 2025 - April 2026 consumption file to enable regional par suggestions."
 );
 const [selectedRegionalConsumptionRegion, setSelectedRegionalConsumptionRegion] =
-  useState(YEARLY_REGION_ALL);
+  useState("");
 const [regionalParBufferPercent, setRegionalParBufferPercent] = useState(0);
 
 const [module, setModule] = useState("");
