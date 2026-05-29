@@ -1313,25 +1313,53 @@ export default function GenerateNextOrder({
       : internalRegionalParBufferPercent;
   const setRegionalParBufferPercent = externalSetRegionalParBufferPercent || setInternalRegionalParBufferPercent;
 
-  const nextOrderRows = useMemo(
-    () =>
-      getRegionalizedOrderRows({
-        orderRows: baseNextOrderRows,
-        yearlyRegionalConsumption,
-        selectedRegion: selectedRegionalConsumptionRegion,
-        voyageDays: nextOrderMeta.voyageDays,
-        daysUntilArrival: nextOrderMeta.daysUntilArrival,
-        bufferPercent: regionalParBufferPercent,
-      }),
-    [
-      baseNextOrderRows,
+  const nextOrderRows = useMemo(() => {
+  try {
+    return getRegionalizedOrderRows({
+      orderRows: baseNextOrderRows,
       yearlyRegionalConsumption,
-      selectedRegionalConsumptionRegion,
-      nextOrderMeta.voyageDays,
-      nextOrderMeta.daysUntilArrival,
-      regionalParBufferPercent,
-    ]
-  );
+      selectedRegion: selectedRegionalConsumptionRegion,
+      voyageDays: nextOrderMeta.voyageDays,
+      daysUntilArrival: nextOrderMeta.daysUntilArrival,
+      bufferPercent: regionalParBufferPercent,
+    });
+  } catch (error) {
+    console.error("Could not prepare regionalized order rows:", error);
+
+    return (Array.isArray(baseNextOrderRows) ? baseNextOrderRows : []).map((row) =>
+      recalculateOrderComparisonFields({
+        ...row,
+        standardAveragePerDay: Number(row.averagePerDay || 0),
+        standardUsageUntilArrival: Number(row.usageUntilArrival || 0),
+        standardAvailableAtArrival: Number(row.availableAtArrival || 0),
+        standardProjectedVoyageNeed: Number(row.projectedVoyageNeed || 0),
+        standardRawSuggested: Number(row.rawSuggested || 0),
+        standardSuggestedOrder: Number(row.suggestedOrder || 0),
+
+        regionalHasData: false,
+        regionalRegion: "",
+        regionalTotalQty: 0,
+        regionalTotalDays: 0,
+        regionalAvgDailyQty: 0,
+        regionalSuggestedParLevel: 0,
+        regionalSuggestedOrder: 0,
+        regionalEvidenceBlocks: 0,
+        regionalMatchedProductName: "",
+        regionalMatchedProductCode: "",
+        regionalByShip: [],
+
+        suggestionBasis: "Current order file history - regional calculation error",
+      })
+    );
+  }
+}, [
+  baseNextOrderRows,
+  yearlyRegionalConsumption,
+  selectedRegionalConsumptionRegion,
+  nextOrderMeta.voyageDays,
+  nextOrderMeta.daysUntilArrival,
+  regionalParBufferPercent,
+]);
 
   const orderByCode = useMemo(() => buildOrderByCodeFromRows(nextOrderRows), [nextOrderRows]);
 
