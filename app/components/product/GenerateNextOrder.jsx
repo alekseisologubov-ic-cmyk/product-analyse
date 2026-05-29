@@ -2214,45 +2214,61 @@ const parLevelByRegionRows = useMemo(() => {
     Status: row.orderComparisonLabel,
   }));
   
-const parLevelByRegionExportRows = parLevelByRegionRows.map((row, index) => ({
-  Number: index + 1,
-  ExcelRow: row.excelRow,
-  Code: row.code,
-  Product: row.product,
-  UM: row.unit,
+const parLevelByRegionExportRows = parLevelByRegionRows.map((row, index) => {
+  const exportRow = {
+    Number: index + 1,
+    ExcelRow: row.excelRow,
+    Code: row.code,
+    Product: row.product,
+    UM: row.unit,
 
-  CurrentParLevelColumnQ: row.currentParLevel,
-  VoyageDaysB6: row.voyageDays,
-  BufferPercent: row.bufferPercent,
+    CurrentParLevelColumnQ: row.currentParLevel,
+    VoyageDaysB6: row.voyageDays,
+    BufferPercent: row.bufferPercent,
 
-  MiamiHasData: row.miamiHasData ? "Yes" : "No",
-  MiamiRegionalDaily: row.miamiDaily,
-  MiamiTotalQty: row.miamiTotalQty,
-  MiamiTotalDays: row.miamiTotalDays,
-  MiamiEvidenceBlocks: row.miamiEvidenceBlocks,
-  MiamiSuggestedPar: row.miamiParLevel,
-  MiamiDifferenceVsCurrentPar: row.miamiDifference,
+    HighestRegionSuggested: row.highestRegion,
+    HighestSuggestedPar: row.highestParLevel,
+    HighestDifferenceVsCurrentPar: row.highestDifference,
+  };
 
-  LAHasData: row.laHasData ? "Yes" : "No",
-  LARegionalDaily: row.laDaily,
-  LATotalQty: row.laTotalQty,
-  LATotalDays: row.laTotalDays,
-  LAEvidenceBlocks: row.laEvidenceBlocks,
-  LASuggestedPar: row.laParLevel,
-  LADifferenceVsCurrentPar: row.laDifference,
+  row.regionResultsList.forEach((regionItem) => {
+    const prefix = regionItem.label.replace(/[^A-Za-z0-9]/g, "");
 
-  BarcelonaHasData: row.barcelonaHasData ? "Yes" : "No",
-  BarcelonaRegionalDaily: row.barcelonaDaily,
-  BarcelonaTotalQty: row.barcelonaTotalQty,
-  BarcelonaTotalDays: row.barcelonaTotalDays,
-  BarcelonaEvidenceBlocks: row.barcelonaEvidenceBlocks,
-  BarcelonaSuggestedPar: row.barcelonaParLevel,
-  BarcelonaDifferenceVsCurrentPar: row.barcelonaDifference,
+    exportRow[`${prefix}HasData`] = regionItem.hasData ? "Yes" : "No";
+    exportRow[`${prefix}RegionalDaily`] = regionItem.avgDailyQty;
+    exportRow[`${prefix}TotalQty`] = regionItem.totalQty;
+    exportRow[`${prefix}TotalDays`] = regionItem.totalDays;
+    exportRow[`${prefix}EvidenceBlocks`] = regionItem.evidenceBlocks;
+    exportRow[`${prefix}SuggestedPar`] = regionItem.suggestedParLevel;
+    exportRow[`${prefix}DifferenceVsCurrentPar`] = regionItem.difference;
 
-  HighestRegionSuggested: row.highestRegion,
-  HighestSuggestedPar: row.highestParLevel,
-  HighestDifferenceVsCurrentPar: row.highestDifference,
-}));
+    exportRow[`${regionItem.key}SuggestedPar`] = regionItem.suggestedParLevel;
+    exportRow[`${regionItem.key}DifferenceVsCurrentPar`] = regionItem.difference;
+  });
+
+  return exportRow;
+});
+
+const parLevelByRegionPrintColumns = [
+  { key: "Number", label: "#" },
+  { key: "ExcelRow", label: "Row" },
+  { key: "Code", label: "Code" },
+  { key: "Product", label: "Product" },
+  { key: "UM", label: "U/M" },
+  { key: "CurrentParLevelColumnQ", label: "Current Par Q" },
+  ...parLevelRegionColumns.flatMap((regionColumn) => [
+    {
+      key: `${regionColumn.key}SuggestedPar`,
+      label: `${regionColumn.label} Par`,
+    },
+    {
+      key: `${regionColumn.key}DifferenceVsCurrentPar`,
+      label: `${regionColumn.label} Diff`,
+    },
+  ]),
+  { key: "HighestRegionSuggested", label: "Highest Region" },
+  { key: "HighestSuggestedPar", label: "Highest Par" },
+];
   const getConsumptionIncreaseExportRows = (rows, modeLabel) =>
     rows.map((row, index) => ({
       Number: index + 1,
