@@ -446,8 +446,21 @@ const findMonthForBlock = ({ rows, metricRowIndex, colIndex, currentMonthInfo })
 const getHeaderCandidatesForBlock = ({ rows, metricRowIndex, colIndex }) => {
   const candidates = [];
 
+  // Important:
+  // Each regional block is exactly PRICE / QTY / VALUE.
+  // For the block starting at colIndex, only read the header cells directly
+  // above those same 3 columns: colIndex, colIndex + 1, colIndex + 2.
+  //
+  // Do NOT read colIndex - 1 or colIndex - 2.
+  // That can accidentally pull the previous ship/region header.
+  //
+  // Example:
+  // BR - New York | RL - Athens | SC - Portsmouth | VL - Miami
+  //
+  // For RL - Athens, only the RL block's 3 columns should be checked.
+  // It should not see BR - New York or SC - Portsmouth.
   for (let r = 0; r < metricRowIndex; r += 1) {
-    for (let c = Math.max(0, colIndex - 2); c <= colIndex + 2; c += 1) {
+    for (let c = colIndex; c <= colIndex + 2; c += 1) {
       const text = safeText(rows[r]?.[c]);
 
       if (!text) continue;
