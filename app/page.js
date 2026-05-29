@@ -554,11 +554,11 @@ export default function App() {
   const [nextOrderMessage, setNextOrderMessage] = useState("");
   const [nextOrderView, setNextOrderView] = useState("order");
   const [fmlMissingRows, setFmlMissingRows] = useState([]);
-  const [fmlMissingSearch, setFmlMissingSearch] = useState("");
-  const [fmlLowRows, setFmlLowRows] = useState([]);
-  const [fmlLowSearch, setFmlLowSearch] = useState("");
+const [fmlMissingSearch, setFmlMissingSearch] = useState("");
+const [fmlLowRows, setFmlLowRows] = useState([]);
+const [fmlLowSearch, setFmlLowSearch] = useState("");
 
-  const [yearlyRegionalConsumption, setYearlyRegionalConsumption] = useState(null);
+const [yearlyRegionalConsumption, setYearlyRegionalConsumption] = useState(null);
 const [yearlyRegionalFileName, setYearlyRegionalFileName] = useState("");
 const [yearlyRegionalMessage, setYearlyRegionalMessage] = useState(
   "Upload yearly May 2025 - April 2026 consumption file to enable regional par suggestions."
@@ -566,7 +566,8 @@ const [yearlyRegionalMessage, setYearlyRegionalMessage] = useState(
 const [selectedRegionalConsumptionRegion, setSelectedRegionalConsumptionRegion] =
   useState(YEARLY_REGION_ALL);
 const [regionalParBufferPercent, setRegionalParBufferPercent] = useState(0);
-  const [module, setModule] = useState("");
+
+const [module, setModule] = useState("");
   const [productMode, setProductMode] = useState("");
   const [equipmentDepartment, setEquipmentDepartment] = useState("");
   const [equipmentMode, setEquipmentMode] = useState("");
