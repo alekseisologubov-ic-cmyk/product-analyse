@@ -5714,12 +5714,27 @@ const getEquipmentFallbackImage = (item) => {
     }
 
     const summaryRows = filteredProductCostReportRows.map((item) => ({
-      Product: item.product,
-      Code: item.code || "",
-      Venues: item.venues.length,
-      TotalQuantity: item.visibleTotalQty,
-      TotalCost: item.visibleTotalCost,
-    }));
+  Product: item.product,
+  Code: item.code || "",
+  Venues: item.venues.length,
+  TotalQuantity: item.visibleTotalQty,
+  TotalCost: item.visibleTotalCost,
+
+  Region:
+    item.regionalRegion === YEARLY_REGION_ALL
+      ? "All regions"
+      : item.regionalRegion || "",
+
+  SuggestionBasis: item.suggestionBasis || "",
+  RegionalDailyConsumption: Number(item.regionalAvgDailyQty || 0),
+  RegionalTotalQty: Number(item.regionalTotalQty || 0),
+  RegionalTotalDays: Number(item.regionalTotalDays || 0),
+  RegionalEvidenceBlocks: Number(item.regionalEvidenceBlocks || 0),
+  SuggestedRegionalParLevel: Number(item.regionalSuggestedParLevel || 0),
+  SuggestedParDifference: Number(item.regionalSuggestedParDifference || 0),
+  MatchedRegionalProductCode: item.regionalMatchedProductCode || "",
+  MatchedRegionalProductName: item.regionalMatchedProductName || "",
+}));
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), "Product Summary");
