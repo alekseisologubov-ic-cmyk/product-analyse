@@ -9452,6 +9452,282 @@ setCurrentInventoryItem({
   )}
 </section>
 
+{productReportView === "yearlyRegional" && (
+  <section style={styles.card}>
+    <div
+      style={{
+        ...styles.header,
+        boxShadow: "none",
+        padding: 0,
+        marginBottom: 18,
+      }}
+    >
+      <div>
+        <h2 style={styles.productTitle}>🌎 Yearly Regional Consumption</h2>
+        <p style={{ ...styles.emptyText, margin: 0 }}>
+          Uses the yearly May 2025 - April 2026 file. Filter by month, region /
+          home port, ship, and product.
+        </p>
+      </div>
+
+      <div style={styles.headerActions}>
+        <button
+          style={styles.primaryButton}
+          onClick={exportYearlyRegionalConsumptionReportToExcel}
+        >
+          📥 Export Excel
+        </button>
+      </div>
+    </div>
+
+    {!yearlyRegionalConsumption && (
+      <p style={styles.emptyText}>
+        Upload or load the yearly regional consumption file to use this report.
+      </p>
+    )}
+
+    <div style={styles.grid}>
+      <div style={styles.card}>
+        <h3 style={styles.cardTitle}>🔎 Filters</h3>
+
+        <label style={styles.label}>Search product, code, category, region, or ship</label>
+        <input
+          placeholder="Search yearly regional data..."
+          value={yearlyRegionalReportSearch}
+          onChange={(event) => setYearlyRegionalReportSearch(event.target.value)}
+          style={styles.searchInput}
+        />
+
+        <label style={styles.label}>Region / home port</label>
+        <select
+          value={yearlyRegionalReportRegion}
+          onChange={(event) => setYearlyRegionalReportRegion(event.target.value)}
+          style={styles.searchInput}
+        >
+          <option value={YEARLY_REGION_ALL}>All regions</option>
+
+          {(yearlyRegionalConsumption?.regionOptions || []).map((region) => (
+            <option key={region} value={region}>
+              {region}
+            </option>
+          ))}
+        </select>
+
+        <label style={styles.label}>Ship</label>
+        <select
+          value={yearlyRegionalReportShip}
+          onChange={(event) => setYearlyRegionalReportShip(event.target.value)}
+          style={styles.searchInput}
+        >
+          <option value={YEARLY_REPORT_ALL_SHIPS}>All ships</option>
+          <option value="BRL">BRL</option>
+          <option value="RL">RL</option>
+          <option value="SC">SC</option>
+          <option value="VL">VL</option>
+        </select>
+
+        <label style={styles.label}>Sort by</label>
+        <select
+          value={yearlyRegionalReportSort}
+          onChange={(event) => setYearlyRegionalReportSort(event.target.value)}
+          style={styles.searchInput}
+        >
+          <option value="qty">Highest quantity</option>
+          <option value="value">Highest value</option>
+          <option value="daily">Highest daily consumption</option>
+          <option value="product">Product name A-Z</option>
+        </select>
+      </div>
+
+      <div style={styles.card}>
+        <h3 style={styles.cardTitle}>📅 Month comparison</h3>
+
+        <div style={styles.viewModeBox}>
+          <button
+            style={{
+              ...styles.viewModeButton,
+              ...(yearlyRegionalReportMonths.length === 0
+                ? styles.viewModeButtonActive
+                : {}),
+            }}
+            onClick={() => setYearlyRegionalReportMonths([])}
+          >
+            All months
+          </button>
+
+          {yearlyRegionalMonthOptions.map((month) => {
+            const active =
+              yearlyRegionalReportMonths.length === 0 ||
+              yearlyRegionalReportMonths.includes(month.monthKey);
+
+            return (
+              <button
+                key={month.monthKey}
+                style={{
+                  ...styles.viewModeButton,
+                  ...(active ? styles.viewModeButtonActive : {}),
+                }}
+                onClick={() => toggleYearlyRegionalReportMonth(month.monthKey)}
+              >
+                {month.monthName}
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={styles.infoBox}>
+          <div>
+            📄 File:{" "}
+            <strong>{yearlyRegionalFileName || "Not loaded"}</strong>
+          </div>
+
+          <div>
+            📦 Product rows shown:{" "}
+            <strong>{yearlyRegionalConsumptionReportRows.length}</strong>
+          </div>
+
+          <div>
+            🧭 Region filter:{" "}
+            <strong>
+              {yearlyRegionalReportRegion === YEARLY_REGION_ALL
+                ? "All regions"
+                : yearlyRegionalReportRegion}
+            </strong>
+          </div>
+
+          <div>
+            🚢 Ship filter:{" "}
+            <strong>
+              {yearlyRegionalReportShip === YEARLY_REPORT_ALL_SHIPS
+                ? "All ships"
+                : yearlyRegionalReportShip}
+            </strong>
+          </div>
+
+          <div>
+            📅 Months selected:{" "}
+            <strong>
+              {yearlyRegionalReportMonths.length === 0
+                ? "All months"
+                : yearlyRegionalMonthOptions
+                    .filter((month) =>
+                      yearlyRegionalReportMonths.includes(month.monthKey)
+                    )
+                    .map((month) => month.monthName)
+                    .join(", ")}
+            </strong>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {yearlyRegionalConsumption &&
+      yearlyRegionalConsumptionReportRows.length === 0 && (
+        <p style={styles.emptyText}>
+          No yearly regional rows match the current filters.
+        </p>
+      )}
+
+    <div style={styles.costReportLineList}>
+      {yearlyRegionalConsumptionReportRows.map((item, index) => {
+        const activeMonthSet = new Set(yearlyRegionalActiveMonthKeys);
+        const visibleMonths = yearlyRegionalMonthOptions.filter((month) =>
+          activeMonthSet.has(month.monthKey)
+        );
+
+        return (
+          <div
+            key={`${item.productCode || item.productKey || item.productName}-${index}`}
+            style={styles.costReportLine}
+          >
+            <div style={styles.costLineMain}>
+              <div style={styles.costLineProduct}>
+                {item.productName || "Unnamed product"}
+              </div>
+
+              <div style={styles.costLineMeta}>
+                {item.productCode ? "Code: " + item.productCode + " • " : ""}
+                U/M: {item.unitMeasure || "N/A"}
+              </div>
+
+              <div style={styles.costLineMeta}>
+                {item.categoryName || "No category"}
+                {item.subCategoryName ? " • " + item.subCategoryName : ""}
+              </div>
+
+              <div style={styles.statusGood}>
+                Daily: {formatRegionalQty(item.avgDailyQty)} • Days:{" "}
+                {formatQty(item.totalDays)} • Blocks: {item.blocks}
+              </div>
+            </div>
+
+            <div style={styles.costLineTotals}>
+              <span>Total Qty</span>
+              <strong>{formatRegionalQty(item.totalQty)}</strong>
+              <span>{formatMoney(item.totalValue)}</span>
+              {item.avgPrice > 0 && (
+                <small>{formatMoney(item.avgPrice)} / unit</small>
+              )}
+            </div>
+
+            <div style={styles.costLineVenues}>
+              {visibleMonths.map((month) => {
+                const monthData = item.months?.[month.monthKey] || {};
+                const hasMonthData =
+                  Number(monthData.qty || 0) !== 0 ||
+                  Number(monthData.value || 0) !== 0;
+
+                return (
+                  <div key={month.monthKey} style={styles.costLineVenue}>
+                    <div style={styles.costLineVenueTitle}>{month.monthName}</div>
+
+                    {hasMonthData ? (
+                      <>
+                        <div style={styles.costLineShipChips}>
+                          <div style={styles.costLineShipChip}>
+                            <span style={styles.costLineShipName}>Qty</span>
+                            <strong>{formatRegionalQty(monthData.qty)}</strong>
+                          </div>
+
+                          <div style={styles.costLineShipChip}>
+                            <span style={styles.costLineShipName}>Value</span>
+                            <strong>{formatMoney(monthData.value)}</strong>
+                          </div>
+
+                          <div style={styles.costLineShipChip}>
+                            <span style={styles.costLineShipName}>Daily</span>
+                            <strong>
+                              {formatRegionalQty(monthData.avgDailyQty)}
+                            </strong>
+                          </div>
+
+                          <div style={styles.costLineShipChip}>
+                            <span style={styles.costLineShipName}>Days</span>
+                            <strong>{formatQty(monthData.days)}</strong>
+                          </div>
+                        </div>
+
+                        <div style={styles.costLinePriceNote}>
+                          Ships: {(monthData.ships || []).join(", ") || "N/A"}
+                        </div>
+
+                        <div style={styles.recipeMeta}>
+                          Regions: {(monthData.regions || []).join(", ") || "N/A"}
+                        </div>
+                      </>
+                    ) : (
+                      <div style={styles.statusNeutral}>No consumption</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </section>
+)}
       {productReportView === "main" && (
       <section style={styles.card}>
         <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 18 }}>
