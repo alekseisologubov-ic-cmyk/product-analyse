@@ -8794,25 +8794,27 @@ setCurrentInventoryItem({
       </div>
 
       <div>
-        🌎 Yearly regional file:{" "}
-        <strong>{yearlyRegionalFileName || "Not uploaded"}</strong>
-      </div>
+  🌎 Yearly regional file:{" "}
+  <strong>{yearlyRegionalFileName || "Not uploaded"}</strong>
+</div>
 
-      <div>
-        🧭 Selected region:{" "}
-        <strong>
-          {selectedRegionalConsumptionRegion === YEARLY_REGION_ALL
-            ? "All regions"
-            : selectedRegionalConsumptionRegion}
-        </strong>
-      </div>
+<div>
+  🧭 Selected region:{" "}
+  <strong>
+    {!selectedRegionalConsumptionRegion
+      ? "Not selected"
+      : selectedRegionalConsumptionRegion === YEARLY_REGION_ALL
+      ? "All regions"
+      : selectedRegionalConsumptionRegion}
+  </strong>
+</div>
 
-      <div>
-        📈 Regional matches:{" "}
-        <strong>
-          {dashboardRegionalMatchedCount} / {productCostReportRowsWithRegionalPar.length}
-        </strong>
-      </div>
+<div>
+  📈 Regional matches:{" "}
+  <strong>
+    {dashboardRegionalMatchedCount} / {productCostReportRowsWithRegionalPar.length}
+  </strong>
+</div>
 
       <div>
         🧮 Regional buffer:{" "}
