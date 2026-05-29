@@ -15,6 +15,15 @@ import {
   uploadIngredientByLocationFileToStorage,
 } from "./lib/permanentFiles";
 
+import {
+  YEARLY_REGION_ALL,
+  parseYearlyRegionalConsumptionWorkbook,
+  formatRegionalQty,
+} from "./lib/yearlyRegionalConsumption";
+
+import {
+  enrichDashboardProductsWithRegionalPar,
+} from "./lib/productDashboardRegionalHelpers";
 import MakeInventoryTopBar from "./components/equipment/MakeInventoryTopBar";
 import InventoryAiHelper from "./components/equipment/InventoryAiHelper";
 import EquipmentDepartmentOptions from "./components/equipment/EquipmentDepartmentOptions";
