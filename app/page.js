@@ -880,14 +880,46 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
   const buildProductList = (rows) =>
     [...new Set(rows.slice(1).map((r) => String(r[6] || "").trim()).filter(Boolean))].sort();
 
-  const readExcelFile = (file, callback) => {
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const wb = XLSX.read(evt.target.result, { type: "binary" });
-      callback(wb);
-    };
-    reader.readAsBinaryString(file);
+  const readExcelFile = (file, callback, onError) => {
+  const reader = new FileReader();
+
+  reader.onload = (evt) => {
+    try {
+      const result = evt.target?.result;
+
+      if (!result) {
+        throw new Error("The uploaded Excel file could not be read.");
+      }
+
+      const workbook = XLSX.read(result, {
+        type: "array",
+        cellDates: true,
+      });
+
+      callback(workbook);
+    } catch (error) {
+      const message = error?.message || "Could not read the Excel file.";
+
+      if (onError) {
+        onError(error);
+      } else {
+        window.alert(message);
+      }
+    }
   };
+
+  reader.onerror = () => {
+    const error = new Error("Could not open the uploaded file.");
+
+    if (onError) {
+      onError(error);
+    } else {
+      window.alert(error.message);
+    }
+  };
+
+  reader.readAsArrayBuffer(file);
+};
 
   const workbookToRows = (workbook) => {
     const ws = workbook.Sheets[workbook.SheetNames[0]];
