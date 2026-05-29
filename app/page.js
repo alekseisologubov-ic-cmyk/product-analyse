@@ -670,6 +670,10 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
   useEffect(() => {
     loadDefaultTemplate();
   }, []);
+  useEffect(() => {
+  loadPermanentYearlyRegionalConsumptionFile();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
 
   useEffect(() => {
     setMakeInventoryShip(userShip);
