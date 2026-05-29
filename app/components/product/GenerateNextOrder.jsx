@@ -2348,6 +2348,7 @@ const parLevelByRegionExportRows = parLevelByRegionRows.map((row, index) => ({
 
   const visibleNextOrderRows = filteredNextOrderRows.slice(0, reportDisplayLimit);
   const visibleOrderedVsSuggestedRows = orderedVsSuggestedRows.slice(0, reportDisplayLimit);
+  const visibleParLevelByRegionRows = parLevelByRegionRows.slice(0, reportDisplayLimit);
   const visibleFmlNotUsedRows = filteredFmlNotUsedRows.slice(0, reportDisplayLimit);
   const visibleFmlRunningLowRows = filteredFmlRunningLowRows.slice(0, reportDisplayLimit);
   const visibleFmlOrderedNotFmlRows = filteredFmlOrderedNotFmlRows.slice(0, reportDisplayLimit);
