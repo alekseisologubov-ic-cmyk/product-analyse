@@ -555,6 +555,14 @@ export default function App() {
   const [fmlLowRows, setFmlLowRows] = useState([]);
   const [fmlLowSearch, setFmlLowSearch] = useState("");
 
+  const [yearlyRegionalConsumption, setYearlyRegionalConsumption] = useState(null);
+const [yearlyRegionalFileName, setYearlyRegionalFileName] = useState("");
+const [yearlyRegionalMessage, setYearlyRegionalMessage] = useState(
+  "Upload yearly May 2025 - April 2026 consumption file to enable regional par suggestions."
+);
+const [selectedRegionalConsumptionRegion, setSelectedRegionalConsumptionRegion] =
+  useState(YEARLY_REGION_ALL);
+const [regionalParBufferPercent, setRegionalParBufferPercent] = useState(0);
   const [module, setModule] = useState("");
   const [productMode, setProductMode] = useState("");
   const [equipmentDepartment, setEquipmentDepartment] = useState("");
