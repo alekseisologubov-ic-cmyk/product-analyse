@@ -9044,7 +9044,7 @@ setCurrentInventoryItem({
               </div>
 
               <div style={styles.costLineVenues}>
-                {item.venues.map((venue) => (
+                {itemVenues.map((venue) => (
                   <div key={venue.venueKey} style={styles.costLineVenue}>
                     <div style={styles.costLineVenueTitle}>{venue.location}</div>
 
