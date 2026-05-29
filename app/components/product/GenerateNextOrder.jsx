@@ -15,23 +15,56 @@ const HISTORICAL_CONSUMPTION_COLUMNS = [35, 36, 37, 38, 39, 40]; // AJ:AO, 0-bas
 const CONSUMPTION_INCREASE_THRESHOLD_PERCENT = 25;
 const DEFAULT_REGIONAL_MESSAGE =
   "Upload yearly May 2025 - April 2026 consumption file to enable regional par suggestions.";
-const PAR_LEVEL_REGION_COLUMNS = [
-  {
-    key: "miami",
-    region: "MIAMI",
-    label: "Miami",
-  },
-  {
-    key: "la",
-    region: "LA",
-    label: "LA",
-  },
-  {
-    key: "barcelona",
-    region: "BARCELONA",
-    label: "Barcelona",
-  },
-];
+const makeParRegionKey = (region) =>
+  String(region || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase() || "region";
+
+const getParRegionLabel = (region) => {
+  const text = String(region || "").trim().toUpperCase();
+
+  if (!text) return "Region";
+  if (text === "LA") return "LA";
+  if (text === "NY" || text === "NEW YORK") return "NY";
+
+  return text
+    .toLowerCase()
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+};
+
+const getParLevelRegionColumns = (yearlyRegionalConsumption) => {
+  const detectedRegions = Array.from(
+    new Set((yearlyRegionalConsumption?.regionOptions || []).filter(Boolean))
+  );
+
+  const preferredOrder = [
+    "MIAMI",
+    "LA",
+    "BARCELONA",
+    "ATHENS",
+    "NEW YORK",
+    "NY",
+    "SAN JUAN",
+    "PORTSMOUTH",
+  ];
+
+  const orderedRegions = [
+    ...preferredOrder.filter((region) => detectedRegions.includes(region)),
+    ...detectedRegions
+      .filter((region) => !preferredOrder.includes(region))
+      .sort(),
+  ];
+
+  return orderedRegions.map((region) => ({
+    key: makeParRegionKey(region),
+    region,
+    label: getParRegionLabel(region),
+  }));
+};
 
 const cleanText = (value) =>
   String(value || "")
