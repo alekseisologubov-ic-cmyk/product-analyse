@@ -1419,7 +1419,12 @@ export default function GenerateNextOrder({
     () => applyRegionalRowsToOrderedNotFmlRows(fmlOrderedNotFmlRows, nextOrderRows),
     [fmlOrderedNotFmlRows, nextOrderRows]
   );
-  const parLevelByRegionRows = useMemo(() => {
+  const parLevelRegionColumns = useMemo(
+  () => getParLevelRegionColumns(yearlyRegionalConsumption),
+  [yearlyRegionalConsumption]
+);
+
+const parLevelByRegionRows = useMemo(() => {
   const query = nextOrderSearch.toLowerCase().trim();
   const activeVoyageDays = Number(nextOrderMeta.voyageDays || 14);
   const sourceRows = Array.isArray(baseNextOrderRows) ? baseNextOrderRows : [];
@@ -1451,9 +1456,8 @@ export default function GenerateNextOrder({
 
   const rows = sourceRows.map((row, index) => {
     const currentParLevel = Number(row.parLevel || 0);
-    const regionResults = {};
 
-    PAR_LEVEL_REGION_COLUMNS.forEach((regionColumn) => {
+    const regionResultsList = parLevelRegionColumns.map((regionColumn) => {
       const regionalPar = getSafeRegionalPar({
         row,
         region: regionColumn.region,
@@ -1462,7 +1466,8 @@ export default function GenerateNextOrder({
       const hasData = Boolean(regionalPar?.hasRegionalData);
       const suggestedParLevel = Number(regionalPar?.suggestedParLevel || 0);
 
-      regionResults[regionColumn.key] = {
+      return {
+        key: regionColumn.key,
         label: regionColumn.label,
         region: regionColumn.region,
         hasData,
@@ -1477,20 +1482,25 @@ export default function GenerateNextOrder({
       };
     });
 
-    const availableRegions = PAR_LEVEL_REGION_COLUMNS
-      .map((regionColumn) => regionResults[regionColumn.key])
-      .filter((item) => item.hasData);
+    const regionResults = {};
+    regionResultsList.forEach((item) => {
+      regionResults[item.key] = item;
+    });
+
+    const availableRegions = regionResultsList.filter((item) => item.hasData);
 
     const highestRegion = availableRegions.reduce((best, item) => {
       if (!best) return item;
       return item.suggestedParLevel > best.suggestedParLevel ? item : best;
     }, null);
 
-    const maxAbsoluteDifference = Math.max(
-      Math.abs(Number(regionResults.miami?.difference || 0)),
-      Math.abs(Number(regionResults.la?.difference || 0)),
-      Math.abs(Number(regionResults.barcelona?.difference || 0))
-    );
+    const maxAbsoluteDifference = availableRegions.length
+      ? Math.max(
+          ...availableRegions.map((item) =>
+            Math.abs(Number(item.difference || 0))
+          )
+        )
+      : 0;
 
     return {
       number: index + 1,
@@ -1508,36 +1518,21 @@ export default function GenerateNextOrder({
         ? Number(highestRegion.suggestedParLevel || 0) - currentParLevel
         : 0,
       maxAbsoluteDifference,
-
-      miamiHasData: Boolean(regionResults.miami?.hasData),
-      miamiParLevel: Number(regionResults.miami?.suggestedParLevel || 0),
-      miamiDifference: Number(regionResults.miami?.difference || 0),
-      miamiDaily: Number(regionResults.miami?.avgDailyQty || 0),
-      miamiTotalQty: Number(regionResults.miami?.totalQty || 0),
-      miamiTotalDays: Number(regionResults.miami?.totalDays || 0),
-      miamiEvidenceBlocks: Number(regionResults.miami?.evidenceBlocks || 0),
-
-      laHasData: Boolean(regionResults.la?.hasData),
-      laParLevel: Number(regionResults.la?.suggestedParLevel || 0),
-      laDifference: Number(regionResults.la?.difference || 0),
-      laDaily: Number(regionResults.la?.avgDailyQty || 0),
-      laTotalQty: Number(regionResults.la?.totalQty || 0),
-      laTotalDays: Number(regionResults.la?.totalDays || 0),
-      laEvidenceBlocks: Number(regionResults.la?.evidenceBlocks || 0),
-
-      barcelonaHasData: Boolean(regionResults.barcelona?.hasData),
-      barcelonaParLevel: Number(regionResults.barcelona?.suggestedParLevel || 0),
-      barcelonaDifference: Number(regionResults.barcelona?.difference || 0),
-      barcelonaDaily: Number(regionResults.barcelona?.avgDailyQty || 0),
-      barcelonaTotalQty: Number(regionResults.barcelona?.totalQty || 0),
-      barcelonaTotalDays: Number(regionResults.barcelona?.totalDays || 0),
-      barcelonaEvidenceBlocks: Number(regionResults.barcelona?.evidenceBlocks || 0),
+      regionResults,
+      regionResultsList,
     };
   });
 
   return rows
     .filter((row) => {
       if (!query) return true;
+
+      const regionText = row.regionResultsList
+        .map(
+          (item) =>
+            `${item.label} ${item.region} ${item.suggestedParLevel} ${item.difference}`
+        )
+        .join(" ");
 
       return [
         row.code,
@@ -1546,9 +1541,7 @@ export default function GenerateNextOrder({
         row.excelRow,
         row.highestRegion,
         String(row.currentParLevel),
-        String(row.miamiParLevel),
-        String(row.laParLevel),
-        String(row.barcelonaParLevel),
+        regionText,
       ]
         .join(" ")
         .toLowerCase()
@@ -1570,11 +1563,11 @@ export default function GenerateNextOrder({
 }, [
   baseNextOrderRows,
   yearlyRegionalConsumption,
+  parLevelRegionColumns,
   nextOrderMeta.voyageDays,
   regionalParBufferPercent,
   nextOrderSearch,
 ]);
-
   useEffect(() => {
     const loadDefaultTemplate = async () => {
       try {
