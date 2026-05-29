@@ -912,57 +912,17 @@ const getRegionalizedOrderRows = ({
   daysUntilArrival,
   bufferPercent,
 }) => {
-  return (orderRows || []).map((row) => {
-    const regionalPar = getRegionalParSuggestion({
-      yearlyRegionalConsumption,
-      productCode: row.code,
-      productName: row.product,
-      region: selectedRegion,
-      voyageDays,
-      bufferPercent,
-    });
+  const rows = Array.isArray(orderRows) ? orderRows : [];
+  const selectedRegionKey = String(selectedRegion || "").trim();
 
-    const hasRegionalData = Boolean(regionalPar?.hasRegionalData);
+  const hasYearlyRegionalData = Boolean(
+    yearlyRegionalConsumption &&
+      Array.isArray(yearlyRegionalConsumption.aggregates) &&
+      yearlyRegionalConsumption.aggregates.length > 0
+  );
 
-    if (!hasRegionalData) {
-      return recalculateOrderComparisonFields({
-        ...row,
-        standardAveragePerDay: Number(row.averagePerDay || 0),
-        standardUsageUntilArrival: Number(row.usageUntilArrival || 0),
-        standardAvailableAtArrival: Number(row.availableAtArrival || 0),
-        standardProjectedVoyageNeed: Number(row.projectedVoyageNeed || 0),
-        standardRawSuggested: Number(row.rawSuggested || 0),
-        standardSuggestedOrder: Number(row.suggestedOrder || 0),
-
-        regionalHasData: false,
-        regionalRegion: selectedRegion || YEARLY_REGION_ALL,
-        regionalTotalQty: 0,
-        regionalTotalDays: 0,
-        regionalAvgDailyQty: 0,
-        regionalSuggestedParLevel: 0,
-        regionalSuggestedOrder: 0,
-        regionalEvidenceBlocks: 0,
-        regionalMatchedProductName: "",
-        regionalMatchedProductCode: "",
-        regionalByShip: [],
-        suggestionBasis: "Current order file history",
-      });
-    }
-
-    const activeDaysUntilArrival = Number(daysUntilArrival || 0);
-    const regionalAveragePerDay = Number(regionalPar.avgDailyQty || 0);
-
-    const regionalUsageUntilArrival = regionalAveragePerDay * activeDaysUntilArrival;
-    const regionalSuggestedParLevel = Number(regionalPar.suggestedParLevel || 0);
-    const regionalAvailableAtArrival =
-      Number(row.stock || 0) + Number(row.futureOrders || 0) - regionalUsageUntilArrival;
-
-    const regionalSuggestedOrder = Math.max(
-      regionalSuggestedParLevel - regionalAvailableAtArrival,
-      0
-    );
-
-    const regionalizedRow = {
+  const makeFallbackRow = (row, basisLabel) =>
+    recalculateOrderComparisonFields({
       ...row,
 
       standardAveragePerDay: Number(row.averagePerDay || 0),
@@ -972,37 +932,129 @@ const getRegionalizedOrderRows = ({
       standardRawSuggested: Number(row.rawSuggested || 0),
       standardSuggestedOrder: Number(row.suggestedOrder || 0),
 
-      regionalHasData: true,
-      regionalRegion: selectedRegion || YEARLY_REGION_ALL,
-      regionalTotalQty: Number(regionalPar.totalQty || 0),
-      regionalTotalDays: Number(regionalPar.totalDays || 0),
-      regionalAvgDailyQty: regionalAveragePerDay,
-      regionalSuggestedParLevel,
-      regionalSuggestedOrder,
-      regionalEvidenceBlocks: Number(regionalPar.evidenceBlocks || 0),
-      regionalMatchedProductName: regionalPar.matchedProductName || "",
-      regionalMatchedProductCode: regionalPar.matchedProductCode || "",
-      regionalByShip: regionalPar.byShip || [],
+      regionalHasData: false,
+      regionalRegion: selectedRegionKey,
+      regionalTotalQty: 0,
+      regionalTotalDays: 0,
+      regionalAvgDailyQty: 0,
+      regionalSuggestedParLevel: 0,
+      regionalSuggestedOrder: 0,
+      regionalEvidenceBlocks: 0,
+      regionalMatchedProductName: "",
+      regionalMatchedProductCode: "",
+      regionalByShip: [],
 
-      averagePerDay: regionalAveragePerDay,
-      usageUntilArrival: regionalUsageUntilArrival,
-      availableAtArrival: regionalAvailableAtArrival,
-      projectedVoyageNeed: regionalSuggestedParLevel,
-      rawSuggested: regionalSuggestedOrder,
-      suggestedOrder: regionalSuggestedOrder,
-
-      parCapApplied: false,
-      parCapLimit: 0,
-      suggestionBasis: "Yearly regional consumption",
-    };
-
-    return recalculateOrderComparisonFields({
-      ...regionalizedRow,
-      ...getRegionalAlertFields(regionalizedRow),
+      suggestionBasis: basisLabel || "Current order file history",
     });
+
+  if (!rows.length) return [];
+
+  // Very important:
+  // Latest order upload must not calculate regional data until a region is selected.
+  // This prevents the page from using all regions/full year by mistake.
+  if (!selectedRegionKey) {
+    return rows.map((row) =>
+      makeFallbackRow(row, "Current order file history - no region selected")
+    );
+  }
+
+  // If yearly file is not loaded, keep normal order-file calculation.
+  if (!hasYearlyRegionalData) {
+    return rows.map((row) =>
+      makeFallbackRow(row, "Current order file history - yearly file not loaded")
+    );
+  }
+
+  return rows.map((row) => {
+    try {
+      const regionalPar = getRegionalParSuggestion({
+        yearlyRegionalConsumption,
+        productCode: row.code,
+        productName: row.product,
+        region: selectedRegionKey,
+        voyageDays,
+        bufferPercent,
+      });
+
+      const hasRegionalData = Boolean(regionalPar?.hasRegionalData);
+
+      if (!hasRegionalData) {
+        return makeFallbackRow(
+          row,
+          "Current order file history - no regional yearly match"
+        );
+      }
+
+      const activeDaysUntilArrival = Number(daysUntilArrival || 0);
+      const regionalAveragePerDay = Number(regionalPar.avgDailyQty || 0);
+
+      const regionalUsageUntilArrival =
+        regionalAveragePerDay * activeDaysUntilArrival;
+
+      const regionalSuggestedParLevel = Number(
+        regionalPar.suggestedParLevel || 0
+      );
+
+      const regionalAvailableAtArrival =
+        Number(row.stock || 0) +
+        Number(row.futureOrders || 0) -
+        regionalUsageUntilArrival;
+
+      const regionalSuggestedOrder = Math.max(
+        regionalSuggestedParLevel - regionalAvailableAtArrival,
+        0
+      );
+
+      const regionalizedRow = {
+        ...row,
+
+        standardAveragePerDay: Number(row.averagePerDay || 0),
+        standardUsageUntilArrival: Number(row.usageUntilArrival || 0),
+        standardAvailableAtArrival: Number(row.availableAtArrival || 0),
+        standardProjectedVoyageNeed: Number(row.projectedVoyageNeed || 0),
+        standardRawSuggested: Number(row.rawSuggested || 0),
+        standardSuggestedOrder: Number(row.suggestedOrder || 0),
+
+        regionalHasData: true,
+        regionalRegion: selectedRegionKey,
+        regionalTotalQty: Number(regionalPar.totalQty || 0),
+        regionalTotalDays: Number(regionalPar.totalDays || 0),
+        regionalAvgDailyQty: regionalAveragePerDay,
+        regionalSuggestedParLevel,
+        regionalSuggestedOrder,
+        regionalEvidenceBlocks: Number(regionalPar.evidenceBlocks || 0),
+        regionalMatchedProductName: regionalPar.matchedProductName || "",
+        regionalMatchedProductCode: regionalPar.matchedProductCode || "",
+        regionalByShip: Array.isArray(regionalPar.byShip)
+          ? regionalPar.byShip
+          : [],
+
+        averagePerDay: regionalAveragePerDay,
+        usageUntilArrival: regionalUsageUntilArrival,
+        availableAtArrival: regionalAvailableAtArrival,
+        projectedVoyageNeed: regionalSuggestedParLevel,
+        rawSuggested: regionalSuggestedOrder,
+        suggestedOrder: regionalSuggestedOrder,
+
+        parCapApplied: false,
+        parCapLimit: 0,
+        suggestionBasis: "Yearly regional consumption",
+      };
+
+      return recalculateOrderComparisonFields({
+        ...regionalizedRow,
+        ...getRegionalAlertFields(regionalizedRow),
+      });
+    } catch (error) {
+      console.error("Regional calculation failed for row:", row, error);
+
+      return makeFallbackRow(
+        row,
+        "Current order file history - regional calculation error"
+      );
+    }
   });
 };
-
 const buildOrderByCodeFromRows = (rows) => {
   const result = {};
 
