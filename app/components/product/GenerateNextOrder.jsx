@@ -2808,22 +2808,11 @@ const parLevelByRegionPrintColumns = [
       <button
         style={styles.backButton}
         onClick={() =>
-          printRows("Par Level by Region", parLevelByRegionExportRows, [
-            { key: "Number", label: "#" },
-            { key: "ExcelRow", label: "Row" },
-            { key: "Code", label: "Code" },
-            { key: "Product", label: "Product" },
-            { key: "UM", label: "U/M" },
-            { key: "CurrentParLevelColumnQ", label: "Current Par Q" },
-            { key: "MiamiSuggestedPar", label: "Miami Par" },
-            { key: "MiamiDifferenceVsCurrentPar", label: "Miami Diff" },
-            { key: "LASuggestedPar", label: "LA Par" },
-            { key: "LADifferenceVsCurrentPar", label: "LA Diff" },
-            { key: "BarcelonaSuggestedPar", label: "Barcelona Par" },
-            { key: "BarcelonaDifferenceVsCurrentPar", label: "Barcelona Diff" },
-            { key: "HighestRegionSuggested", label: "Highest Region" },
-            { key: "HighestSuggestedPar", label: "Highest Par" },
-          ])
+          printRows(
+  "Par Level by Region",
+  parLevelByRegionExportRows,
+  parLevelByRegionPrintColumns
+)
         }
       >
         🖨️ Print
