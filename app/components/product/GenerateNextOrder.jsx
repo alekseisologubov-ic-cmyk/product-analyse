@@ -2404,6 +2404,15 @@ const parLevelByRegionExportRows = parLevelByRegionRows.map((row, index) => ({
         >
           📊 Ordered vs Suggested ({orderedVsSuggestedRows.length})
         </button>
+        <button
+  style={{
+    ...styles.viewModeButton,
+    ...(nextOrderView === "parregion" ? styles.viewModeButtonActive : {}),
+  }}
+  onClick={() => setNextOrderView("parregion")}
+>
+  📏 Par by Region ({parLevelByRegionRows.length})
+</button>
 
         <button
           style={{
