@@ -4014,7 +4014,53 @@ for (let index = 0; index < items.length; index += 1) {
       });
     });
   };
+const uploadYearlyRegionalConsumptionFile = (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
 
+  setYearlyRegionalMessage("Preparing yearly regional consumption file...");
+
+  readExcelFile(file, (workbook) => {
+    try {
+      const parsed = parseYearlyRegionalConsumptionWorkbook(workbook);
+
+      setYearlyRegionalConsumption(parsed);
+      setYearlyRegionalFileName(file.name);
+
+      if (!parsed.regionOptions?.length) {
+        setSelectedRegionalConsumptionRegion(YEARLY_REGION_ALL);
+        setYearlyRegionalMessage(
+          "Yearly file loaded, but no regional ship blocks were detected. Check the header rows."
+        );
+      } else {
+        setYearlyRegionalMessage(
+          "Yearly regional file loaded. " +
+            parsed.aggregates.length +
+            " regional product records found across " +
+            parsed.regionOptions.length +
+            " region(s)."
+        );
+      }
+
+      logUsageEvent("yearly_regional_consumption_uploaded", {
+        module: "product_dashboard",
+        fileName: file.name,
+        sourceSheet: parsed.sourceSheet,
+        regions: parsed.regionOptions || [],
+        aggregates: parsed.aggregates.length,
+        shipRegionBlocks: parsed.shipRegionBlocks.length,
+      });
+    } catch (error) {
+      setYearlyRegionalConsumption(null);
+      setYearlyRegionalFileName("");
+      setYearlyRegionalMessage(
+        error?.message || "Could not prepare yearly regional consumption file."
+      );
+    }
+  });
+
+  e.target.value = "";
+};
   const loadPermanentIngredientByLocationForProductDashboard = async ({ silent = false } = {}) => {
   if (!supabase) {
     if (!silent) {
