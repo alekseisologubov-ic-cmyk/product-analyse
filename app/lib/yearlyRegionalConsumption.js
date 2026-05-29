@@ -490,30 +490,44 @@ const getParsedBlockFromCandidates = ({ candidates, monthInfo }) => {
 
     if (!text) return false;
     if (getMonthInfoFromText(text)) return false;
-    if (text === "PRICE" || text === "QTY" || text === "QUANTITY" || text === "VALUE") {
+
+    if (
+      text === "PRICE" ||
+      text === "QTY" ||
+      text === "QUANTITY" ||
+      text === "VALUE"
+    ) {
       return false;
     }
 
     return true;
   });
 
+  // First try each exact header candidate by itself.
+  // This prevents one region from mixing with another region.
   for (let i = 0; i < cleanCandidates.length; i += 1) {
     const parsed = parseShipRegionHeader({
       descriptor: cleanCandidates[i],
-      fallbackShip: cleanCandidates[i + 1] || cleanCandidates[i - 1] || "",
+      fallbackShip: "",
       monthInfo,
     });
 
     if (parsed) return parsed;
   }
 
-  const combined = cleanCandidates.join(" ");
+  // Fallback only for unusual files where ship and region are split
+  // inside the same 3-column PRICE/QTY/VALUE block.
+  for (let i = 0; i < cleanCandidates.length; i += 1) {
+    const parsed = parseShipRegionHeader({
+      descriptor: cleanCandidates[i],
+      fallbackShip: cleanCandidates[i + 1] || "",
+      monthInfo,
+    });
 
-  return parseShipRegionHeader({
-    descriptor: combined,
-    fallbackShip: "",
-    monthInfo,
-  });
+    if (parsed) return parsed;
+  }
+
+  return null;
 };
 
 const makeAggregateKey = ({ region, productCode, productKey }) =>
