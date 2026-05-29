@@ -569,6 +569,13 @@ const [yearlyRegionalMessage, setYearlyRegionalMessage] = useState(
 const [selectedRegionalConsumptionRegion, setSelectedRegionalConsumptionRegion] =
   useState("");
 const [regionalParBufferPercent, setRegionalParBufferPercent] = useState(0);
+  const [yearlyRegionalReportSearch, setYearlyRegionalReportSearch] = useState("");
+const [yearlyRegionalReportRegion, setYearlyRegionalReportRegion] =
+  useState(YEARLY_REGION_ALL);
+const [yearlyRegionalReportShip, setYearlyRegionalReportShip] =
+  useState(YEARLY_REPORT_ALL_SHIPS);
+const [yearlyRegionalReportMonths, setYearlyRegionalReportMonths] = useState([]);
+const [yearlyRegionalReportSort, setYearlyRegionalReportSort] = useState("qty");
 
 const [module, setModule] = useState("");
   const [productMode, setProductMode] = useState("");
