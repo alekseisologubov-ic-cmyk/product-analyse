@@ -2200,6 +2200,19 @@ export default function GenerateNextOrder({
             <div>📋 ERP template: <strong>{templateStatus}</strong></div>
             <div>📄 Order file: <strong>{nextOrderFileName || "Not uploaded"}</strong></div>
             <div>🌎 Yearly regional file: <strong>{yearlyRegionalFileName || "Not uploaded"}</strong></div>
+            <div>
+  🧭 Regions found:{" "}
+  <strong>
+    {(yearlyRegionalConsumption?.regionOptions || []).length
+      ? (yearlyRegionalConsumption?.regionOptions || []).join(", ")
+      : "No regions detected"}
+  </strong>
+</div>
+
+<div>
+  🧱 Region blocks found:{" "}
+  <strong>{yearlyRegionalConsumption?.shipRegionBlocks?.length || 0}</strong>
+</div>
             <div>🚢 Ship from B1: <strong>{getShipDisplayName(nextOrderMeta.shipCode) || "Not loaded"}</strong></div>
             <div>
   🧭 Selected region:{" "}
