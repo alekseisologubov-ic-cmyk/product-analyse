@@ -4094,6 +4094,67 @@ for (let index = 0; index < items.length; index += 1) {
 
   e.target.value = "";
 };
+  const loadPermanentYearlyRegionalConsumptionFile = async () => {
+  try {
+    setYearlyRegionalMessage("Loading permanent yearly regional consumption file...");
+
+    const response = await fetch("/yearly-regional-consumption.xlsx");
+
+    if (!response.ok) {
+      setYearlyRegionalConsumption(null);
+      setYearlyRegionalFileName("");
+      setYearlyRegionalMessage(
+        "Permanent yearly regional consumption file was not found. You can still upload it manually."
+      );
+      return;
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+
+    const workbook = XLSX.read(arrayBuffer, {
+      type: "array",
+      cellDates: true,
+    });
+
+    const parsed = parseYearlyRegionalConsumptionWorkbook(workbook);
+
+    setYearlyRegionalConsumption(parsed);
+    setYearlyRegionalFileName("yearly-regional-consumption.xlsx");
+
+    // Keep region blank by default so user must choose ATHENS / MIAMI / BARCELONA.
+    setSelectedRegionalConsumptionRegion("");
+
+    if (!parsed.regionOptions?.length) {
+      setYearlyRegionalMessage(
+        "Permanent yearly file loaded, but no regional ship blocks were detected. Check the header rows."
+      );
+      return;
+    }
+
+    setYearlyRegionalMessage(
+      "Permanent yearly regional file loaded. " +
+        parsed.aggregates.length +
+        " regional product records found across " +
+        parsed.regionOptions.length +
+        " region(s)."
+    );
+
+    logUsageEvent("permanent_yearly_regional_consumption_loaded", {
+      module: "product_dashboard",
+      fileName: "yearly-regional-consumption.xlsx",
+      sourceSheet: parsed.sourceSheet,
+      regions: parsed.regionOptions || [],
+      aggregates: parsed.aggregates.length,
+      shipRegionBlocks: parsed.shipRegionBlocks.length,
+    });
+  } catch (error) {
+    setYearlyRegionalConsumption(null);
+    setYearlyRegionalFileName("");
+    setYearlyRegionalMessage(
+      error?.message || "Could not load permanent yearly regional consumption file."
+    );
+  }
+};
   const loadPermanentIngredientByLocationForProductDashboard = async ({ silent = false } = {}) => {
   if (!supabase) {
     if (!silent) {
