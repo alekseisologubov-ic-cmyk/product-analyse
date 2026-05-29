@@ -26,6 +26,11 @@ export const getDashboardProductCode = (product) =>
     product?.productCode,
     product?.sku,
     product?.erpCode,
+    product?.inventoryCode,
+    product?.articleCode,
+    product?.Code,
+    product?.ITEM_CODE,
+    product?.PRODUCT_CODE,
     ""
   );
 
@@ -36,6 +41,23 @@ export const getDashboardProductName = (product) =>
     product?.name,
     product?.itemName,
     product?.description,
+    product?.Product,
+    product?.PRODUCT,
+    product?.PRODUCT_NAME,
+    product?.ITEM_NAME,
+    ""
+  );
+
+export const getDashboardProductUnit = (product) =>
+  firstValue(
+    product?.unit,
+    product?.um,
+    product?.uom,
+    product?.unitMeasure,
+    product?.unitOfMeasure,
+    product?.UM,
+    product?.UOM,
+    product?.UNIT,
     ""
   );
 
@@ -47,6 +69,16 @@ export const getDashboardProductParLevel = (product) =>
       product?.par,
       product?.parQty,
       product?.currentPar,
+      product?.currentParQty,
+      product?.qPar,
+      product?.q,
+      product?.PAR,
+      product?.PAR_LEVEL,
+      product?.CURRENT_PAR,
+      product?.CURRENT_PAR_LEVEL,
+      product?.par_level,
+      product?.current_par,
+      product?.current_par_level,
       0
     )
   );
@@ -61,6 +93,7 @@ export const enrichDashboardProductsWithRegionalPar = ({
   return (products || []).map((product) => {
     const productCode = getDashboardProductCode(product);
     const productName = getDashboardProductName(product);
+    const unit = getDashboardProductUnit(product);
     const currentParLevel = getDashboardProductParLevel(product);
 
     const regionalPar = getRegionalParSuggestion({
@@ -76,8 +109,17 @@ export const enrichDashboardProductsWithRegionalPar = ({
       regionalPar.suggestedParLevel || 0
     );
 
+    const regionalSuggestedParDifference =
+      regionalSuggestedParLevel - currentParLevel;
+
     return {
       ...product,
+
+      code: product?.code ?? productCode,
+      product: product?.product ?? productName,
+      unit: product?.unit ?? unit,
+
+      currentParLevel,
 
       regionalHasData: Boolean(regionalPar.hasRegionalData),
       regionalRegion: selectedRegion || YEARLY_REGION_ALL,
@@ -87,15 +129,12 @@ export const enrichDashboardProductsWithRegionalPar = ({
       regionalAvgDailyQty: Number(regionalPar.avgDailyQty || 0),
 
       regionalSuggestedParLevel,
-      regionalSuggestedParDifference:
-        regionalSuggestedParLevel - currentParLevel,
+      regionalSuggestedParDifference,
 
       regionalEvidenceBlocks: Number(regionalPar.evidenceBlocks || 0),
       regionalMatchedProductCode: regionalPar.matchedProductCode || "",
       regionalMatchedProductName: regionalPar.matchedProductName || "",
       regionalByShip: regionalPar.byShip || [],
-
-      currentParLevel,
 
       suggestionBasis: regionalPar.hasRegionalData
         ? "Yearly regional consumption"
@@ -109,6 +148,7 @@ export const buildDashboardRegionalExportRows = (products = []) =>
     Number: index + 1,
     Code: getDashboardProductCode(row),
     Product: getDashboardProductName(row),
+    UM: getDashboardProductUnit(row),
 
     Region:
       row.regionalRegion === YEARLY_REGION_ALL
@@ -154,3 +194,42 @@ export const getRegionalParCardLines = (row) => {
     )} days`,
   ];
 };
+
+export const getRegionalParSummaryText = (row) => {
+  if (!row?.regionalHasData) {
+    return "No yearly regional match";
+  }
+
+  return `Regional daily ${formatRegionalQty(
+    row.regionalAvgDailyQty
+  )}, suggested par ${formatRegionalQty(row.regionalSuggestedParLevel)}`;
+};
+
+export const getRegionalParStatus = (row) => {
+  if (!row?.regionalHasData) return "missing";
+
+  const difference = Number(row.regionalSuggestedParDifference || 0);
+
+  if (difference > 0) return "increase";
+  if (difference < 0) return "decrease";
+
+  return "same";
+};
+
+export const sortProductsByRegionalParDifference = (products = []) =>
+  [...products].sort((a, b) => {
+    const aHasData = a?.regionalHasData ? 1 : 0;
+    const bHasData = b?.regionalHasData ? 1 : 0;
+
+    if (aHasData !== bHasData) return bHasData - aHasData;
+
+    const diff =
+      Math.abs(Number(b?.regionalSuggestedParDifference || 0)) -
+      Math.abs(Number(a?.regionalSuggestedParDifference || 0));
+
+    if (diff !== 0) return diff;
+
+    return String(getDashboardProductName(a)).localeCompare(
+      String(getDashboardProductName(b))
+    );
+  });
