@@ -453,12 +453,6 @@ const getHeaderCandidatesForBlock = ({ rows, metricRowIndex, colIndex }) => {
   //
   // Do NOT read colIndex - 1 or colIndex - 2.
   // That can accidentally pull the previous ship/region header.
-  //
-  // Example:
-  // BR - New York | RL - Athens | SC - Portsmouth | VL - Miami
-  //
-  // For RL - Athens, only the RL block's 3 columns should be checked.
-  // It should not see BR - New York or SC - Portsmouth.
   for (let r = 0; r < metricRowIndex; r += 1) {
     for (let c = colIndex; c <= colIndex + 2; c += 1) {
       const text = safeText(rows[r]?.[c]);
