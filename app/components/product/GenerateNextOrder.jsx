@@ -1231,7 +1231,7 @@ export default function GenerateNextOrder({
   const [internalYearlyRegionalConsumption, setInternalYearlyRegionalConsumption] = useState(null);
   const [internalYearlyRegionalFileName, setInternalYearlyRegionalFileName] = useState("");
   const [internalSelectedRegionalConsumptionRegion, setInternalSelectedRegionalConsumptionRegion] =
-    useState(YEARLY_REGION_ALL);
+    useState("");
   const [internalRegionalParBufferPercent, setInternalRegionalParBufferPercent] = useState(0);
   const [yearlyRegionalMessage, setYearlyRegionalMessage] = useState(DEFAULT_REGIONAL_MESSAGE);
 
