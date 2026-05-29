@@ -1393,6 +1393,99 @@ export default function GenerateNextOrder({
 
     loadDefaultTemplate();
   }, []);
+  useEffect(() => {
+  let cancelled = false;
+
+  const loadPermanentYearlyRegionalConsumptionFile = async () => {
+    const alreadyLoaded =
+      Boolean(yearlyRegionalConsumption?.aggregates?.length) ||
+      Boolean(yearlyRegionalFileName);
+
+    if (alreadyLoaded) return;
+
+    try {
+      setYearlyRegionalMessage(
+        "Loading permanent yearly regional consumption file..."
+      );
+
+      const response = await fetch("/yearly-regional-consumption.xlsx", {
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        if (cancelled) return;
+
+        setYearlyRegionalConsumption(null);
+        setYearlyRegionalFileName("");
+        setYearlyRegionalMessage(
+          "Permanent yearly regional consumption file was not found. You can still upload it manually."
+        );
+        return;
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+
+      const workbook = XLSX.read(arrayBuffer, {
+        type: "array",
+        cellDates: true,
+      });
+
+      const parsed = parseYearlyRegionalConsumptionWorkbook(workbook);
+
+      if (cancelled) return;
+
+      setYearlyRegionalConsumption(parsed);
+      setYearlyRegionalFileName("yearly-regional-consumption.xlsx");
+
+      // Keep blank unless user already selected a real region.
+      // This prevents automatic All Regions / full-year calculation.
+      setSelectedRegionalConsumptionRegion((current) =>
+        current && current !== YEARLY_REGION_ALL ? current : ""
+      );
+
+      if (!parsed.regionOptions?.length) {
+        setYearlyRegionalMessage(
+          "Permanent yearly file loaded, but no regions were detected. Check the header rows."
+        );
+        return;
+      }
+
+      setYearlyRegionalMessage(
+        "Permanent yearly regional file loaded. " +
+          parsed.regionOptions.join(", ") +
+          ". " +
+          parsed.shipRegionBlocks.length +
+          " region block(s) found."
+      );
+
+      logUsageEvent("permanent_yearly_regional_consumption_loaded", {
+        module: "generate_next_order",
+        fileName: "yearly-regional-consumption.xlsx",
+        sourceSheet: parsed.sourceSheet,
+        regions: parsed.regionOptions || [],
+        aggregates: parsed.aggregates.length,
+        shipRegionBlocks: parsed.shipRegionBlocks.length,
+      });
+    } catch (error) {
+      if (cancelled) return;
+
+      setYearlyRegionalConsumption(null);
+      setYearlyRegionalFileName("");
+      setYearlyRegionalMessage(
+        error?.message ||
+          "Could not load permanent yearly regional consumption file."
+      );
+    }
+  };
+
+  loadPermanentYearlyRegionalConsumptionFile();
+
+  return () => {
+    cancelled = true;
+  };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
 
   useEffect(() => {
     setReportDisplayLimit(REPORT_RENDER_BATCH);
