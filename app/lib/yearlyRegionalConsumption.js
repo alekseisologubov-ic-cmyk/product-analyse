@@ -27,23 +27,28 @@ export const normalizeOrderCode = (value) => {
 
   if (!raw) return "";
 
-  const numberValue = Number(raw);
+  const cleaned = raw
+    .replace(/\.0+$/g, "")
+    .replace(/[^A-Z0-9]/gi, "")
+    .toUpperCase();
 
-  if (
-    Number.isFinite(numberValue) &&
-    raw.replace(/\.0+$/, "") === String(Math.trunc(numberValue))
-  ) {
-    return String(Math.trunc(numberValue));
+  if (!cleaned) return "";
+
+  if (/^\d+$/.test(cleaned)) {
+    return cleaned.replace(/^0+/, "") || "0";
   }
 
-  return cleanText(raw).replace(/\.0+$/, "");
+  return cleaned;
 };
 
 const PRODUCT_MATCH_STOP_WORDS = new Set([
   "FRESH",
+  "FROZEN",
+  "CHILLED",
   "BABY",
   "LARGE",
   "SMALL",
+  "MEDIUM",
   "REGULAR",
   "HYDROPONIC",
   "OR",
@@ -56,10 +61,13 @@ const PRODUCT_MATCH_STOP_WORDS = new Set([
   "LB",
   "KG",
   "G",
+  "GR",
   "OZ",
   "CS",
   "CASE",
   "BOX",
+  "BAG",
+  "BAGS",
   "PC",
   "PCS",
   "PK",
@@ -67,17 +75,25 @@ const PRODUCT_MATCH_STOP_WORDS = new Set([
   "CT",
   "EA",
   "EACH",
+  "UOM",
+  "UM",
 ]);
 
 const singularizeProductToken = (token) => {
   if (!token) return "";
-  if (token.length > 4 && token.endsWith("IES")) return `${token.slice(0, -3)}Y`;
+
+  if (token.length > 4 && token.endsWith("IES")) {
+    return `${token.slice(0, -3)}Y`;
+  }
+
   if (token.length > 4 && token.endsWith("ES") && !token.endsWith("SES")) {
     return token.slice(0, -2);
   }
+
   if (token.length > 3 && token.endsWith("S") && !token.endsWith("SS")) {
     return token.slice(0, -1);
   }
+
   return token;
 };
 
@@ -101,20 +117,53 @@ export const getProductReportKey = (value) => {
 };
 
 export const normalizeYearlyShipCode = (value) => {
-  const text = cleanText(value);
+  const text = cleanText(value).replace(/RESILIANT/g, "RESILIENT");
 
   if (!text) return "";
 
-  if (text === "BR" || text === "BRL" || text.includes("BRILLIANT")) return "BRL";
-  if (text === "RL" || text.includes("RESILIENT")) return "RL";
-  if (text === "SC" || text.includes("SCARLET")) return "SC";
-  if (text === "VL" || text === "V1" || text.includes("VALIANT")) return "VL";
+  if (text === "BR" || text === "BRL" || text.includes("BRILLIANT")) {
+    return "BRL";
+  }
 
-  return text;
+  if (text === "RL" || text.includes("RESILIENT")) {
+    return "RL";
+  }
+
+  if (text === "SC" || text === "SCL" || text.includes("SCARLET")) {
+    return "SC";
+  }
+
+  if (
+    text === "VL" ||
+    text === "V1" ||
+    text === "VAL" ||
+    text.includes("VALIANT")
+  ) {
+    return "VL";
+  }
+
+  return "";
 };
 
 export const normalizeRegionName = (value) => {
-  const text = cleanText(value)
+  const originalText = cleanText(value);
+
+  if (!originalText) return "";
+
+  if (
+    originalText === "A" ||
+    originalText === "NA" ||
+    originalText === "N/A" ||
+    originalText === "NONE" ||
+    originalText.includes("NOT IN OPERATION") ||
+    originalText.includes("NOT OPERATING") ||
+    originalText.includes("NO OPERATION") ||
+    originalText.includes("NO SAILING")
+  ) {
+    return "";
+  }
+
+  const text = originalText
     .replace(/\bHOME\s*PORT\b/g, "")
     .replace(/\bPORT\b/g, "")
     .replace(/\bDAYS?\b/g, "")
@@ -122,14 +171,23 @@ export const normalizeRegionName = (value) => {
     .replace(/\bDYAS?\b/g, "")
     .replace(/\bDYA\b/g, "")
     .replace(/\bDAYAS\b/g, "")
-    .replace(/\b5\s*DYAS\b/g, "")
-    .replace(/\b5\s*DAYS\b/g, "")
     .replace(/\b\d+\b/g, "")
     .replace(/[^A-Z ]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
   if (!text) return "";
+
+  if (
+    text === "A" ||
+    text === "NA" ||
+    text === "N A" ||
+    text === "NONE" ||
+    text.includes("NOT IN OPERATION") ||
+    text.includes("NOT OPERATING")
+  ) {
+    return "";
+  }
 
   if (text.includes("MIAMI")) return "MIAMI";
   if (text.includes("BARCELONA")) return "BARCELONA";
@@ -185,30 +243,100 @@ const extractDaysOverride = (value) => {
   return Number.isFinite(days) && days > 0 ? days : 0;
 };
 
-const parseShipRegionHeader = ({ descriptor, fallbackShip, monthInfo }) => {
-  const raw = safeText(descriptor);
+const extractShipPrefix = (value) => {
+  const raw = safeText(value);
 
   if (!raw) return null;
 
-  const text = cleanText(raw);
+  const match = raw.match(
+    /^\s*(BRL|BR|BRILLIANT LADY|BRILLIANT|RL|RESILIENT LADY|RESILIENT|SC|SCL|SCARLET LADY|SCARLET|VL|V1|VAL|VALIANT LADY|VALIANT)\b/i
+  );
 
-  if (!text || text.includes("TOTAL")) return null;
-  if (text.includes("NOT IN OPERATION")) return null;
+  if (!match) return null;
 
-  const parts = raw.split(/\s*-\s*/).map((part) => part.trim()).filter(Boolean);
+  const ship = normalizeYearlyShipCode(match[1]);
 
-  const shipText = parts[0] || fallbackShip || "";
-  const regionText = parts.length > 1 ? parts.slice(1).join(" - ") : "";
+  const rest = raw
+    .slice(match[0].length)
+    .replace(/^\s*[-:/]\s*/, "")
+    .trim();
 
-  const ship = normalizeYearlyShipCode(shipText || fallbackShip);
+  return {
+    ship,
+    rest,
+  };
+};
 
-  if (!ship || ship === "TOTAL") return null;
+const parseShipRegionHeader = ({ descriptor, fallbackShip, monthInfo }) => {
+  const raw = safeText(descriptor);
+  const fallbackRaw = safeText(fallbackShip);
+  const combinedText = cleanText([raw, fallbackRaw].filter(Boolean).join(" "));
+
+  if (!combinedText) return null;
+  if (combinedText.includes("TOTAL")) return null;
+
+  if (
+    /\b(NOT|NO)\s*(IN\s*)?(OPERATION|OPERATING|SAILING)\b/.test(combinedText) ||
+    /^(N\/?A|NA|A)$/.test(combinedText)
+  ) {
+    return null;
+  }
+
+  let ship = "";
+  let regionText = "";
+
+  const hyphenParts = raw
+    .split(/\s*-\s*/g)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (hyphenParts.length > 1) {
+    const shipFromLeft = normalizeYearlyShipCode(hyphenParts[0]);
+
+    if (shipFromLeft) {
+      ship = shipFromLeft;
+      regionText = hyphenParts.slice(1).join(" - ");
+    }
+  }
+
+  if (!ship) {
+    const prefix = extractShipPrefix(raw);
+
+    if (prefix?.ship) {
+      ship = prefix.ship;
+      regionText = prefix.rest;
+    }
+  }
+
+  if (!ship) {
+    ship = normalizeYearlyShipCode(fallbackRaw);
+    regionText = raw;
+  }
+
+  if (!ship) {
+    const fallbackPrefix = extractShipPrefix(fallbackRaw);
+
+    if (fallbackPrefix?.ship) {
+      ship = fallbackPrefix.ship;
+      regionText = raw || fallbackPrefix.rest;
+    }
+  }
+
+  if (!ship) return null;
+
+  if (!regionText) {
+    const fallbackPrefix = extractShipPrefix(fallbackRaw);
+    regionText = fallbackPrefix?.rest || "";
+  }
 
   const region = normalizeRegionName(regionText);
 
   if (!region) return null;
 
-  const daysOverride = extractDaysOverride(regionText);
+  const daysOverride = extractDaysOverride(
+    [raw, fallbackRaw, regionText].filter(Boolean).join(" ")
+  );
+
   const days = daysOverride || Number(monthInfo?.days || 0);
 
   if (!days) return null;
@@ -217,7 +345,7 @@ const parseShipRegionHeader = ({ descriptor, fallbackShip, monthInfo }) => {
     ship,
     region,
     days,
-    descriptor: raw,
+    descriptor: raw || fallbackRaw,
   };
 };
 
@@ -316,7 +444,6 @@ export const parseYearlyRegionalConsumptionWorkbook = (workbook) => {
   const productRows = rows.slice(3);
 
   let currentMonthInfo = null;
-
   const shipRegionBlocks = [];
 
   for (let colIndex = 8; colIndex < metricRow.length - 2; colIndex += 1) {
@@ -328,18 +455,38 @@ export const parseYearlyRegionalConsumptionWorkbook = (workbook) => {
       continue;
     }
 
-    currentMonthInfo = getMonthInfoFromHeader(monthRow[colIndex], currentMonthInfo);
+    currentMonthInfo = getMonthInfoFromHeader(
+      monthRow[colIndex],
+      currentMonthInfo
+    );
 
     if (!currentMonthInfo) continue;
 
-    const fallbackShip = shipRow[colIndex + 1];
-    const descriptor = shipRow[colIndex];
+    const descriptorCandidates = [
+      shipRow[colIndex],
+      shipRow[colIndex + 1],
+      shipRow[colIndex + 2],
+    ].filter((value) => safeText(value));
 
-    const parsed = parseShipRegionHeader({
-      descriptor,
-      fallbackShip,
-      monthInfo: currentMonthInfo,
-    });
+    let parsed = null;
+
+    for (let i = 0; i < descriptorCandidates.length; i += 1) {
+      parsed = parseShipRegionHeader({
+        descriptor: descriptorCandidates[i],
+        fallbackShip: descriptorCandidates[i + 1] || "",
+        monthInfo: currentMonthInfo,
+      });
+
+      if (parsed) break;
+    }
+
+    if (!parsed) {
+      parsed = parseShipRegionHeader({
+        descriptor: shipRow[colIndex],
+        fallbackShip: shipRow[colIndex + 1],
+        monthInfo: currentMonthInfo,
+      });
+    }
 
     if (!parsed) continue;
 
@@ -397,7 +544,6 @@ export const parseYearlyRegionalConsumptionWorkbook = (workbook) => {
       };
 
       detailRows.push(detail);
-
       addAggregate(aggregateMap, detail);
     });
   });
@@ -516,7 +662,9 @@ export const findRegionalConsumptionForProduct = ({
   let matches = [];
 
   if (codeKey) {
-    matches = candidates.filter((item) => normalizeOrderCode(item.productCode) === codeKey);
+    matches = candidates.filter(
+      (item) => normalizeOrderCode(item.productCode) === codeKey
+    );
   }
 
   if (!matches.length && productKey) {
@@ -563,7 +711,8 @@ export const getRegionalParSuggestion = ({
     };
   }
 
-  const suggestedParLevel = Number(match.avgDailyQty || 0) * days * bufferMultiplier;
+  const suggestedParLevel =
+    Number(match.avgDailyQty || 0) * days * bufferMultiplier;
 
   return {
     hasRegionalData: Number(match.totalDays || 0) > 0,
