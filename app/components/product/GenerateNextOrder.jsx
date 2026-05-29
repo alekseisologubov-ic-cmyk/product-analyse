@@ -2201,7 +2201,16 @@ export default function GenerateNextOrder({
             <div>📄 Order file: <strong>{nextOrderFileName || "Not uploaded"}</strong></div>
             <div>🌎 Yearly regional file: <strong>{yearlyRegionalFileName || "Not uploaded"}</strong></div>
             <div>🚢 Ship from B1: <strong>{getShipDisplayName(nextOrderMeta.shipCode) || "Not loaded"}</strong></div>
-            <div>🧭 Selected region: <strong>{selectedRegionalConsumptionRegion === YEARLY_REGION_ALL ? "All regions" : selectedRegionalConsumptionRegion}</strong></div>
+            <div>
+  🧭 Selected region:{" "}
+  <strong>
+    {!selectedRegionalConsumptionRegion
+      ? "Not selected"
+      : selectedRegionalConsumptionRegion === YEARLY_REGION_ALL
+      ? "All regions"
+      : selectedRegionalConsumptionRegion}
+  </strong>
+</div>
             <div>📅 Order day B2: <strong>{formatDate(nextOrderMeta.orderDate)}</strong></div>
             <div>📦 Arrival day B3: <strong>{formatDate(nextOrderMeta.arrivalDate)}</strong></div>
             <div>👥 Sailors B5: <strong>{formatQty(nextOrderMeta.sailors)}</strong></div>
