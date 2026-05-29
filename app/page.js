@@ -7262,6 +7262,14 @@ const filteredProductCostReportRows = useMemo(() => {
     setProductMode("");
   }}
   logUsageEvent={logUsageEvent}
+  yearlyRegionalConsumption={yearlyRegionalConsumption}
+  setYearlyRegionalConsumption={setYearlyRegionalConsumption}
+  yearlyRegionalFileName={yearlyRegionalFileName}
+  setYearlyRegionalFileName={setYearlyRegionalFileName}
+  selectedRegionalConsumptionRegion={selectedRegionalConsumptionRegion}
+  setSelectedRegionalConsumptionRegion={setSelectedRegionalConsumptionRegion}
+  regionalParBufferPercent={regionalParBufferPercent}
+  setRegionalParBufferPercent={setRegionalParBufferPercent}
 />
       </Suspense>
     );
