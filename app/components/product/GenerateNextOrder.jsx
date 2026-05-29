@@ -2187,7 +2187,46 @@ export default function GenerateNextOrder({
     DifferencePercent: row.orderDifferencePercent,
     Status: row.orderComparisonLabel,
   }));
+  
+const parLevelByRegionExportRows = parLevelByRegionRows.map((row, index) => ({
+  Number: index + 1,
+  ExcelRow: row.excelRow,
+  Code: row.code,
+  Product: row.product,
+  UM: row.unit,
 
+  CurrentParLevelColumnQ: row.currentParLevel,
+  VoyageDaysB6: row.voyageDays,
+  BufferPercent: row.bufferPercent,
+
+  MiamiHasData: row.miamiHasData ? "Yes" : "No",
+  MiamiRegionalDaily: row.miamiDaily,
+  MiamiTotalQty: row.miamiTotalQty,
+  MiamiTotalDays: row.miamiTotalDays,
+  MiamiEvidenceBlocks: row.miamiEvidenceBlocks,
+  MiamiSuggestedPar: row.miamiParLevel,
+  MiamiDifferenceVsCurrentPar: row.miamiDifference,
+
+  LAHasData: row.laHasData ? "Yes" : "No",
+  LARegionalDaily: row.laDaily,
+  LATotalQty: row.laTotalQty,
+  LATotalDays: row.laTotalDays,
+  LAEvidenceBlocks: row.laEvidenceBlocks,
+  LASuggestedPar: row.laParLevel,
+  LADifferenceVsCurrentPar: row.laDifference,
+
+  BarcelonaHasData: row.barcelonaHasData ? "Yes" : "No",
+  BarcelonaRegionalDaily: row.barcelonaDaily,
+  BarcelonaTotalQty: row.barcelonaTotalQty,
+  BarcelonaTotalDays: row.barcelonaTotalDays,
+  BarcelonaEvidenceBlocks: row.barcelonaEvidenceBlocks,
+  BarcelonaSuggestedPar: row.barcelonaParLevel,
+  BarcelonaDifferenceVsCurrentPar: row.barcelonaDifference,
+
+  HighestRegionSuggested: row.highestRegion,
+  HighestSuggestedPar: row.highestParLevel,
+  HighestDifferenceVsCurrentPar: row.highestDifference,
+}));
   const getConsumptionIncreaseExportRows = (rows, modeLabel) =>
     rows.map((row, index) => ({
       Number: index + 1,
