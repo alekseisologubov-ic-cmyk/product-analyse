@@ -4110,6 +4110,7 @@ for (let index = 0; index < items.length; index += 1) {
       setYearlyRegionalMessage(
         "Permanent yearly regional consumption file was not found. You can still upload it manually."
       );
+      const loadPermanentIngredientByLocationForProductDashboard = async ({ silent = false } = {}) => {
       return;
     }
 
