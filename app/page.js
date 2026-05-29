@@ -28,9 +28,6 @@ const PeopleScheduleModule = lazy(loadPeopleScheduleModule);
 
 const GenerateNextOrder = lazy(() => import("./components/GenerateNextOrder"));
 
-const GenerateNextOrder = lazy(() =>
-  import("./components/product/GenerateNextOrder")
-);
 const TemperatureCheckModule = lazy(() =>
   import("./components/temperature/TemperatureCheckModule")
 );
