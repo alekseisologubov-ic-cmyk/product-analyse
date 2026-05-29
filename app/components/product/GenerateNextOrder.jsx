@@ -2728,6 +2728,80 @@ const parLevelByRegionExportRows = parLevelByRegionRows.map((row, index) => ({
             </>
           )}
 
+          {nextOrderView === "parregion" && (
+  <>
+    <input
+      placeholder="Search par by region item, code, U/M, row, or region..."
+      value={nextOrderSearch}
+      onChange={(event) => setNextOrderSearch(event.target.value)}
+      style={styles.searchInput}
+    />
+
+    <div style={styles.infoBox}>
+      <div>
+        📏 Report: <strong>Current Par vs Regional Suggested Par</strong>
+      </div>
+      <div>
+        📘 Current par source: <strong>Latest order file column Q</strong>
+      </div>
+      <div>
+        🌎 Regional par source:{" "}
+        <strong>Yearly regional consumption May 2025 - April 2026</strong>
+      </div>
+      <div>
+        🧮 Formula:{" "}
+        <strong>regional daily consumption × voyage days B6 × buffer %</strong>
+      </div>
+      <div>
+        ➕ Positive difference:{" "}
+        <strong>regional par is higher than current par</strong>
+      </div>
+      <div>
+        ➖ Negative difference:{" "}
+        <strong>current par is higher than regional suggested par</strong>
+      </div>
+    </div>
+
+    <div style={styles.headerActions}>
+      <button
+        style={styles.backButton}
+        onClick={() =>
+          printRows("Par Level by Region", parLevelByRegionExportRows, [
+            { key: "Number", label: "#" },
+            { key: "ExcelRow", label: "Row" },
+            { key: "Code", label: "Code" },
+            { key: "Product", label: "Product" },
+            { key: "UM", label: "U/M" },
+            { key: "CurrentParLevelColumnQ", label: "Current Par Q" },
+            { key: "MiamiSuggestedPar", label: "Miami Par" },
+            { key: "MiamiDifferenceVsCurrentPar", label: "Miami Diff" },
+            { key: "LASuggestedPar", label: "LA Par" },
+            { key: "LADifferenceVsCurrentPar", label: "LA Diff" },
+            { key: "BarcelonaSuggestedPar", label: "Barcelona Par" },
+            { key: "BarcelonaDifferenceVsCurrentPar", label: "Barcelona Diff" },
+            { key: "HighestRegionSuggested", label: "Highest Region" },
+            { key: "HighestSuggestedPar", label: "Highest Par" },
+          ])
+        }
+      >
+        🖨️ Print
+      </button>
+
+      <button
+        style={styles.primaryButton}
+        onClick={() =>
+          exportRowsToExcel(
+            parLevelByRegionExportRows,
+            "Par by Region",
+            "par-level-by-region.xlsx"
+          )
+        }
+      >
+        📥 Export Excel
+      </button>
+    </div>
+  </>
+)}
           {nextOrderView === "increase1" && (
             <>
               <input
