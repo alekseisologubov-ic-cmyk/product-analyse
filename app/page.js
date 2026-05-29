@@ -9008,7 +9008,10 @@ setCurrentInventoryItem({
         )}
 
         <div style={styles.costReportLineList}>
-          {filteredProductCostReportRows.map((item) => (
+          {filteredProductCostReportRows.map((item) => {
+  const itemVenues = Array.isArray(item.venues) ? item.venues : [];
+
+  return (
             <div key={item.productKey} style={styles.costReportLine}>
               <div style={styles.costLineMain}>
   <div style={styles.costLineProduct}>{item.product}</div>
