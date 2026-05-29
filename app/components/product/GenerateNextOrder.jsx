@@ -3331,8 +3331,8 @@ const parLevelByRegionPrintColumns = [
 
     {parLevelByRegionRows.length === 0 && (
       <p style={styles.emptyText}>
-        Upload the latest order file to compare current par level against Miami,
-        LA, and Barcelona suggested regional par levels.
+        Upload the latest order file to compare current par level against all
+        yearly regions.
       </p>
     )}
 
@@ -3340,14 +3340,26 @@ const parLevelByRegionPrintColumns = [
       <div>
         📄 Order file: <strong>{nextOrderFileName || "Not uploaded"}</strong>
       </div>
+
       <div>
         🌎 Yearly regional file:{" "}
         <strong>{yearlyRegionalFileName || "Not loaded"}</strong>
       </div>
+
+      <div>
+        🧭 Regions in report:{" "}
+        <strong>
+          {parLevelRegionColumns.length
+            ? parLevelRegionColumns.map((item) => item.label).join(", ")
+            : "No regions detected"}
+        </strong>
+      </div>
+
       <div>
         🗓️ Voyage days B6 used for regional par:{" "}
         <strong>{formatQty(nextOrderMeta.voyageDays || 14)}</strong>
       </div>
+
       <div>
         🧮 Buffer: <strong>{formatQty(regionalParBufferPercent)}%</strong>
       </div>
@@ -3393,84 +3405,70 @@ const parLevelByRegionPrintColumns = [
               </div>
             </div>
 
-            <div style={localStyles.metricGrid}>
-              <div style={row.miamiHasData ? localStyles.metricBox : localStyles.metricBox}>
-                <span>Miami Par</span>
-                <strong>
-                  {row.miamiHasData ? formatRegionalQty(row.miamiParLevel) : "No data"}
-                </strong>
-              </div>
+            <div style={{ display: "grid", gap: 6 }}>
+              {row.regionResultsList.map((regionItem) => (
+                <div
+                  key={regionItem.key}
+                  style={{
+                    border: "1px solid #ddd",
+                    borderRadius: 10,
+                    padding: 6,
+                    background: "#fff",
+                    display: "grid",
+                    gap: 5,
+                  }}
+                >
+                  <div style={localStyles.categoryBadge}>
+                    {regionItem.label}
+                  </div>
 
-              <div style={getDifferenceStyle(row.miamiHasData, row.miamiDifference)}>
-                <span>Miami Diff</span>
-                <strong>
-                  {row.miamiHasData ? formatQty(row.miamiDifference) : "N/A"}
-                </strong>
-              </div>
+                  <div style={localStyles.metricGrid}>
+                    <div style={localStyles.metricBox}>
+                      <span>Suggested Par</span>
+                      <strong>
+                        {regionItem.hasData
+                          ? formatRegionalQty(regionItem.suggestedParLevel)
+                          : "No data"}
+                      </strong>
+                    </div>
 
-              <div style={localStyles.metricBox}>
-                <span>Miami Daily</span>
-                <strong>
-                  {row.miamiHasData ? formatRegionalQty(row.miamiDaily) : "N/A"}
-                </strong>
-              </div>
-            </div>
+                    <div
+                      style={getDifferenceStyle(
+                        regionItem.hasData,
+                        regionItem.difference
+                      )}
+                    >
+                      <span>Diff vs Q</span>
+                      <strong>
+                        {regionItem.hasData
+                          ? formatQty(regionItem.difference)
+                          : "N/A"}
+                      </strong>
+                    </div>
 
-            <div style={localStyles.metricGrid}>
-              <div style={localStyles.metricBox}>
-                <span>LA Par</span>
-                <strong>
-                  {row.laHasData ? formatRegionalQty(row.laParLevel) : "No data"}
-                </strong>
-              </div>
+                    <div style={localStyles.metricBox}>
+                      <span>Daily</span>
+                      <strong>
+                        {regionItem.hasData
+                          ? formatRegionalQty(regionItem.avgDailyQty)
+                          : "N/A"}
+                      </strong>
+                    </div>
+                  </div>
 
-              <div style={getDifferenceStyle(row.laHasData, row.laDifference)}>
-                <span>LA Diff</span>
-                <strong>
-                  {row.laHasData ? formatQty(row.laDifference) : "N/A"}
-                </strong>
-              </div>
-
-              <div style={localStyles.metricBox}>
-                <span>LA Daily</span>
-                <strong>
-                  {row.laHasData ? formatRegionalQty(row.laDaily) : "N/A"}
-                </strong>
-              </div>
-            </div>
-
-            <div style={localStyles.metricGrid}>
-              <div style={localStyles.metricBox}>
-                <span>Barcelona Par</span>
-                <strong>
-                  {row.barcelonaHasData
-                    ? formatRegionalQty(row.barcelonaParLevel)
-                    : "No data"}
-                </strong>
-              </div>
-
-              <div
-                style={getDifferenceStyle(
-                  row.barcelonaHasData,
-                  row.barcelonaDifference
-                )}
-              >
-                <span>Barcelona Diff</span>
-                <strong>
-                  {row.barcelonaHasData
-                    ? formatQty(row.barcelonaDifference)
-                    : "N/A"}
-                </strong>
-              </div>
-
-              <div style={localStyles.metricBox}>
-                <span>Barcelona Daily</span>
-                <strong>
-                  {row.barcelonaHasData
-                    ? formatRegionalQty(row.barcelonaDaily)
-                    : "N/A"}
-                </strong>
-              </div>
+                  {regionItem.hasData && (
+                    <div style={localStyles.calcStrip}>
+                      <div>
+                        Qty:{" "}
+                        <strong>{formatRegionalQty(regionItem.totalQty)}</strong>{" "}
+                        · Days:{" "}
+                        <strong>{formatQty(regionItem.totalDays)}</strong> ·
+                        Blocks: <strong>{regionItem.evidenceBlocks}</strong>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
 
             {row.hasAnyRegionalData ? (
