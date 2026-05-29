@@ -86,7 +86,7 @@ export const getDashboardProductParLevel = (product) =>
 export const enrichDashboardProductsWithRegionalPar = ({
   products,
   yearlyRegionalConsumption,
-  selectedRegion = YEARLY_REGION_ALL,
+  selectedRegion = "",
   voyageDays,
   bufferPercent = 0,
 }) => {
