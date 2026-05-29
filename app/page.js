@@ -24,6 +24,7 @@ import {
 import {
   enrichDashboardProductsWithRegionalPar,
 } from "./lib/productDashboardRegionalHelpers";
+
 import MakeInventoryTopBar from "./components/equipment/MakeInventoryTopBar";
 import InventoryAiHelper from "./components/equipment/InventoryAiHelper";
 import EquipmentDepartmentOptions from "./components/equipment/EquipmentDepartmentOptions";
@@ -40,9 +41,11 @@ const GenerateNextOrder = lazy(() => import("./components/GenerateNextOrder"));
 const TemperatureCheckModule = lazy(() =>
   import("./components/temperature/TemperatureCheckModule")
 );
+
 const TrainingModule = lazy(() =>
   import("./components/training/TrainingModule")
 );
+
 const AllergenModule = lazy(() =>
   import("./components/allergen/AllergenModule")
 );
