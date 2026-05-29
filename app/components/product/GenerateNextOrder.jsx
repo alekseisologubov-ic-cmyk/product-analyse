@@ -1522,123 +1522,155 @@ export default function GenerateNextOrder({
   };
 
   const uploadNextOrderFile = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const file = event.target.files?.[0];
+  if (!file) return;
 
-    setNextOrderLoading(true);
-    setFmlReportLoading(false);
-    setNextOrderMessage("Preparing next order report...");
-    setFmlReportMessage("");
+  setNextOrderLoading(true);
+  setFmlReportLoading(false);
+  setNextOrderMessage("Preparing next order report...");
+  setFmlReportMessage("");
+
+  try {
+    await yieldToBrowser();
+
+    let parsed;
 
     try {
-      await yieldToBrowser();
-
-      const parsed = await parseOrderFile(file);
-
-      setBaseNextOrderRows(parsed.orderRows);
-      setFmlSourceRows(parsed.fmlRows || []);
-      setFmlNotUsedRows([]);
-      setFmlRunningLowRows([]);
-      setFmlOrderedNotFmlRows(parsed.fmlOrderedNotFmlRows || []);
-      setFmlNotUsedPrepared(false);
-      setFmlRunningLowPrepared(false);
-      setNextOrderMeta(parsed.meta);
-      setNextOrderFileName(file.name);
-      setNextOrderSearch("");
-      setFmlSearch("");
-      setFmlLowSearch("");
-      setFmlOrderedNotFmlSearch("");
-      setNextOrderFilter("all");
-      setNextOrderView("order");
-      setNextOrderMessage(
-        "Order file loaded. " +
-          parsed.meta.totalItems +
-          " product rows found. " +
-          parsed.meta.itemsNeedingOrder +
-          " need order by the original order-file calculation. " +
-          parsed.meta.fmlOrderedNotFml +
-          " ordered item(s) are not in FML. Regional yearly consumption will be used for suggested order when a matching product and region are found. If no yearly regional match exists, the current order-file history remains the fallback."
+      parsed = await parseOrderFile(file);
+    } catch (parseError) {
+      throw new Error(
+        parseError?.message ||
+          "Could not read this latest order file. Please check that it is a valid Standard Order workbook."
       );
-
-      logUsageEvent("next_order_file_uploaded", {
-        module: "generate_next_order",
-        fileName: file.name,
-        ship: parsed.meta.shipCode,
-        totalItems: parsed.meta.totalItems,
-        fmlRows: (parsed.fmlRows || []).length,
-        orderedNotInFml: parsed.meta.fmlOrderedNotFml,
-      });
-
-      window.setTimeout(() => {
-        (async () => {
-          try {
-            setFmlReportLoading(true);
-            setFmlReportMessage("Preparing FML reports...");
-
-            const regionalRowsForFml = getRegionalizedOrderRows({
-              orderRows: parsed.orderRows || [],
-              yearlyRegionalConsumption,
-              selectedRegion: selectedRegionalConsumptionRegion,
-              voyageDays: parsed.meta.voyageDays,
-              daysUntilArrival: parsed.meta.daysUntilArrival,
-              bufferPercent: regionalParBufferPercent,
-            });
-
-            const regionalOrderByCodeForFml = buildOrderByCodeFromRows(regionalRowsForFml);
-
-            const notUsedRows = await buildFmlReportAsync({
-              mode: "notUsed",
-              fmlRows: parsed.fmlRows || [],
-              orderRows: regionalRowsForFml,
-              orderByCode: regionalOrderByCodeForFml,
-              templateEntries,
-              shipCode: parsed.meta.shipCode,
-              onProgress: setFmlReportMessage,
-            });
-
-            setFmlNotUsedRows(notUsedRows);
-            setFmlNotUsedPrepared(true);
-            setNextOrderMeta((prev) => ({ ...prev, fmlNotUsed: notUsedRows.length }));
-
-            const runningLowRows = await buildFmlReportAsync({
-              mode: "runningLow",
-              fmlRows: parsed.fmlRows || [],
-              orderRows: regionalRowsForFml,
-              orderByCode: regionalOrderByCodeForFml,
-              templateEntries,
-              shipCode: parsed.meta.shipCode,
-              onProgress: setFmlReportMessage,
-            });
-
-            setFmlRunningLowRows(runningLowRows);
-            setFmlRunningLowPrepared(true);
-            setNextOrderMeta((prev) => ({ ...prev, fmlRunningLow: runningLowRows.length }));
-            setFmlReportMessage(
-              "FML reports ready. Not used: " +
-                notUsedRows.length +
-                ", running low: " +
-                runningLowRows.length +
-                ", ordered not in FML: " +
-                (parsed.fmlOrderedNotFmlRows || []).length +
-                "."
-            );
-          } catch (error) {
-            setFmlReportMessage(error?.message || "Could not prepare FML reports.");
-          } finally {
-            setFmlReportLoading(false);
-          }
-        })();
-      }, 50);
-    } catch (error) {
-      setBaseNextOrderRows([]);
-      setFmlSourceRows([]);
-      resetFmlReports();
-      setNextOrderMessage(error?.message || "Could not prepare order file.");
-    } finally {
-      setNextOrderLoading(false);
-      event.target.value = "";
     }
-  };
+
+    if (!parsed || !Array.isArray(parsed.orderRows)) {
+      throw new Error(
+        "The latest order file was read, but no valid product rows were found."
+      );
+    }
+
+    setBaseNextOrderRows(parsed.orderRows);
+    setFmlSourceRows(parsed.fmlRows || []);
+    setFmlNotUsedRows([]);
+    setFmlRunningLowRows([]);
+    setFmlOrderedNotFmlRows(parsed.fmlOrderedNotFmlRows || []);
+    setFmlNotUsedPrepared(false);
+    setFmlRunningLowPrepared(false);
+    setNextOrderMeta(parsed.meta || {});
+    setNextOrderFileName(file.name);
+    setNextOrderSearch("");
+    setFmlSearch("");
+    setFmlLowSearch("");
+    setFmlOrderedNotFmlSearch("");
+    setNextOrderFilter("all");
+    setNextOrderView("order");
+
+    setNextOrderMessage(
+      "Order file loaded. " +
+        Number(parsed.meta?.totalItems || parsed.orderRows.length || 0) +
+        " product rows found. " +
+        Number(parsed.meta?.itemsNeedingOrder || 0) +
+        " need order by the original order-file calculation. " +
+        Number(parsed.meta?.fmlOrderedNotFml || 0) +
+        " ordered item(s) are not in FML. Select a region to apply yearly regional par suggestions."
+    );
+
+    logUsageEvent("next_order_file_uploaded", {
+      module: "generate_next_order",
+      fileName: file.name,
+      ship: parsed.meta?.shipCode || "",
+      totalItems: parsed.meta?.totalItems || parsed.orderRows.length || 0,
+      fmlRows: (parsed.fmlRows || []).length,
+      orderedNotInFml: parsed.meta?.fmlOrderedNotFml || 0,
+    });
+
+    window.setTimeout(() => {
+      (async () => {
+        try {
+          setFmlReportLoading(true);
+          setFmlReportMessage("Preparing FML reports...");
+
+          const regionalRowsForFml = getRegionalizedOrderRows({
+            orderRows: parsed.orderRows || [],
+            yearlyRegionalConsumption,
+            selectedRegion: selectedRegionalConsumptionRegion,
+            voyageDays: parsed.meta?.voyageDays || 0,
+            daysUntilArrival: parsed.meta?.daysUntilArrival || 0,
+            bufferPercent: regionalParBufferPercent,
+          });
+
+          const regionalOrderByCodeForFml =
+            buildOrderByCodeFromRows(regionalRowsForFml);
+
+          const notUsedRows = await buildFmlReportAsync({
+            mode: "notUsed",
+            fmlRows: parsed.fmlRows || [],
+            orderRows: regionalRowsForFml,
+            orderByCode: regionalOrderByCodeForFml,
+            templateEntries,
+            shipCode: parsed.meta?.shipCode || "",
+            onProgress: setFmlReportMessage,
+          });
+
+          setFmlNotUsedRows(notUsedRows);
+          setFmlNotUsedPrepared(true);
+          setNextOrderMeta((prev) => ({
+            ...prev,
+            fmlNotUsed: notUsedRows.length,
+          }));
+
+          const runningLowRows = await buildFmlReportAsync({
+            mode: "runningLow",
+            fmlRows: parsed.fmlRows || [],
+            orderRows: regionalRowsForFml,
+            orderByCode: regionalOrderByCodeForFml,
+            templateEntries,
+            shipCode: parsed.meta?.shipCode || "",
+            onProgress: setFmlReportMessage,
+          });
+
+          setFmlRunningLowRows(runningLowRows);
+          setFmlRunningLowPrepared(true);
+          setNextOrderMeta((prev) => ({
+            ...prev,
+            fmlRunningLow: runningLowRows.length,
+          }));
+
+          setFmlReportMessage(
+            "FML reports ready. Not used: " +
+              notUsedRows.length +
+              ", running low: " +
+              runningLowRows.length +
+              ", ordered not in FML: " +
+              (parsed.fmlOrderedNotFmlRows || []).length +
+              "."
+          );
+        } catch (error) {
+          console.error("Could not prepare FML reports:", error);
+          setFmlReportMessage(
+            error?.message || "Could not prepare FML reports."
+          );
+        } finally {
+          setFmlReportLoading(false);
+        }
+      })();
+    }, 50);
+  } catch (error) {
+    console.error("Could not prepare latest order file:", error);
+
+    setBaseNextOrderRows([]);
+    setFmlSourceRows([]);
+    resetFmlReports();
+
+    setNextOrderMessage(
+      error?.message || "Could not prepare order file."
+    );
+  } finally {
+    setNextOrderLoading(false);
+    event.target.value = "";
+  }
+};
 
   const prepareFmlReport = async (mode) => {
     if (!fmlSourceRows.length || !nextOrderRows.length) {
