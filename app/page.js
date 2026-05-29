@@ -7042,19 +7042,20 @@ const getEquipmentFallbackImage = (item) => {
         }
       >
         <GenerateNextOrder
-          styles={styles}
-          userShip={userShip}
-          onBack={() => {
-  if (equipmentDepartment) {
-    setModule("equipment");
-    setEquipmentMode("");
-    setProductMode("");
-    return;
-  }
+  styles={styles}
+  userShip={userShip}
+  onBack={() => {
+    if (equipmentDepartment) {
+      setModule("equipment");
+      setEquipmentMode("");
+      setProductMode("");
+      return;
+    }
 
-  setProductMode("");
-}}
-        />
+    setProductMode("");
+  }}
+  logUsageEvent={logUsageEvent}
+/>
       </Suspense>
     );
   }
