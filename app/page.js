@@ -9018,7 +9018,7 @@ setCurrentInventoryItem({
 
   <div style={styles.costLineMeta}>
     {item.code ? "Code: " + item.code + " • " : ""}
-    {item.venues.length} venue{item.venues.length === 1 ? "" : "s"}
+    {itemVenues.length} venue{itemVenues.length === 1 ? "" : "s"}
   </div>
 
   {item.regionalHasData ? (
