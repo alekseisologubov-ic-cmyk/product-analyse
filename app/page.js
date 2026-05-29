@@ -8752,18 +8752,19 @@ setCurrentInventoryItem({
     <label style={styles.label}>Region / home port</label>
 
     <select
-      value={selectedRegionalConsumptionRegion}
-      onChange={(e) => setSelectedRegionalConsumptionRegion(e.target.value)}
-      style={styles.searchInput}
-    >
-      <option value={YEARLY_REGION_ALL}>All regions</option>
+  value={selectedRegionalConsumptionRegion}
+  onChange={(e) => setSelectedRegionalConsumptionRegion(e.target.value)}
+  style={styles.searchInput}
+>
+  <option value="">Select region / origin</option>
+  <option value={YEARLY_REGION_ALL}>All regions</option>
 
-      {(yearlyRegionalConsumption?.regionOptions || []).map((region) => (
-        <option key={region} value={region}>
-          {region}
-        </option>
-      ))}
-    </select>
+  {(yearlyRegionalConsumption?.regionOptions || []).map((region) => (
+    <option key={region} value={region}>
+      {region}
+    </option>
+  ))}
+</select>
 
     <label style={styles.label}>Regional par buffer %</label>
 
