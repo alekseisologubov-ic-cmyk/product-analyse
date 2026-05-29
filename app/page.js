@@ -9381,6 +9381,18 @@ setCurrentInventoryItem({
         <strong>💰 Main Report</strong>
         <span>Consumption and cost by product, venue and ship</span>
       </button>
+        <button
+  style={{
+    ...styles.reportModeButton,
+    ...(productReportView === "yearlyRegional"
+      ? styles.reportModeButtonActive
+      : {}),
+  }}
+  onClick={() => setProductReportView("yearlyRegional")}
+>
+  <strong>🌎 Yearly Regional Consumption</strong>
+  <span>Consumption by month, region / home port, ship, and product</span>
+</button>
 
       <button
         style={{
