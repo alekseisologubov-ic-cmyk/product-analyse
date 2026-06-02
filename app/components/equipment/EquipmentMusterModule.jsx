@@ -1,9 +1,200 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 const cleanMusterSearchText = (value) =>
   String(value || "").toLowerCase().replace(/\s+/g, " ").trim();
+
+const getGoogleDriveId = (value) => {
+  const text = String(value || "").trim();
+
+  const fileMatch = text.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+  const idMatch = text.match(/[?&]id=([^&]+)/);
+
+  return fileMatch?.[1] || idMatch?.[1] || "";
+};
+
+const addUniqueImageCandidate = (list, value) => {
+  const text = String(value || "").trim();
+
+  if (!text) return;
+  if (list.includes(text)) return;
+
+  list.push(text);
+};
+
+const buildImageCandidates = ({
+  displayImage,
+  fallbackImage,
+  getImageSrc,
+  size = "w360",
+}) => {
+  const candidates = [];
+
+  [displayImage, fallbackImage].forEach((value) => {
+    const rawValue = String(value || "").trim();
+
+    if (!rawValue) return;
+
+    const convertedValue =
+      typeof getImageSrc === "function" ? getImageSrc(rawValue, size) : rawValue;
+
+    addUniqueImageCandidate(candidates, convertedValue);
+
+    const googleDriveId = getGoogleDriveId(rawValue);
+
+    if (googleDriveId) {
+      addUniqueImageCandidate(
+        candidates,
+        `https://drive.google.com/thumbnail?id=${googleDriveId}&sz=${size}`
+      );
+
+      addUniqueImageCandidate(
+        candidates,
+        `https://drive.google.com/uc?export=view&id=${googleDriveId}`
+      );
+    }
+
+    addUniqueImageCandidate(candidates, rawValue);
+  });
+
+  return candidates;
+};
+
+function MusterImagePreview({
+  styles,
+  item,
+  displayImage,
+  fallbackImage,
+  getImageSrc,
+  height = 150,
+  size = "w360",
+  showOpenButton = false,
+}) {
+  const [candidateIndex, setCandidateIndex] = useState(0);
+
+  const candidates = useMemo(
+    () =>
+      buildImageCandidates({
+        displayImage,
+        fallbackImage,
+        getImageSrc,
+        size,
+      }),
+    [displayImage, fallbackImage, getImageSrc, size]
+  );
+
+  const openCandidates = useMemo(
+    () =>
+      buildImageCandidates({
+        displayImage,
+        fallbackImage,
+        getImageSrc,
+        size: "w1200",
+      }),
+    [displayImage, fallbackImage, getImageSrc]
+  );
+
+  useEffect(() => {
+    setCandidateIndex(0);
+  }, [displayImage, fallbackImage]);
+
+  const previewSrc = candidates[candidateIndex] || "";
+  const openSrc = openCandidates[0] || candidates[0] || displayImage || fallbackImage || "";
+  const hasAnyImage = Boolean(displayImage || fallbackImage);
+  const previewUnavailable = hasAnyImage && !previewSrc;
+
+  const openPicture = (event) => {
+    event.stopPropagation();
+
+    if (!openSrc) return;
+
+    window.open(openSrc, "_blank", "noopener,noreferrer");
+  };
+
+  if (!hasAnyImage) {
+    return <div style={styles.equipmentNoImage}>No image</div>;
+  }
+
+  return (
+    <div>
+      {!previewUnavailable ? (
+        <div
+          style={{
+            width: "100%",
+            height,
+            borderRadius: 10,
+            overflow: "hidden",
+            background: "#eee",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <img
+            src={previewSrc}
+            alt={item?.name || "Equipment picture"}
+            loading="lazy"
+            decoding="async"
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              display: "block",
+              cursor: "pointer",
+              background: "#eee",
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
+              openPicture(event);
+            }}
+            onError={() => {
+              setCandidateIndex((currentIndex) => {
+                const nextIndex = currentIndex + 1;
+
+                if (nextIndex < candidates.length) {
+                  return nextIndex;
+                }
+
+                return candidates.length;
+              });
+            }}
+          />
+        </div>
+      ) : (
+        <div
+          style={{
+            width: "100%",
+            height,
+            borderRadius: 10,
+            background: "#eee",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#777",
+            fontWeight: "bold",
+            fontSize: 13,
+            textAlign: "center",
+            padding: 8,
+            boxSizing: "border-box",
+          }}
+        >
+          Picture preview unavailable
+        </div>
+      )}
+
+      {(showOpenButton || previewUnavailable) && openSrc && (
+        <button
+          type="button"
+          style={styles.imageButton}
+          onClick={openPicture}
+        >
+          Open Picture
+        </button>
+      )}
+    </div>
+  );
+}
 
 export default function EquipmentMusterModule({
   styles,
@@ -30,6 +221,8 @@ export default function EquipmentMusterModule({
   const [musterSearch, setMusterSearch] = useState("");
   const [selectedEquipment, setSelectedEquipment] = useState(null);
 
+  const departmentLabel = activeEquipmentDepartmentLabel || "Equipment";
+
   const shipDisplayName =
     typeof getShipDisplayName === "function"
       ? getShipDisplayName(userShip)
@@ -43,12 +236,16 @@ export default function EquipmentMusterModule({
 
     (musterItems || []).forEach((item) => {
       const searchText = cleanMusterSearchText(
-        `${item.sheetName || ""} ${item.category || ""} ${item.code || ""} ${item.name || ""}`
+        `${item.sheetName || ""} ${item.category || ""} ${item.code || ""} ${
+          item.name || ""
+        }`
       );
 
       if (query && !searchText.includes(query)) return;
 
-      const groupKey = `${item.sheetName || "Unknown Sheet"} / ${item.category || "Uncategorized"}`;
+      const groupKey = `${item.sheetName || "Unknown Sheet"} / ${
+        item.category || "Uncategorized"
+      }`;
 
       if (!grouped[groupKey]) {
         grouped[groupKey] = [];
@@ -70,7 +267,10 @@ export default function EquipmentMusterModule({
   );
 
   const sheetCount = useMemo(
-    () => [...new Set((musterItems || []).map((item) => item.sheetName))].filter(Boolean).length,
+    () =>
+      [...new Set((musterItems || []).map((item) => item.sheetName))].filter(
+        Boolean
+      ).length,
     [musterItems]
   );
 
@@ -79,15 +279,26 @@ export default function EquipmentMusterModule({
   const getDisplayImage = (item) =>
     typeof getEquipmentDisplayImage === "function"
       ? getEquipmentDisplayImage(item)
-      : item?.image || "";
+      : item?.image || item?.imageFallback || "";
 
   const getFallbackImage = (item) =>
     typeof getEquipmentFallbackImage === "function"
       ? getEquipmentFallbackImage(item)
       : item?.imageFallback || "";
 
-  const getImageSrc = (value) =>
-    typeof getImageUrl === "function" ? getImageUrl(value) : value;
+  const getImageSrc = (value, size = "w800") =>
+    typeof getImageUrl === "function" ? getImageUrl(value, size) : String(value || "").trim();
+
+  const openSelectedEquipment = (item) => {
+    const displayImage = getDisplayImage(item);
+    const fallbackImage = getFallbackImage(item);
+
+    setSelectedEquipment({
+      ...item,
+      image: displayImage,
+      imageFallback: fallbackImage,
+    });
+  };
 
   return (
     <main style={styles.page}>
@@ -99,7 +310,7 @@ export default function EquipmentMusterModule({
         />
 
         <div style={styles.headerActions}>
-          <button style={styles.backButton} onClick={onBack}>
+          <button type="button" style={styles.backButton} onClick={onBack}>
             ← Back
           </button>
 
@@ -120,6 +331,7 @@ export default function EquipmentMusterModule({
           />
 
           <button
+            type="button"
             style={styles.backButton}
             onClick={() => loadMasterInventoryItems(refreshShip)}
           >
@@ -129,6 +341,7 @@ export default function EquipmentMusterModule({
           {isAdmin && equipmentDepartment === "culinary" && (
             <>
               <button
+                type="button"
                 style={styles.backButton}
                 onClick={syncMasterInventoryPicturesFromDrive}
                 disabled={pictureLibraryBusy || masterInventoryLoading}
@@ -172,7 +385,10 @@ export default function EquipmentMusterModule({
             <div>
               🗂️ Groups shown: <strong>{groupCount}</strong>
             </div>
-            <div>C = Sub Category, D = Code, E = Name, I = Product Picture, H = backup only</div>
+            <div>
+              C = Sub Category, D = Code, E = Name, I = Product Picture, H =
+              backup only
+            </div>
           </div>
         </div>
 
@@ -193,18 +409,14 @@ export default function EquipmentMusterModule({
       </section>
 
       <section style={styles.card}>
-        <h2 style={styles.productTitle}>
-          📋 {activeEquipmentDepartmentLabel} Muster List
-        </h2>
+        <h2 style={styles.productTitle}>📋 {departmentLabel} Muster List</h2>
 
         {(musterItems || []).length === 0 && (
           <p style={styles.emptyText}>Upload the muster list file to begin.</p>
         )}
 
         {(musterItems || []).length > 0 && totalItems === 0 && (
-          <p style={styles.emptyText}>
-            No equipment matched your search.
-          </p>
+          <p style={styles.emptyText}>No equipment matched your search.</p>
         )}
 
         {Object.entries(groupedMuster || {}).map(([category, items]) => (
@@ -215,63 +427,33 @@ export default function EquipmentMusterModule({
               {items.map((item, index) => {
                 const displayImage = getDisplayImage(item);
                 const fallbackImage = getFallbackImage(item);
-                const imageSrc = displayImage ? getImageSrc(displayImage) : "";
-                const fallbackSrc =
-                  fallbackImage && fallbackImage !== displayImage
-                    ? getImageSrc(fallbackImage)
-                    : "";
 
                 return (
-                  <button
-                    key={`${item.sheetName || "sheet"}-${item.code || "code"}-${index}`}
+                  <div
+                    key={`${item.sheetName || "sheet"}-${
+                      item.code || "code"
+                    }-${index}`}
+                    role="button"
+                    tabIndex={0}
                     style={styles.equipmentCard}
-                    onClick={() =>
-                      setSelectedEquipment({
-                        ...item,
-                        image: displayImage,
-                        imageFallback: fallbackImage,
-                      })
-                    }
+                    onClick={() => openSelectedEquipment(item)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        openSelectedEquipment(item);
+                      }
+                    }}
                   >
-                    {displayImage ? (
-                      <div>
-                        <img
-                          src={imageSrc}
-                          alt={item.name}
-                          style={styles.equipmentImage}
-                          data-fallback-src={fallbackSrc}
-                          onError={(event) => {
-                            const nextSrc =
-                              event.currentTarget.dataset.fallbackSrc;
-
-                            if (
-                              nextSrc &&
-                              event.currentTarget.dataset.usedFallback !==
-                                "true"
-                            ) {
-                              event.currentTarget.dataset.usedFallback = "true";
-                              event.currentTarget.src = nextSrc;
-                              return;
-                            }
-
-                            event.currentTarget.style.display = "none";
-                            const link = event.currentTarget.nextElementSibling;
-                            if (link) link.style.display = "block";
-                          }}
-                        />
-
-                        <a
-                          href={fallbackImage || displayImage}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={styles.imageLink}
-                        >
-                          Open Picture
-                        </a>
-                      </div>
-                    ) : (
-                      <div style={styles.equipmentNoImage}>No image</div>
-                    )}
+                    <MusterImagePreview
+                      styles={styles}
+                      item={item}
+                      displayImage={displayImage}
+                      fallbackImage={fallbackImage}
+                      getImageSrc={getImageSrc}
+                      height={150}
+                      size="w360"
+                      showOpenButton={false}
+                    />
 
                     <div style={styles.recipeName}>{item.name}</div>
                     <div style={styles.recipeMeta}>
@@ -283,7 +465,7 @@ export default function EquipmentMusterModule({
                     <div style={styles.recipeMeta}>
                       Category: {item.category || "N/A"}
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -300,6 +482,7 @@ export default function EquipmentMusterModule({
               onClick={(event) => event.stopPropagation()}
             >
               <button
+                type="button"
                 style={styles.closeButton}
                 onClick={() => setSelectedEquipment(null)}
               >
@@ -319,54 +502,16 @@ export default function EquipmentMusterModule({
                 {selectedEquipment.category || "N/A"}
               </p>
 
-              {selectedEquipment.image || selectedEquipment.imageFallback ? (
-                <div>
-                  <img
-                    src={getImageSrc(
-                      selectedEquipment.image ||
-                        selectedEquipment.imageFallback
-                    )}
-                    alt={selectedEquipment.name}
-                    style={styles.modalImage}
-                    data-fallback-src={
-                      selectedEquipment.imageFallback
-                        ? getImageSrc(selectedEquipment.imageFallback)
-                        : ""
-                    }
-                    onError={(event) => {
-                      const fallbackSrc =
-                        event.currentTarget.dataset.fallbackSrc;
-
-                      if (
-                        fallbackSrc &&
-                        event.currentTarget.dataset.usedFallback !== "true"
-                      ) {
-                        event.currentTarget.dataset.usedFallback = "true";
-                        event.currentTarget.src = fallbackSrc;
-                        return;
-                      }
-
-                      event.currentTarget.style.display = "none";
-                      const link = event.currentTarget.nextElementSibling;
-                      if (link) link.style.display = "block";
-                    }}
-                  />
-
-                  <a
-                    href={
-                      selectedEquipment.imageFallback ||
-                      selectedEquipment.image
-                    }
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ ...styles.imageLink, display: "block" }}
-                  >
-                    Open Picture
-                  </a>
-                </div>
-              ) : (
-                <div style={styles.equipmentNoImage}>No image</div>
-              )}
+              <MusterImagePreview
+                styles={styles}
+                item={selectedEquipment}
+                displayImage={selectedEquipment.image}
+                fallbackImage={selectedEquipment.imageFallback}
+                getImageSrc={getImageSrc}
+                height={420}
+                size="w1200"
+                showOpenButton={true}
+              />
             </div>
           </div>
         )}
