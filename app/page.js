@@ -2315,6 +2315,103 @@ const getPersistentEquipmentImageUrl = async (item, scope, index) => {
   return "";
 };
 
+  const getEquipmentDepartmentLabelForState = (department) => {
+  const labels = {
+    culinary: "Culinary",
+    bar: "Bar",
+    restaurant: "Restaurant",
+  };
+
+  return labels[department] || "Equipment";
+};
+
+const getInventoryPictureCandidateCodesForSync = (item) => {
+  const candidates = [];
+
+  const addCandidate = (value) => {
+    const rawValue = String(value || "").trim();
+    if (!rawValue) return;
+
+    const numericKey = normalizeEquipmentPictureCode(rawValue);
+    const looseKey = getEquipmentImageMatchCode(rawValue);
+
+    [numericKey, looseKey].forEach((key) => {
+      const cleanKey = String(key || "").trim();
+      if (!cleanKey) return;
+      if (candidates.includes(cleanKey)) return;
+
+      candidates.push(cleanKey);
+    });
+
+    const numberMatches = rawValue.match(/\d{4,}/g) || [];
+
+    numberMatches.forEach((numberText) => {
+      const cleanNumber = String(numberText || "")
+        .replace(/^0+(?=\d)/g, "")
+        .trim();
+
+      if (!cleanNumber) return;
+      if (candidates.includes(cleanNumber)) return;
+
+      candidates.push(cleanNumber);
+    });
+  };
+
+  addCandidate(item?.code);
+  addCandidate(item?.name);
+  addCandidate(item?.pictureFileName);
+  addCandidate(item?.pictureMatchCode);
+  addCandidate(item?.category);
+  addCandidate(item?.sheetName);
+
+  return candidates;
+};
+
+const getPictureMatchForItemFromMap = (item, pictureMap = {}) => {
+  const candidateCodes = getInventoryPictureCandidateCodesForSync(item);
+
+  for (const codeKey of candidateCodes) {
+    const pictureUrl = pictureMap[codeKey];
+
+    if (pictureUrl) {
+      return {
+        codeKey,
+        pictureUrl,
+      };
+    }
+  }
+
+  return {
+    codeKey: "",
+    pictureUrl: "",
+  };
+};
+
+const attachPicturesFromLibraryToItems = (items = [], pictureMap = {}) => {
+  return (items || []).map((item) => {
+    const match = getPictureMatchForItemFromMap(item, pictureMap);
+
+    if (!match.pictureUrl) {
+      return item;
+    }
+
+    const currentImage = String(item.image || "").trim();
+    const currentFallback = String(item.imageFallback || "").trim();
+
+    const shouldReplaceCurrentImage =
+      !currentImage || isTemporaryGoogleThumbnail(currentImage);
+
+    return {
+      ...item,
+      image: shouldReplaceCurrentImage ? match.pictureUrl : currentImage,
+      imageFallback:
+        !shouldReplaceCurrentImage && currentImage !== match.pictureUrl
+          ? currentFallback || match.pictureUrl
+          : currentFallback || currentImage || "",
+      pictureMatchCode: match.codeKey,
+    };
+  });
+};
 const loadExistingMasterImagesByCode = async (scope) => {
   const imageByCode = {};
 
