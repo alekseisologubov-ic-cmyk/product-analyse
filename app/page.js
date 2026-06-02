@@ -4469,30 +4469,47 @@ setDrivePictureLibraryByCode(liveByCode);
 };
 
 const getEquipmentPictureFromLibrary = (item) => {
-  const codeKey = normalizeEquipmentPictureCode(item?.code);
-  return codeKey ? drivePictureLibraryByCode[codeKey] || "" : "";
-};
+  const numericCodeKey = normalizeEquipmentPictureCode(item?.code);
+  const looseCodeKey = getEquipmentImageMatchCode(item?.code);
 
-const getEquipmentDisplayImage = (item) =>
-  item?.image ||
-  item?.imageFallback ||
-  getEquipmentPictureFromLibrary(item) ||
-  "";
-
-const getEquipmentFallbackImage = (item) => {
-  const mainImage = item?.image || "";
-  const fallbackImage = item?.imageFallback || "";
-  const driveImage = getEquipmentPictureFromLibrary(item);
-
-  if (fallbackImage && fallbackImage !== mainImage) {
-    return fallbackImage;
+  if (numericCodeKey && drivePictureLibraryByCode[numericCodeKey]) {
+    return drivePictureLibraryByCode[numericCodeKey];
   }
 
-  if (driveImage && driveImage !== mainImage) {
-    return driveImage;
+  if (looseCodeKey && drivePictureLibraryByCode[looseCodeKey]) {
+    return drivePictureLibraryByCode[looseCodeKey];
   }
 
   return "";
+};
+
+const getEquipmentImageCandidates = (item) => {
+  const candidates = [
+    item?.image,
+    item?.imageFallback,
+    item?.photo,
+    item?.photoUrl,
+    item?.picture,
+    item?.pictureUrl,
+    item?.imageUrl,
+    getEquipmentPictureFromLibrary(item),
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .filter((value, index, array) => array.indexOf(value) === index)
+    .filter((value) => isUsableImageValue(value));
+
+  return candidates;
+};
+
+const getEquipmentDisplayImage = (item) => {
+  const candidates = getEquipmentImageCandidates(item);
+  return candidates[0] || "";
+};
+
+const getEquipmentFallbackImage = (item) => {
+  const candidates = getEquipmentImageCandidates(item);
+  return candidates[1] || "";
 };
   useEffect(() => {
   if (module !== "equipment") return;
