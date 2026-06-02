@@ -4478,16 +4478,55 @@ const isTemporaryGoogleThumbnail = (value) => {
   );
 };
 
+const getEquipmentPictureCandidateCodes = (item) => {
+  const candidates = [];
+
+  const addCandidate = (value) => {
+    const rawValue = String(value || "").trim();
+    if (!rawValue) return;
+
+    const numericKey = normalizeEquipmentPictureCode(rawValue);
+    const looseKey = getEquipmentImageMatchCode(rawValue);
+
+    [numericKey, looseKey].forEach((key) => {
+      const cleanKey = String(key || "").trim();
+
+      if (!cleanKey) return;
+      if (candidates.includes(cleanKey)) return;
+
+      candidates.push(cleanKey);
+    });
+
+    const numberMatches = rawValue.match(/\d{4,}/g) || [];
+
+    numberMatches.forEach((numberText) => {
+      const cleanNumber = String(numberText || "")
+        .replace(/^0+(?=\d)/g, "")
+        .trim();
+
+      if (!cleanNumber) return;
+      if (candidates.includes(cleanNumber)) return;
+
+      candidates.push(cleanNumber);
+    });
+  };
+
+  addCandidate(item?.code);
+  addCandidate(item?.name);
+  addCandidate(item?.pictureFileName);
+  addCandidate(item?.category);
+  addCandidate(item?.sheetName);
+
+  return candidates;
+};
+
 const getEquipmentPictureFromLibrary = (item) => {
-  const numericCodeKey = normalizeEquipmentPictureCode(item?.code);
-  const looseCodeKey = getEquipmentImageMatchCode(item?.code);
+  const candidateCodes = getEquipmentPictureCandidateCodes(item);
 
-  if (numericCodeKey && drivePictureLibraryByCode[numericCodeKey]) {
-    return drivePictureLibraryByCode[numericCodeKey];
-  }
-
-  if (looseCodeKey && drivePictureLibraryByCode[looseCodeKey]) {
-    return drivePictureLibraryByCode[looseCodeKey];
+  for (const codeKey of candidateCodes) {
+    if (drivePictureLibraryByCode[codeKey]) {
+      return drivePictureLibraryByCode[codeKey];
+    }
   }
 
   return "";
@@ -4496,7 +4535,7 @@ const getEquipmentPictureFromLibrary = (item) => {
 const getEquipmentImageCandidates = (item) => {
   const driveLibraryImage = getEquipmentPictureFromLibrary(item);
 
-  const stableCandidates = [
+  const rawCandidates = [
     driveLibraryImage,
     item?.image,
     item?.imageFallback,
@@ -4507,23 +4546,14 @@ const getEquipmentImageCandidates = (item) => {
     item?.imageUrl,
   ]
     .map((value) => String(value || "").trim())
-    .filter(Boolean)
+    .filter(Boolean);
+
+  const stableCandidates = rawCandidates
     .filter((value) => !isTemporaryGoogleThumbnail(value))
     .filter((value, index, array) => array.indexOf(value) === index)
     .filter((value) => isUsableImageValue(value));
 
-  const temporaryCandidates = [
-    driveLibraryImage,
-    item?.image,
-    item?.imageFallback,
-    item?.photo,
-    item?.photoUrl,
-    item?.picture,
-    item?.pictureUrl,
-    item?.imageUrl,
-  ]
-    .map((value) => String(value || "").trim())
-    .filter(Boolean)
+  const temporaryCandidates = rawCandidates
     .filter((value) => isTemporaryGoogleThumbnail(value))
     .filter((value, index, array) => array.indexOf(value) === index)
     .filter((value) => isUsableImageValue(value));
@@ -4536,6 +4566,10 @@ const getEquipmentDisplayImage = (item) => {
   return candidates[0] || "";
 };
 
+const getEquipmentFallbackImage = (item) => {
+  const candidates = getEquipmentImageCandidates(item);
+  return candidates[1] || candidates[2] || "";
+};
 const getEquipmentFallbackImage = (item) => {
   const candidates = getEquipmentImageCandidates(item);
   return candidates[1] || candidates[2] || "";
