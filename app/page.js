@@ -4351,14 +4351,18 @@ const uploadEquipmentPictureZipFile = async (event) => {
     const unmatchedCodes = [];
 
     const updatedItems = sourceItems.map((item) => {
-  const codeKeys = getEquipmentPictureCandidateCodes(item);
-  const matchedCodeKey = codeKeys.find((codeKey) =>
-    pictureByNumber.has(codeKey)
-  );
+  const codeKeys =
+    typeof getEquipmentPictureCandidateCodes === "function"
+      ? getEquipmentPictureCandidateCodes(item)
+      : [
+          normalizeEquipmentPictureCode(item?.code),
+          getEquipmentImageMatchCode(item?.code),
+        ].filter(Boolean);
 
-  const match = matchedCodeKey ? pictureByNumber.get(matchedCodeKey) : null;
+  const matchedCodeKey = codeKeys.find((codeKey) => pictureByCode[codeKey]);
+  const pictureUrl = matchedCodeKey ? pictureByCode[matchedCodeKey] : "";
 
-  if (!match) {
+  if (!pictureUrl) {
     if (codeKeys[0]) unmatchedCodes.push(codeKeys[0]);
     return item;
   }
@@ -4367,13 +4371,12 @@ const uploadEquipmentPictureZipFile = async (event) => {
 
   return {
     ...item,
-    image: match.webViewLink || match.imageUrl || match.thumbnailUrl || "",
+    image: pictureUrl,
     imageFallback: item.imageFallback || item.image || "",
-    pictureFileName: match.name,
+    pictureFileName: matchedCodeKey,
     pictureMatchCode: matchedCodeKey,
   };
 });
-
     setDrivePictureLibraryByCode((current) => ({
       ...current,
       ...pictureByCode,
