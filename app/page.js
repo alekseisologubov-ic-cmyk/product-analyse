@@ -2231,6 +2231,62 @@ const uploadEquipmentDataImageToStorage = async ({ dataUrl, scope, item, index }
   return data?.publicUrl || "";
 };
 
+  const uploadExtraInventoryPhotoToStorage = async ({
+  file,
+  ship,
+  station,
+  code,
+  name,
+}) => {
+  if (!supabase || !file) return "";
+
+  const fileName = String(file.name || "").toLowerCase();
+  const fileExtension =
+    fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")
+      ? "jpg"
+      : fileName.endsWith(".webp")
+      ? "webp"
+      : fileName.endsWith(".gif")
+      ? "gif"
+      : "png";
+
+  const contentType = file.type || "image/" + fileExtension;
+  const scope = getMasterInventoryScope(equipmentDepartment);
+  const stationPart = makeStorageSafePart(station || "station");
+  const itemPart = makeStorageSafePart(code || name || "extra-item");
+
+  const path =
+    scope +
+    "/extra-inventory/" +
+    makeStorageSafePart(ship || "ship") +
+    "/" +
+    stationPart +
+    "/" +
+    Date.now() +
+    "-" +
+    itemPart +
+    "." +
+    fileExtension;
+
+  const { error } = await supabase.storage
+    .from(EQUIPMENT_PICTURE_BUCKET)
+    .upload(path, file, {
+      contentType,
+      upsert: true,
+      cacheControl: "31536000",
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  const { data } = supabase.storage
+    .from(EQUIPMENT_PICTURE_BUCKET)
+    .getPublicUrl(path);
+
+  return data?.publicUrl || "";
+};
+
 const getPersistentEquipmentImageUrl = async (item, scope, index) => {
   const imageCandidates = [
     item?.image,
