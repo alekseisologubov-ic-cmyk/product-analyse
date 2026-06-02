@@ -4629,22 +4629,28 @@ const getEquipmentFallbackImage = (item) => {
       const unmatchedCodes = [];
 
       const updatedItems = sourceItems.map((item) => {
-        const codeKey = normalizeEquipmentPictureCode(item.code);
-        const match = codeKey ? pictureByNumber.get(codeKey) : null;
+  const codeKeys = getEquipmentPictureCandidateCodes(item);
+  const matchedCodeKey = codeKeys.find((codeKey) =>
+    pictureByNumber.has(codeKey)
+  );
 
-        if (!match) {
-          if (codeKey) unmatchedCodes.push(codeKey);
-          return item;
-        }
+  const match = matchedCodeKey ? pictureByNumber.get(matchedCodeKey) : null;
 
-        matchedCount += 1;
+  if (!match) {
+    if (codeKeys[0]) unmatchedCodes.push(codeKeys[0]);
+    return item;
+  }
 
-        return {
-          ...item,
-          image: match.webViewLink || match.imageUrl || match.thumbnailUrl || "",
-          pictureFileName: match.name,
-        };
-      });
+  matchedCount += 1;
+
+  return {
+    ...item,
+    image: match.webViewLink || match.imageUrl || match.thumbnailUrl || "",
+    imageFallback: item.imageFallback || item.image || "",
+    pictureFileName: match.name,
+    pictureMatchCode: matchedCodeKey,
+  };
+});
 
       setMakeInventoryItems(updatedItems);
       setMusterItems(updatedItems);
