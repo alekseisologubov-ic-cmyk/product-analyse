@@ -2154,43 +2154,134 @@ const imageFallback = imageCandidates.find((value) => value !== image) || "";
     equipmentDepartment === "bar" ? "bar" : "station";
 
   const loadMasterInventoryItems = async (shipOverride) => {
-    if (!supabase) {
-      setMakeInventoryMessage("Supabase is not connected. Shared master inventory cannot load.");
-      return;
+  if (!supabase) {
+    const text =
+      "Supabase is not connected. Shared master inventory cannot load.";
+
+    setMakeInventoryMessage(text);
+    setMusterMessage(text);
+    setMasterInventorySource("Supabase is not connected.");
+    return;
+  }
+
+  const activeDepartment = equipmentDepartment || "culinary";
+  const masterScope = getMasterInventoryScope(activeDepartment);
+  const departmentLabel = getEquipmentDepartmentLabelForState(activeDepartment);
+
+  setMasterInventoryLoading(true);
+  setMakeInventoryMessage("Loading shared " + departmentLabel + " master list...");
+
+  const loadForScope = async (scope) =>
+    supabase
+      .from("inventory_master_items")
+      .select("*")
+      .eq("ship", scope)
+      .order("sort_order", { ascending: true });
+
+  try {
+    let { data, error } = await loadForScope(masterScope);
+    let sourceText =
+      "Shared " + departmentLabel + " master list loaded for all users.";
+
+    if (error) {
+      throw error;
     }
 
-    setMasterInventoryLoading(true);
-
-    const loadForScope = async (scope) =>
-      supabase
-        .from("inventory_master_items")
-        .select("*")
-        .eq("ship", scope)
-        .order("sort_order", { ascending: true });
-
-    const masterScope = getMasterInventoryScope(equipmentDepartment);
-    const departmentLabel = activeEquipmentDepartmentLabel || "Equipment";
-
-    let { data, error } = await loadForScope(masterScope);
-    let sourceText = "Shared " + departmentLabel + " master list loaded for all users.";
-
-    if (!error && (!data || data.length === 0) && shipOverride) {
+    if ((!data || data.length === 0) && shipOverride) {
       const legacyResult = await loadForScope(shipOverride);
+
       if (!legacyResult.error && legacyResult.data?.length) {
         data = legacyResult.data;
-        sourceText = "Legacy shared master list loaded for " + shipOverride + ". Upload again to make it shared by department.";
+        sourceText =
+          "Legacy shared master list loaded for " +
+          shipOverride +
+          ". Upload again from Muster List to make it shared by department.";
       }
     }
 
-    if (error) {
-      setMasterInventoryLoading(false);
-      setMakeInventoryMessage(`Could not load shared master inventory: ${error.message}`);
-      return;
+    let items = (data || []).map(normalizeMasterInventoryRecord);
+
+    setMakeInventoryItems(items);
+    setMusterItems(items);
+    setMasterInventorySource(
+      items.length ? sourceText : "No shared master list uploaded yet."
+    );
+    setMusterMessage(
+      items.length
+        ? sourceText + " " + items.length + " item(s) available."
+        : "No shared master list uploaded yet."
+    );
+    setMakeInventoryMessage(
+      items.length
+        ? sourceText + " " + items.length + " item(s) loaded."
+        : "No shared master list uploaded yet."
+    );
+
+    // Important: picture sync happens AFTER the master list loads.
+    // If picture sync fails, the equipment list still stays loaded.
+    if (activeDepartment === "culinary" && items.length > 0) {
+      try {
+        const pictureMap =
+          Object.keys(drivePictureLibraryByCode || {}).length > 0
+            ? drivePictureLibraryByCode
+            : await loadDrivePictureLibrary({ silent: true });
+
+        if (Object.keys(pictureMap || {}).length > 0) {
+          const itemsWithPictures = attachPicturesFromLibraryToItems(
+            items,
+            pictureMap
+          );
+
+          const matchedPictureCount = itemsWithPictures.filter((item) => {
+            const match = getPictureMatchForItemFromMap(item, pictureMap);
+            return Boolean(match.pictureUrl);
+          }).length;
+
+          setMakeInventoryItems(itemsWithPictures);
+          setMusterItems(itemsWithPictures);
+
+          setMakeInventoryMessage(
+            sourceText +
+              " " +
+              itemsWithPictures.length +
+              " item(s) loaded. Pictures matched: " +
+              matchedPictureCount +
+              "."
+          );
+
+          setMusterMessage(
+            sourceText +
+              " " +
+              itemsWithPictures.length +
+              " item(s) loaded. Pictures matched: " +
+              matchedPictureCount +
+              "."
+          );
+        }
+      } catch (pictureError) {
+        setPictureLibraryMessage(
+          "Master list loaded, but pictures could not sync: " +
+            (pictureError?.message || "Unknown picture sync error")
+        );
+      }
     }
+  } catch (error) {
+    const text =
+      "Could not load shared " +
+      departmentLabel +
+      " master inventory: " +
+      (error?.message || "Unknown error");
 
-    const items = (data || []).map(normalizeMasterInventoryRecord);
-  };
-
+    setMakeInventoryItems([]);
+    setMusterItems([]);
+    setMasterInventorySource("Master list failed to load.");
+    setMakeInventoryMessage(text);
+    setMusterMessage(text);
+    window.alert(text);
+  } finally {
+    setMasterInventoryLoading(false);
+  }
+};
 const uploadEquipmentDataImageToStorage = async ({ dataUrl, scope, item, index }) => {
   const value = String(dataUrl || "").trim();
 
