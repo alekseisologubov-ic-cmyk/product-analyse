@@ -4228,14 +4228,6 @@ const inventoryRecordMatchesCurrentDepartment = (item) =>
     });
   };
 
-    const normalizeEquipmentPictureCode = (value) => {
-  const text = String(value || "")
-    .trim()
-    .replace(/\.0+$/g, "");
-
-  const match = text.match(/\d{4,}/);
-  return match ? match[0].replace(/^0+/, "") : "";
-};
 const getZipImageMimeType = (fileName) => {
   const text = String(fileName || "").toLowerCase();
 
