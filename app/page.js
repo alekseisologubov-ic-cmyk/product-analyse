@@ -32,6 +32,16 @@ import {
   getMasterInventoryScope,
 } from "./constants/inventoryConfig";
 
+import {
+  buildInventoryQtyMap,
+  getEquipmentDepartmentKey,
+  getInventoryProductGroupKey,
+  inventoryRecordMatchesDepartment,
+  normalizeInventoryRecord,
+  normalizeInventoryStationStatusRecord,
+  normalizeMasterInventoryRecord,
+} from "./lib/inventoryHelpers";
+
 import MakeInventoryTopBar from "./components/equipment/MakeInventoryTopBar";
 import InventoryAiHelper from "./components/equipment/InventoryAiHelper";
 import EquipmentDepartmentOptions from "./components/equipment/EquipmentDepartmentOptions";
