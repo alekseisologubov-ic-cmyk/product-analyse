@@ -4351,23 +4351,28 @@ const uploadEquipmentPictureZipFile = async (event) => {
     const unmatchedCodes = [];
 
     const updatedItems = sourceItems.map((item) => {
-      const codeKey = normalizeEquipmentPictureCode(item.code);
-      const pictureUrl = codeKey ? pictureByCode[codeKey] : "";
+  const codeKeys = getEquipmentPictureCandidateCodes(item);
+  const matchedCodeKey = codeKeys.find((codeKey) =>
+    pictureByNumber.has(codeKey)
+  );
 
-      if (!pictureUrl) {
-        if (codeKey) unmatchedCodes.push(codeKey);
-        return item;
-      }
+  const match = matchedCodeKey ? pictureByNumber.get(matchedCodeKey) : null;
 
-      matchedCount += 1;
+  if (!match) {
+    if (codeKeys[0]) unmatchedCodes.push(codeKeys[0]);
+    return item;
+  }
 
-      return {
-        ...item,
-        image: pictureUrl,
-        imageFallback: item.imageFallback || item.image || "",
-        pictureFileName: `${codeKey}`,
-      };
-    });
+  matchedCount += 1;
+
+  return {
+    ...item,
+    image: match.webViewLink || match.imageUrl || match.thumbnailUrl || "",
+    imageFallback: item.imageFallback || item.image || "",
+    pictureFileName: match.name,
+    pictureMatchCode: matchedCodeKey,
+  };
+});
 
     setDrivePictureLibraryByCode((current) => ({
       ...current,
