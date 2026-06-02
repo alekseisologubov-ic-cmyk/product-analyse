@@ -4228,15 +4228,6 @@ const inventoryRecordMatchesCurrentDepartment = (item) =>
     });
   };
 
-const getZipImageMimeType = (fileName) => {
-  const text = String(fileName || "").toLowerCase();
-
-  if (text.endsWith(".jpg") || text.endsWith(".jpeg")) return "image/jpeg";
-  if (text.endsWith(".webp")) return "image/webp";
-  if (text.endsWith(".gif")) return "image/gif";
-  return "image/png";
-};
-
 const getZipImageExtension = (fileName) => {
   const text = String(fileName || "").toLowerCase();
 
