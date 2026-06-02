@@ -5116,96 +5116,59 @@ const getEquipmentFallbackImage = (item) => {
   const sourceItems = makeInventoryItems.length ? makeInventoryItems : musterItems;
 
   if (!sourceItems.length) {
-    const text = "No master inventory items found. Upload or refresh the master list first.";
+    const text =
+      "No master inventory items found. Refresh the shared master list first.";
+
     setPictureLibraryMessage(text);
     window.alert(text);
     return;
   }
 
   setPictureLibraryBusy(true);
-  setPictureLibraryMessage("Loading Google Drive picture library...");
+  setPictureLibraryMessage("Loading picture library and matching pictures...");
 
   try {
-    const response = await fetch("/api/drive-picture-library");
-    const data = await response.json();
+    const pictureMap = await loadDrivePictureLibrary({ silent: true });
 
-    if (!response.ok) {
-      throw new Error(data?.error || "Could not load picture library.");
+    if (!Object.keys(pictureMap || {}).length) {
+      throw new Error(
+        "Picture library loaded, but no picture code keys were prepared."
+      );
     }
 
-    const pictureByNumber = new Map();
+    const updatedItems = attachPicturesFromLibraryToItems(
+      sourceItems,
+      pictureMap
+    );
 
-    (data.files || []).forEach((file) => {
-      (file.numbers || []).forEach((number) => {
-        const rawNumber = String(number || "").trim();
-        const cleanNumber = rawNumber.replace(/^0+(?=\d)/g, "");
-
-        if (rawNumber && !pictureByNumber.has(rawNumber)) {
-          pictureByNumber.set(rawNumber, file);
-        }
-
-        if (cleanNumber && !pictureByNumber.has(cleanNumber)) {
-          pictureByNumber.set(cleanNumber, file);
-        }
-      });
-    });
-
-    let matchedCount = 0;
-    const unmatchedCodes = [];
-
-    const updatedItems = sourceItems.map((item) => {
-  const codeKeys =
-    typeof getEquipmentPictureCandidateCodes === "function"
-      ? getEquipmentPictureCandidateCodes(item)
-      : [
-          normalizeEquipmentPictureCode(item?.code),
-          getEquipmentImageMatchCode(item?.code),
-        ].filter(Boolean);
-
-  const matchedCodeKey = codeKeys.find((codeKey) =>
-    pictureByNumber.has(codeKey)
-  );
-
-  const match = matchedCodeKey ? pictureByNumber.get(matchedCodeKey) : null;
-
-  if (!match) {
-    if (codeKeys[0]) unmatchedCodes.push(codeKeys[0]);
-    return item;
-  }
-
-  matchedCount += 1;
-
-  return {
-    ...item,
-    image: match.webViewLink || match.imageUrl || match.thumbnailUrl || "",
-    imageFallback: item.imageFallback || item.image || "",
-    pictureFileName: match.name || matchedCodeKey,
-    pictureMatchCode: matchedCodeKey,
-  };
-});
+    const matchedCount = updatedItems.filter((item) => {
+      const match = getPictureMatchForItemFromMap(item, pictureMap);
+      return Boolean(match.pictureUrl);
+    }).length;
 
     setMakeInventoryItems(updatedItems);
     setMusterItems(updatedItems);
 
-    if (matchedCount > 0) {
-      setPictureLibraryMessage(
-        `Matched ${matchedCount} picture(s). Saving updated master list...`
-      );
+    setPictureLibraryMessage(
+      "Matched " +
+        matchedCount +
+        " picture(s). Saving updated master list..."
+    );
 
-      await saveMasterInventoryItems(null, updatedItems);
-    }
+    await saveMasterInventoryItems(null, updatedItems);
 
     setPictureLibraryMessage(
-      `Picture library sync completed. ${data.count || 0} Drive image(s) found. ${matchedCount} item(s) matched by code/SKU. ${unmatchedCodes.length} item code(s) had no picture match.`
+      "Picture sync completed. " +
+        matchedCount +
+        " master item(s) matched with picture library."
     );
 
     logUsageEvent("equipment_picture_library_synced", {
       module: "make_inventory",
       ship: makeInventoryShip || userShip,
       equipmentDepartment,
-      driveFiles: data.count || 0,
       matchedCount,
-      unmatchedCount: unmatchedCodes.length,
+      pictureKeys: Object.keys(pictureMap || {}).length,
     });
   } catch (error) {
     const text = error?.message || "Could not sync picture library.";
