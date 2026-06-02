@@ -3027,54 +3027,71 @@ const inventoryRecordMatchesCurrentDepartment = (item) =>
 };
 
   const getSummaryInventoryRecordsForDownload = () => {
-    const ship = makeInventoryShip || userShip;
-    const selectedStation = summaryStationFilter || "ALL";
+  const ship = makeInventoryShip || userShip;
+  const selectedStation = summaryStationFilter || "ALL";
 
-    const summaryCountRecords = inventorySummary
-      .filter(
-        (item) =>
-          item.ship === ship &&
-          inventoryRecordMatchesCurrentDepartment(item) &&
-          (selectedStation === "ALL" || item.station === selectedStation)
-      )
-      .map((item) => {
-        const qty = Number(item.qty || 0);
-        const safeQty = Number.isFinite(qty) ? qty : 0;
-
-        return {
-          ...item,
-          count: safeQty,
-          Count: safeQty,
-          qty: safeQty,
-          quantity: safeQty,
-          Quantity: safeQty,
-          totalQty: safeQty,
-        };
-      });
-
-    const countMap = buildInventoryQtyMap(summaryCountRecords);
-
-    const sourceItems = makeInventoryItems.length
-      ? makeInventoryItems
-      : getShipSummaryRows();
-
-    return sourceItems.map((item) => {
-      const key = getInventoryProductGroupKey(item);
-      const count = key && countMap.has(key) ? countMap.get(key) : 0;
+  const summaryCountRecords = inventorySummary
+    .filter(
+      (item) =>
+        item.ship === ship &&
+        inventoryRecordMatchesCurrentDepartment(item) &&
+        (selectedStation === "ALL" || item.station === selectedStation)
+    )
+    .map((item) => {
+      const qty = Number(item.qty || 0);
+      const safeQty = Number.isFinite(qty) ? qty : 0;
 
       return {
         ...item,
-        code: item.code || "",
-        name: item.name || "",
-        count,
-        Count: count,
-        qty: count,
-        quantity: count,
-        Quantity: count,
-        totalQty: count,
+        count: safeQty,
+        Count: safeQty,
+        qty: safeQty,
+        quantity: safeQty,
+        Quantity: safeQty,
+        totalQty: safeQty,
       };
     });
-  };
+
+  const countMap = buildInventoryQtyMap(summaryCountRecords);
+
+  const masterItems = makeInventoryItems.length ? makeInventoryItems : [];
+  const masterKeys = new Set(
+    masterItems.map((item) => getInventoryProductGroupKey(item)).filter(Boolean)
+  );
+
+  const summaryRows = getShipSummaryRows();
+
+  const extraRows = summaryRows.filter((item) => {
+    const key = getInventoryProductGroupKey(item);
+    const isExtra =
+      cleanText(item.sheetName) === "EXTRA ITEM" ||
+      cleanText(item.category).includes("NOT IN MASTER");
+
+    return isExtra || !masterKeys.has(key);
+  });
+
+  const sourceItems = masterItems.length
+    ? [...masterItems, ...extraRows]
+    : summaryRows;
+
+  return sourceItems.map((item) => {
+    const key = getInventoryProductGroupKey(item);
+    const count = key && countMap.has(key) ? countMap.get(key) : 0;
+
+    return {
+      ...item,
+      code: item.code || "",
+      name: item.name || "",
+      image: item.image || "",
+      count,
+      Count: count,
+      qty: count,
+      quantity: count,
+      Quantity: count,
+      totalQty: count,
+    };
+  });
+};
 
   const handleInventoryCountSheetTemplateFile = (event) => {
     const file = event.target.files?.[0];
