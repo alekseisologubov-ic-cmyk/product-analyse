@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import {
   downloadIngredientByLocationFileFromStorage,
@@ -230,7 +230,6 @@ const FRESH_HERB_OR_RAW_PRODUCE_WORDS = [
   "LEMON GRASS",
   "KAFFIR LIME LEAF",
   "LIME LEAF",
-
   "LETTUCE",
   "ROMAINE",
   "SPINACH",
@@ -248,7 +247,6 @@ const FRESH_HERB_OR_RAW_PRODUCE_WORDS = [
   "ENDIVE",
   "ESCAROLE",
   "RADICCHIO",
-
   "CARROT",
   "CARROTS",
   "ONION",
@@ -316,7 +314,6 @@ const FRESH_HERB_OR_RAW_PRODUCE_WORDS = [
   "PEA",
   "PEAS",
   "OKRA",
-
   "SQUASH",
   "BUTTERNUT",
   "BUTTERNUT SQUASH",
@@ -326,7 +323,6 @@ const FRESH_HERB_OR_RAW_PRODUCE_WORDS = [
   "PUMPKINS",
   "SPAGHETTI SQUASH",
   "YELLOW SQUASH",
-
   "APPLE",
   "APPLES",
   "ORANGE",
@@ -1517,6 +1513,9 @@ export default function AllergenModule({
   const [loading, setLoading] = useState(false);
   const [permanentFileLoading, setPermanentFileLoading] = useState(false);
 
+  const autoLoadStartedRef = useRef(false);
+  const fileLoadInProgressRef = useRef(false);
+
   const applyIngredientByLocationArrayBuffer = (
     arrayBuffer,
     fileName = "Permanent Ingredient by Location"
@@ -1536,33 +1535,49 @@ export default function AllergenModule({
     setVenues(parsed.venues);
     setSourceFileName(fileName);
     setSourceSheetName(parsed.sourceSheet);
-    setSelectedVenueKey(parsed.venues[0]?.venueKey || "");
+
+    // Do not auto-open first venue. This prevents the screen from freezing
+    // after loading large Ingredient by Location files.
+    setSelectedVenueKey("");
     setSelectedRecipeKey("");
     setSelectedSubRecipeLine(null);
+
     setPosterBuilderOpen(false);
     setPosterSearch("");
     setSelectedPosterRecipeKeys([]);
+
     setSafeDishFinderOpen(false);
     setSafeDishSearch("");
     setSelectedSafeAllergens([]);
     setIncludePossibleHiddenInSafeFinder(true);
+
+    setVenueSearch("");
+    setRecipeSearch("");
     setIngredientSearch("");
+    setAllergenFilter("ALL");
 
     return parsed;
   };
 
   const loadPermanentIngredientByLocationFile = async ({ silent = false } = {}) => {
+    if (fileLoadInProgressRef.current) {
+      return false;
+    }
+
     if (!supabase) {
+      const text =
+        "Supabase is not connected. Permanent Ingredient by Location file cannot load.";
+
+      setMessage(text);
+
       if (!silent) {
-        const text =
-          "Supabase is not connected. Permanent Ingredient by Location file cannot load.";
-        setMessage(text);
         window.alert(text);
       }
 
       return false;
     }
 
+    fileLoadInProgressRef.current = true;
     setPermanentFileLoading(true);
 
     if (!silent) {
@@ -1574,38 +1589,51 @@ export default function AllergenModule({
         supabase,
       });
 
+      setMessage("Permanent Ingredient by Location file downloaded. Parsing allergens...");
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
       const parsed = applyIngredientByLocationArrayBuffer(
         arrayBuffer,
         "Permanent Ingredient by Location"
       );
 
       setMessage(
-        `Permanent Ingredient by Location loaded. ${parsed.venues.length} venue(s), ${parsed.rows.length} ingredient row(s).`
+        `Permanent Ingredient by Location loaded. ${parsed.venues.length} venue(s), ${parsed.rows.length} ingredient row(s). Choose a venue below.`
       );
 
       return true;
     } catch (error) {
-      if (!silent) {
-        const text =
-          error?.message ||
-          "Could not load permanent Ingredient by Location file.";
+      const text =
+        error?.message ||
+        "Could not load permanent Ingredient by Location file.";
 
-        setMessage(text);
+      setRows([]);
+      setVenues([]);
+      setSelectedVenueKey("");
+      setSelectedRecipeKey("");
+      setSelectedSubRecipeLine(null);
+      setMessage(text);
+
+      if (!silent) {
         window.alert(text);
       }
 
       return false;
     } finally {
+      fileLoadInProgressRef.current = false;
       setPermanentFileLoading(false);
     }
   };
 
   useEffect(() => {
-  if (!supabase) return;
+    if (!supabase) return;
+    if (autoLoadStartedRef.current) return;
 
-  loadPermanentIngredientByLocationFile({ silent: true });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [supabase]);
+    autoLoadStartedRef.current = true;
+    loadPermanentIngredientByLocationFile({ silent: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase]);
 
   const uploadIngredientByLocationFile = async (event) => {
     const file = event.target.files?.[0];
@@ -1642,10 +1670,14 @@ export default function AllergenModule({
       });
 
       const arrayBuffer = await file.arrayBuffer();
+
+      setMessage("File saved. Parsing allergen data...");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
       const parsed = applyIngredientByLocationArrayBuffer(arrayBuffer, file.name);
 
       setMessage(
-        `Permanent Ingredient by Location file updated. ${parsed.venues.length} venue(s), ${parsed.rows.length} ingredient row(s) loaded.`
+        `Permanent Ingredient by Location file updated. ${parsed.venues.length} venue(s), ${parsed.rows.length} ingredient row(s) loaded. Choose a venue below.`
       );
 
       logUsageEvent("permanent_ingredient_by_location_updated", {
@@ -2678,9 +2710,8 @@ export default function AllergenModule({
           <h2 style={styles.cardTitle}>🧬 Allergen Matrix</h2>
 
           <p style={styles.emptyText}>
-            Upload the Ingredient by Location workbook. This screen groups recipes
-            by venue, then shows ingredients, sub-recipes, declared allergens, and
-            possible hidden allergens.
+            Ingredient by Location loads automatically. After it loads, choose a
+            venue below to see recipes and allergen details.
           </p>
 
           <div style={styles.infoBox}>
@@ -2694,7 +2725,9 @@ export default function AllergenModule({
             onClick={() => loadPermanentIngredientByLocationFile()}
             disabled={loading || permanentFileLoading}
           >
-            🔄 Reload Permanent Ingredient File
+            {permanentFileLoading
+              ? "Loading..."
+              : "🔄 Reload Permanent Ingredient File"}
           </button>
 
           {isAdmin && (
@@ -2715,7 +2748,7 @@ export default function AllergenModule({
 
           <div style={styles.infoBox}>
             <div>
-              📄 File: <strong>{sourceFileName || "Not uploaded"}</strong>
+              📄 File: <strong>{sourceFileName || "Not loaded"}</strong>
             </div>
             <div>
               📋 Sheet: <strong>{sourceSheetName || "N/A"}</strong>
@@ -2729,7 +2762,7 @@ export default function AllergenModule({
             <div>
               🚨 Hidden warnings: <strong>{hiddenWarningRows.length}</strong>
             </div>
-            {(loading || permanentFileLoading) && <div>Loading...</div>}
+            {(loading || permanentFileLoading) && <div>Loading / parsing...</div>}
           </div>
 
           {message && <p style={styles.message}>{message}</p>}
@@ -2738,13 +2771,9 @@ export default function AllergenModule({
             This support tool lists only the 14 required allergen groups:
             cereals containing gluten, crustaceans, eggs, fish, peanuts,
             soybeans, milk, tree nuts, celery, mustard, sesame seeds, sulphur
-            dioxide and sulphites, lupin, and molluscs. Gluten-free product
-            names such as “Gluten Free Cookies” or “GF Bread” will not be marked
-            as cereals containing gluten from keyword matching. Fresh vegetables,
-            fruits, herbs, and produce items such as butternut squash are not
-            treated as pre-made products. Always verify against official recipe
-            cards, supplier labels, and onboard allergy procedures before
-            answering a Sailor allergy request.
+            dioxide and sulphites, lupin, and molluscs. Always verify against
+            official recipe cards, supplier labels, and onboard allergy
+            procedures before answering a Sailor allergy request.
           </div>
 
           <button
@@ -2809,6 +2838,13 @@ export default function AllergenModule({
           <p style={styles.emptyText}>
             Permanent Ingredient by Location file will load automatically. Admin
             can replace it if needed.
+          </p>
+        )}
+
+        {venues.length > 0 && !selectedVenue && (
+          <p style={styles.emptyText}>
+            Choose a venue to show recipes. This keeps the page fast after the
+            permanent file loads.
           </p>
         )}
 
