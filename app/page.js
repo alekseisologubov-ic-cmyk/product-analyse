@@ -8121,22 +8121,34 @@ if (module === "allergen") {
         </main>
       }
     >
-      <AllergenModule
-  styles={styles}
-  supabase={supabase}
-  userShip={userShip}
-  isAdmin={isAdmin}
-  onBack={() => {
-    if (equipmentDepartment) {
-      setModule("equipment");
-      setEquipmentMode("");
-      return;
-    }
+      <AppProvider
+        value={{
+          supabase,
+          userShip,
+          userEmail: normalizeAppEmail(userEmail),
+          isAdmin,
+          logUsageEvent,
+        }}
+      >
+        <AllergenModule
+          key={`${userShip}-${normalizeAppEmail(userEmail)}`}
+          styles={styles}
+          supabase={supabase}
+          userShip={userShip}
+          userEmail={normalizeAppEmail(userEmail)}
+          isAdmin={isAdmin}
+          onBack={() => {
+            if (equipmentDepartment) {
+              setModule("equipment");
+              setEquipmentMode("");
+              return;
+            }
 
-    setModule("");
-  }}
-  logUsageEvent={logUsageEvent}
-/>
+            setModule("");
+          }}
+          logUsageEvent={logUsageEvent}
+        />
+      </AppProvider>
     </Suspense>
   );
 }
