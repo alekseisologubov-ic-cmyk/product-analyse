@@ -8296,7 +8296,7 @@ setCurrentInventoryItem({
 
       setInventoryQty(countedRecord ? String(countedRecord.qty ?? "") : "");
       setEditingInventoryId(countedRecord?.id || null);
-      setMakeInventoryMessage(`AI helper selected: ${item.name}`);
+      setMakeInventoryMessage(`Selected: ${item.name}`);
     };
     const sortedMakeInventoryItems = filteredMakeInventoryItems
       .map((item, index) => ({
