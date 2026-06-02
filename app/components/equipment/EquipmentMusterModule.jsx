@@ -558,6 +558,11 @@ export default function EquipmentMusterModule({
                     <div style={styles.recipeMeta}>
                       Category: {item.category || "N/A"}
                     </div>
+                    {Number(item.duplicateCount || 1) > 1 && (
+  <div style={styles.statusNeutral}>
+    Duplicate code hidden: {Number(item.duplicateCount || 1) - 1}
+  </div>
+)}
                   </div>
                 );
               })}
