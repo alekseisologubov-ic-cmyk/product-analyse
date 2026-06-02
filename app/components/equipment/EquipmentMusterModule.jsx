@@ -341,6 +341,20 @@ export default function EquipmentMusterModule({
       ),
     [groupedMuster]
   );
+  const hiddenDuplicateCount = useMemo(
+  () =>
+    Object.values(groupedMuster).reduce(
+      (sum, items) =>
+        sum +
+        items.reduce(
+          (itemSum, item) =>
+            itemSum + Math.max(Number(item.duplicateCount || 1) - 1, 0),
+          0
+        ),
+      0
+    ),
+  [groupedMuster]
+);
 
   const sheetCount = useMemo(
     () =>
