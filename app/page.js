@@ -42,6 +42,17 @@ import {
   normalizeMasterInventoryRecord,
 } from "./lib/inventoryHelpers";
 
+import {
+  cleanSharedMasterImage,
+  getEquipmentImageMatchCode,
+  getImageExtensionFromMime,
+  getImageMimeFromDataUrl,
+  getZipImageExtension,
+  getZipImageMimeType,
+  makeStorageSafePart,
+  normalizeEquipmentPictureCode,
+} from "./lib/inventoryImageHelpers";
+
 import MakeInventoryTopBar from "./components/equipment/MakeInventoryTopBar";
 import InventoryAiHelper from "./components/equipment/InventoryAiHelper";
 import EquipmentDepartmentOptions from "./components/equipment/EquipmentDepartmentOptions";
