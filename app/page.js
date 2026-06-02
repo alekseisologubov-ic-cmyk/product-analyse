@@ -4578,10 +4578,7 @@ const getEquipmentFallbackImage = (item) => {
   const candidates = getEquipmentImageCandidates(item);
   return candidates[1] || candidates[2] || "";
 };
-const getEquipmentFallbackImage = (item) => {
-  const candidates = getEquipmentImageCandidates(item);
-  return candidates[1] || candidates[2] || "";
-};
+
   useEffect(() => {
   if (module !== "equipment") return;
   if (equipmentDepartment !== "culinary") return;
