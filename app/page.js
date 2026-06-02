@@ -2190,11 +2190,6 @@ const imageFallback = imageCandidates.find((value) => value !== image) || "";
     setMasterInventoryLoading(false);
   };
 
-  const getImageMimeFromDataUrl = (dataUrl) => {
-  const match = String(dataUrl || "").match(/^data:([^;]+);base64,/);
-  return match?.[1] || "image/png";
-};
-
 const getImageExtensionFromMime = (mime) => {
   const value = String(mime || "").toLowerCase();
 
