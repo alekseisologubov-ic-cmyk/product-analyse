@@ -2511,18 +2511,6 @@ for (let index = 0; index < items.length; index += 1) {
 
 const inventoryRecordMatchesCurrentDepartment = (item) =>
   inventoryRecordMatchesDepartment(item, equipmentDepartment);
-    const normalizeInventoryStationStatusRecord = (record) => ({
-    id: record.id,
-    ship: record.ship || "",
-    department: record.department || "",
-    station: record.station || "",
-    status: record.status || "not_started",
-    userName: record.user_name || "",
-    userPosition: record.user_position || "",
-    startedAt: record.started_at || "",
-    submittedAt: record.submitted_at || "",
-    updatedAt: record.updated_at || "",
-  });
 
   const loadInventoryStationStatuses = async (shipOverride) => {
     const ship = shipOverride || makeInventoryShip || userShip;
