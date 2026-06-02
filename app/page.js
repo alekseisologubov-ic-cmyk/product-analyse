@@ -2507,21 +2507,10 @@ for (let index = 0; index < items.length; index += 1) {
   };
 
   const getCurrentEquipmentDepartmentKey = () =>
-    cleanText(equipmentDepartment || "culinary").replace(/[^A-Z0-9]/g, "_") || "CULINARY";
+  getEquipmentDepartmentKey(equipmentDepartment);
 
-  const inventoryRecordMatchesCurrentDepartment = (item) => {
-    const departmentKey = getCurrentEquipmentDepartmentKey();
-    const key = cleanText(item?.itemKey || "");
-
-    if (!key) return true;
-    if (key.startsWith(departmentKey + "|")) return true;
-
-    const hasKnownDepartmentPrefix = ["CULINARY|", "BAR|", "RESTAURANT|"].some((prefix) =>
-      key.startsWith(prefix)
-    );
-
-    return !hasKnownDepartmentPrefix && departmentKey === "CULINARY";
-  };
+const inventoryRecordMatchesCurrentDepartment = (item) =>
+  inventoryRecordMatchesDepartment(item, equipmentDepartment);
     const normalizeInventoryStationStatusRecord = (record) => ({
     id: record.id,
     ship: record.ship || "",
