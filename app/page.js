@@ -3301,6 +3301,181 @@ const inventoryRecordMatchesCurrentDepartment = (item) =>
     }
   };
 
+  const saveExtraInventoryItem = async () => {
+  if (extraInventorySaving) return;
+
+  const ship = makeInventoryShip || userShip;
+  const station = inventoryStation;
+  const userName = getEffectiveInventoryUserName();
+
+  const code = String(extraInventoryCode || "").trim();
+  const name = String(extraInventoryName || "").replace(/\s+/g, " ").trim();
+  const qty = Number(extraInventoryQty || 0);
+
+  if (!supabase) {
+    const text =
+      "Supabase is not connected. Cannot save extra inventory item.";
+    setExtraInventoryMessage(text);
+    window.alert(text);
+    return;
+  }
+
+  if (!ship || !station || !userName) {
+    const text =
+      "Choose ship, station, and user before saving an extra item.";
+    setExtraInventoryMessage(text);
+    window.alert(text);
+    return;
+  }
+
+  if (!name) {
+    const text = "Enter the item name before saving.";
+    setExtraInventoryMessage(text);
+    window.alert(text);
+    return;
+  }
+
+  if (String(extraInventoryQty).trim() === "" || Number.isNaN(qty) || qty < 0) {
+    const text = "Enter a valid quantity before saving.";
+    setExtraInventoryMessage(text);
+    window.alert(text);
+    return;
+  }
+
+  const currentStationProgress = getCurrentStationProgress();
+
+  if (currentStationProgress?.status === "submitted") {
+    const text =
+      "This station has already submitted its inventory count. Reset inventory before starting a new count.";
+    setExtraInventoryMessage(text);
+    window.alert(text);
+    return;
+  }
+
+  setExtraInventorySaving(true);
+  setExtraInventoryMessage("Saving extra item...");
+
+  try {
+    const departmentKey = getCurrentEquipmentDepartmentKey();
+    const itemKey = cleanText(
+      departmentKey +
+        "|EXTRA|" +
+        (code || "NO-CODE") +
+        "|" +
+        name
+    );
+
+    const imageUrl = extraInventoryPhotoFile
+      ? await uploadExtraInventoryPhotoToStorage({
+          file: extraInventoryPhotoFile,
+          ship,
+          station,
+          code,
+          name,
+        })
+      : "";
+
+    const now = new Date().toISOString();
+
+    const payload = {
+      ship,
+      station,
+      user_name: userName,
+      item_key: itemKey,
+      code: code || "EXTRA",
+      item_name: name,
+      category: "Extra item - not in master list",
+      sheet_name: "Extra Item",
+      image: imageUrl,
+      qty,
+      updated_at: now,
+    };
+
+    const { data: existingRows, error: findError } = await supabase
+      .from("inventory_counts")
+      .select("id")
+      .eq("ship", ship)
+      .eq("station", station)
+      .eq("user_name", userName)
+      .eq("item_key", itemKey)
+      .limit(1);
+
+    if (findError) {
+      throw findError;
+    }
+
+    const existingId = existingRows?.[0]?.id;
+    let saveResult;
+
+    if (existingId) {
+      saveResult = await supabase
+        .from("inventory_counts")
+        .update(payload)
+        .eq("id", existingId)
+        .select("*")
+        .single();
+    } else {
+      saveResult = await supabase
+        .from("inventory_counts")
+        .insert(payload)
+        .select("*")
+        .single();
+    }
+
+    if (saveResult.error) {
+      throw saveResult.error;
+    }
+
+    const savedRecord = normalizeInventoryRecord(saveResult.data);
+
+    setInventorySummary((prev) => {
+      const withoutSaved = prev.filter(
+        (item) =>
+          item.id !== savedRecord.id &&
+          !(
+            item.ship === savedRecord.ship &&
+            item.station === savedRecord.station &&
+            item.userName === savedRecord.userName &&
+            item.itemKey === savedRecord.itemKey
+          )
+      );
+
+      return [savedRecord, ...withoutSaved];
+    });
+
+    try {
+      await upsertInventoryStationStatus("started");
+    } catch {}
+
+    setExtraInventoryCode("");
+    setExtraInventoryName("");
+    setExtraInventoryQty("");
+    setExtraInventoryPhotoFile(null);
+    setExtraInventoryPhotoInputKey((value) => value + 1);
+
+    setExtraInventoryMessage(
+      "Extra item saved: " + name + " / Qty " + formatQty(qty)
+    );
+
+    logUsageEvent("extra_inventory_item_saved", {
+      module: "make_inventory",
+      ship,
+      station,
+      userName,
+      userPosition: inventoryUserPosition,
+      code,
+      itemName: name,
+      qty,
+      hasPhoto: Boolean(imageUrl),
+    });
+  } catch (error) {
+    const text = error?.message || "Could not save extra item.";
+    setExtraInventoryMessage(text);
+    window.alert(text);
+  } finally {
+    setExtraInventorySaving(false);
+  }
+};
  const editInventoryItem = (item) => {
   const masterMatch =
     makeInventoryItems.find(
