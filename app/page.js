@@ -2190,15 +2190,6 @@ const imageFallback = imageCandidates.find((value) => value !== image) || "";
     setMasterInventoryLoading(false);
   };
 
-const getImageExtensionFromMime = (mime) => {
-  const value = String(mime || "").toLowerCase();
-
-  if (value.includes("jpeg") || value.includes("jpg")) return "jpg";
-  if (value.includes("webp")) return "webp";
-  if (value.includes("gif")) return "gif";
-  return "png";
-};
-
 const makeStorageSafePart = (value) => {
   const cleaned = String(value || "item")
     .toLowerCase()
