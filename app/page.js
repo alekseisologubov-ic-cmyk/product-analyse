@@ -2858,20 +2858,6 @@ const inventoryRecordMatchesCurrentDepartment = (item) =>
       .sort((a, b) => a.localeCompare(b));
   };
 
-    const getInventoryProductGroupKey = (item) => {
-    const codeKey = cleanText(item?.code || "")
-      .replace(/\s+/g, "")
-      .replace(/\.0$/, "");
-
-    const nameKey = cleanText(item?.name || "");
-
-    if (codeKey && nameKey) return `${codeKey}__${nameKey}`;
-    if (codeKey) return `CODE__${codeKey}`;
-    if (nameKey) return `NAME__${nameKey}`;
-
-    return "";
-  };
-
   const getShipSummaryRows = () => {
     const ship = makeInventoryShip || userShip;
     const grouped = {};
