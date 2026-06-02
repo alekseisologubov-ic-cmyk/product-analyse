@@ -2190,16 +2190,6 @@ const imageFallback = imageCandidates.find((value) => value !== image) || "";
     setMasterInventoryLoading(false);
   };
 
-const makeStorageSafePart = (value) => {
-  const cleaned = String(value || "item")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 90);
-
-  return cleaned || "item";
-};
-
 const uploadEquipmentDataImageToStorage = async ({ dataUrl, scope, item, index }) => {
   const value = String(dataUrl || "").trim();
 
