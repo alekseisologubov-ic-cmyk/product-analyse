@@ -2189,11 +2189,6 @@ const imageFallback = imageCandidates.find((value) => value !== image) || "";
     }
 
     const items = (data || []).map(normalizeMasterInventoryRecord);
-    setMakeInventoryItems(items);
-    setMusterItems(items);
-    setMasterInventorySource(items.length ? sourceText : "No shared MEL master list uploaded yet.");
-    setMusterMessage(items.length ? `${sourceText} ${items.length} item(s) available from all tabs.` : "No shared MEL master list uploaded yet.");
-    setMasterInventoryLoading(false);
   };
 
 const uploadEquipmentDataImageToStorage = async ({ dataUrl, scope, item, index }) => {
