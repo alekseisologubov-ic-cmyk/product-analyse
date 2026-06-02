@@ -54,7 +54,6 @@ import {
 } from "./lib/inventoryImageHelpers";
 
 import MakeInventoryTopBar from "./components/equipment/MakeInventoryTopBar";
-import InventoryAiHelper from "./components/equipment/InventoryAiHelper";
 import EquipmentDepartmentOptions from "./components/equipment/EquipmentDepartmentOptions";
 import EquipmentInventoryOptions from "./components/equipment/EquipmentInventoryOptions";
 import EquipmentMusterModule from "./components/equipment/EquipmentMusterModule";
