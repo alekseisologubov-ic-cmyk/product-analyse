@@ -4532,10 +4532,16 @@ const inventoryRecordMatchesCurrentDepartment = (item) =>
     return false;
   }
 };
-  useEffect(() => {
-  loadPermanentIngredientByLocationForProductDashboard({ silent: true });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
+    useEffect(() => {
+    const shouldLoadIngredientFile =
+      module === "product" && productMode === "dashboard";
+
+    if (!shouldLoadIngredientFile) return;
+    if (recipeRows.length > 1) return;
+
+    loadPermanentIngredientByLocationForProductDashboard({ silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [module, productMode, recipeRows.length]);
   const uploadRecipeFile = async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
