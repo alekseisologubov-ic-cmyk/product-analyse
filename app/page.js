@@ -2136,22 +2136,6 @@ const imageFallback = imageCandidates.find((value) => value !== image) || "";
   const getInventoryStationLabel = () =>
     equipmentDepartment === "bar" ? "bar" : "station";
 
-  const normalizeInventoryRecord = (record) => ({
-    id: record.id,
-    ship: record.ship,
-    station: record.station,
-    userName: record.user_name,
-    itemKey: record.item_key,
-    code: record.code || "",
-    name: record.item_name || "",
-    category: record.category || "",
-    sheetName: record.sheet_name || "",
-    image: record.image || "",
-    qty: Number(record.qty || 0),
-    confirmedAt: record.updated_at ? new Date(record.updated_at).toLocaleString() : "",
-    updatedAt: record.updated_at || "",
-  });
-
   const normalizeMasterInventoryRecord = (record) => ({
     id: record.id,
     ship: record.ship,
