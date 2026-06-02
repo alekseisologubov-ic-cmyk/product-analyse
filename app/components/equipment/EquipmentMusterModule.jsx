@@ -466,6 +466,9 @@ export default function EquipmentMusterModule({
             <div>
               📋 Items shown: <strong>{totalItems}</strong>
             </div>
+             <div>
+  🔁 Duplicate codes hidden: <strong>{hiddenDuplicateCount}</strong>
+</div>
             <div>
               📋 Master items loaded: <strong>{(musterItems || []).length}</strong>
             </div>
