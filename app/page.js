@@ -25,6 +25,13 @@ import {
   enrichDashboardProductsWithRegionalPar,
 } from "./lib/productDashboardRegionalHelpers";
 
+import {
+  BAR_STATIONS,
+  CULINARY_STATIONS,
+  EQUIPMENT_PICTURE_BUCKET,
+  getMasterInventoryScope,
+} from "./constants/inventoryConfig";
+
 import MakeInventoryTopBar from "./components/equipment/MakeInventoryTopBar";
 import InventoryAiHelper from "./components/equipment/InventoryAiHelper";
 import EquipmentDepartmentOptions from "./components/equipment/EquipmentDepartmentOptions";
