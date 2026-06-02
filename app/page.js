@@ -121,13 +121,6 @@ const normalizeShipCode = (value) => {
 
 const SCHEDULE_ALL_SHIPS = "ALL";
 const YEARLY_REPORT_ALL_SHIPS = "ALL_SHIPS";
-const MASTER_INVENTORY_SCOPE = "GLOBAL";
-const EQUIPMENT_PICTURE_BUCKET = "equipment-pictures";
-
-const getMasterInventoryScope = (department) => {
-  const dept = cleanText(department || "culinary").replace(/[^A-Z0-9]/g, "_");
-  return "GLOBAL_" + (dept || "CULINARY");
-};
 
 const getShipDisplayName = (shipCode) => SHIP_DISPLAY_NAMES[shipCode] || shipCode || "";
 
