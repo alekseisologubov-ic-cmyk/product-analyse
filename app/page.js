@@ -4795,16 +4795,57 @@ const getEquipmentPictureCandidateCodes = (item) => {
   return candidates;
 };
 
-const getEquipmentPictureFromLibrary = (item) => {
+const getEquipmentPictureMatchFromMap = (item, pictureMap = {}) => {
   const candidateCodes = getEquipmentPictureCandidateCodes(item);
 
   for (const codeKey of candidateCodes) {
-    if (drivePictureLibraryByCode[codeKey]) {
-      return drivePictureLibraryByCode[codeKey];
+    const pictureUrl = pictureMap[codeKey];
+
+    if (pictureUrl) {
+      return {
+        codeKey,
+        pictureUrl,
+      };
     }
   }
 
-  return "";
+  return {
+    codeKey: "",
+    pictureUrl: "",
+  };
+};
+
+const attachPicturesFromLibraryToItems = (items = [], pictureMap = {}) => {
+  return (items || []).map((item) => {
+    const match = getEquipmentPictureMatchFromMap(item, pictureMap);
+
+    if (!match.pictureUrl) {
+      return item;
+    }
+
+    const currentImage = String(item.image || "").trim();
+    const currentFallback = String(item.imageFallback || "").trim();
+
+    const shouldReplaceCurrentImage =
+      !currentImage || isTemporaryGoogleThumbnail(currentImage);
+
+    return {
+      ...item,
+      image: shouldReplaceCurrentImage ? match.pictureUrl : currentImage,
+      imageFallback:
+        !shouldReplaceCurrentImage && currentImage !== match.pictureUrl
+          ? currentFallback || match.pictureUrl
+          : currentFallback || currentImage || "",
+      pictureMatchCode: match.codeKey,
+    };
+  });
+};
+
+const getEquipmentPictureFromLibrary = (item) => {
+  return getEquipmentPictureMatchFromMap(
+    item,
+    drivePictureLibraryByCode
+  ).pictureUrl;
 };
 
 const getEquipmentImageCandidates = (item) => {
