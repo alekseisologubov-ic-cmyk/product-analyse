@@ -2187,7 +2187,7 @@ const imageFallback = imageCandidates.find((value) => value !== image) || "";
   };
 
   const getActiveInventoryStationList = () =>
-    equipmentDepartment === "bar" ? BAR_STATIONS : STATIONS;
+  equipmentDepartment === "bar" ? BAR_STATIONS : CULINARY_STATIONS;
 
   const getInventoryStationLabel = () =>
     equipmentDepartment === "bar" ? "bar" : "station";
