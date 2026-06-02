@@ -8441,6 +8441,18 @@ setCurrentInventoryItem({
 >
   {masterInventoryLoading ? "Refreshing..." : "🔄 Refresh Shared Master List"}
 </button>
+{isAdmin && equipmentDepartment === "culinary" && (
+  <button
+    type="button"
+    style={styles.backButton}
+    onClick={syncMasterInventoryPicturesFromDrive}
+    disabled={pictureLibraryBusy || masterInventoryLoading}
+  >
+    {pictureLibraryBusy
+      ? "Syncing pictures..."
+      : "🖼️ Sync Pictures With Master List"}
+  </button>
+)}
 
             {makeInventoryMessage && <p style={styles.message}>{makeInventoryMessage}</p>}
 
