@@ -1601,9 +1601,11 @@ export default function AllergenModule({
   };
 
   useEffect(() => {
-    loadPermanentIngredientByLocationFile({ silent: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supabase]);
+  if (!supabase) return;
+
+  loadPermanentIngredientByLocationFile({ silent: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [supabase]);
 
   const uploadIngredientByLocationFile = async (event) => {
     const file = event.target.files?.[0];
