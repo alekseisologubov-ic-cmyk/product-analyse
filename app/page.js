@@ -2136,20 +2136,6 @@ const imageFallback = imageCandidates.find((value) => value !== image) || "";
   const getInventoryStationLabel = () =>
     equipmentDepartment === "bar" ? "bar" : "station";
 
-  const normalizeMasterInventoryRecord = (record) => ({
-    id: record.id,
-    ship: record.ship,
-    itemKey: record.item_key,
-    code: record.code || "",
-    name: record.item_name || "",
-    category: record.category || "",
-    sheetName: record.sheet_name || "",
-    image: record.image || "",
-    sourceRow: Number(record.source_row || 0),
-    sortOrder: Number(record.sort_order || 0),
-    updatedAt: record.updated_at || "",
-  });
-
   const loadMasterInventoryItems = async (shipOverride) => {
     if (!supabase) {
       setMakeInventoryMessage("Supabase is not connected. Shared master inventory cannot load.");
