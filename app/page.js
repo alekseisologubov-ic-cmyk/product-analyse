@@ -8372,7 +8372,13 @@ isAdmin={isAdmin}
           ship: userShip,
         });
       }}
-      onOpenAllergen={() => {
+            onOpenAllergen={() => {
+        setSelectedProduct("");
+        setSelectedRecipe(null);
+        setSearch("");
+        setProductCostReportSearch("");
+        setProductReportView("main");
+
         setModule("allergen");
 
         logUsageEvent("module_opened", {
