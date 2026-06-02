@@ -4424,10 +4424,10 @@ const uploadEquipmentPictureZipFile = async (event) => {
   (file.numbers || []).forEach((number) => {
     if (!liveByCode[number]) {
       liveByCode[number] =
-        file.thumbnailUrl ||
-        file.imageUrl ||
         file.webViewLink ||
-        "";
+file.imageUrl ||
+file.thumbnailUrl ||
+"";
     }
   });
 });
