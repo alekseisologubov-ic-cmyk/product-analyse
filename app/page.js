@@ -8367,6 +8367,15 @@ setCurrentInventoryItem({
               style={styles.searchInput}
             />
 
+<button
+  type="button"
+  style={styles.backButton}
+  onClick={() => loadMasterInventoryItems(makeInventoryShip || userShip)}
+  disabled={masterInventoryLoading}
+>
+  {masterInventoryLoading ? "Refreshing..." : "🔄 Refresh Shared Master List"}
+</button>
+
             {makeInventoryMessage && <p style={styles.message}>{makeInventoryMessage}</p>}
 
             <div style={styles.infoBox}>
