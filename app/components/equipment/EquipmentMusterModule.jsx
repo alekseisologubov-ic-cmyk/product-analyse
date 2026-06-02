@@ -292,31 +292,46 @@ export default function EquipmentMusterModule({
   const refreshShip = makeInventoryShip || userShip;
 
   const groupedMuster = useMemo(() => {
-    const grouped = {};
-    const query = cleanMusterSearchText(musterSearch);
+  const grouped = {};
+  const query = cleanMusterSearchText(musterSearch);
+  const uniqueByCode = new Map();
 
-    (musterItems || []).forEach((item) => {
-      const searchText = cleanMusterSearchText(
-        `${item.sheetName || ""} ${item.category || ""} ${item.code || ""} ${
-          item.name || ""
-        }`
-      );
+  (musterItems || []).forEach((item) => {
+    const duplicateKey = getMusterDuplicateKey(item);
 
-      if (query && !searchText.includes(query)) return;
+    if (!duplicateKey) return;
 
-      const groupKey = `${item.sheetName || "Unknown Sheet"} / ${
-        item.category || "Uncategorized"
-      }`;
+    if (!uniqueByCode.has(duplicateKey)) {
+      uniqueByCode.set(duplicateKey, createDedupedMusterItem(item));
+      return;
+    }
 
-      if (!grouped[groupKey]) {
-        grouped[groupKey] = [];
-      }
+    uniqueByCode.set(
+      duplicateKey,
+      mergeDedupedMusterItem(uniqueByCode.get(duplicateKey), item)
+    );
+  });
 
-      grouped[groupKey].push(item);
-    });
+  Array.from(uniqueByCode.values()).forEach((item) => {
+    const searchText = cleanMusterSearchText(
+      item.duplicateSearchText || getMusterItemSearchText(item)
+    );
 
-    return grouped;
-  }, [musterItems, musterSearch]);
+    if (query && !searchText.includes(query)) return;
+
+    const groupKey = `${item.sheetName || "Unknown Sheet"} / ${
+      item.category || "Uncategorized"
+    }`;
+
+    if (!grouped[groupKey]) {
+      grouped[groupKey] = [];
+    }
+
+    grouped[groupKey].push(item);
+  });
+
+  return grouped;
+}, [musterItems, musterSearch]);
 
   const totalItems = useMemo(
     () =>
