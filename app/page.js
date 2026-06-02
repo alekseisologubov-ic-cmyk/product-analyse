@@ -4468,6 +4468,16 @@ setDrivePictureLibraryByCode(liveByCode);
   }
 };
 
+const isTemporaryGoogleThumbnail = (value) => {
+  const text = String(value || "").trim().toLowerCase();
+
+  return (
+    text.includes("googleusercontent.com") ||
+    text.includes("thumbnail") ||
+    text.includes("drive-thirdparty")
+  );
+};
+
 const getEquipmentPictureFromLibrary = (item) => {
   const numericCodeKey = normalizeEquipmentPictureCode(item?.code);
   const looseCodeKey = getEquipmentImageMatchCode(item?.code);
@@ -4484,7 +4494,10 @@ const getEquipmentPictureFromLibrary = (item) => {
 };
 
 const getEquipmentImageCandidates = (item) => {
-  const candidates = [
+  const driveLibraryImage = getEquipmentPictureFromLibrary(item);
+
+  const stableCandidates = [
+    driveLibraryImage,
     item?.image,
     item?.imageFallback,
     item?.photo,
@@ -4492,14 +4505,30 @@ const getEquipmentImageCandidates = (item) => {
     item?.picture,
     item?.pictureUrl,
     item?.imageUrl,
-    getEquipmentPictureFromLibrary(item),
   ]
     .map((value) => String(value || "").trim())
     .filter(Boolean)
+    .filter((value) => !isTemporaryGoogleThumbnail(value))
     .filter((value, index, array) => array.indexOf(value) === index)
     .filter((value) => isUsableImageValue(value));
 
-  return candidates;
+  const temporaryCandidates = [
+    driveLibraryImage,
+    item?.image,
+    item?.imageFallback,
+    item?.photo,
+    item?.photoUrl,
+    item?.picture,
+    item?.pictureUrl,
+    item?.imageUrl,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .filter((value) => isTemporaryGoogleThumbnail(value))
+    .filter((value, index, array) => array.indexOf(value) === index)
+    .filter((value) => isUsableImageValue(value));
+
+  return [...stableCandidates, ...temporaryCandidates];
 };
 
 const getEquipmentDisplayImage = (item) => {
@@ -4509,7 +4538,7 @@ const getEquipmentDisplayImage = (item) => {
 
 const getEquipmentFallbackImage = (item) => {
   const candidates = getEquipmentImageCandidates(item);
-  return candidates[1] || "";
+  return candidates[1] || candidates[2] || "";
 };
   useEffect(() => {
   if (module !== "equipment") return;
