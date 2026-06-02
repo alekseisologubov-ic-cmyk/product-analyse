@@ -8209,14 +8209,6 @@ setCurrentInventoryItem({
           </div>
         </section>
 
-              <InventoryAiHelper
-  styles={styles}
-  items={makeInventoryItems.length ? makeInventoryItems : musterItems}
-  inventoryReady={inventoryReady}
-  currentStationSubmitted={currentStationSubmitted}
-  inventoryStation={inventoryStation}
-  onUseItem={selectInventoryItemForCounting}
-/>
                 <section style={styles.card}>
           <h2 style={styles.productTitle}>📦 Select Product for Inventory</h2>
 
