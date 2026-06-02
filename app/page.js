@@ -8414,6 +8414,82 @@ setCurrentInventoryItem({
               Select the correct product from the master list. Green means already counted by this user for this station.
             </p>
           </div>
+              <div style={styles.card}>
+  <h2 style={styles.cardTitle}>➕ Item Not In Master List</h2>
+
+  <p style={styles.emptyText}>
+    Use this only when the item is found during inventory but does not exist in the shared master list.
+  </p>
+
+  <label style={styles.label}>Code / SKU optional</label>
+  <input
+    placeholder="Enter code or SKU..."
+    value={extraInventoryCode}
+    onChange={(event) => setExtraInventoryCode(event.target.value)}
+    style={styles.searchInput}
+  />
+
+  <label style={styles.label}>Item name</label>
+  <input
+    placeholder="Enter item name..."
+    value={extraInventoryName}
+    onChange={(event) => setExtraInventoryName(event.target.value)}
+    style={styles.searchInput}
+  />
+
+  <label style={styles.label}>Quantity</label>
+  <input
+    type="number"
+    min="0"
+    placeholder="Enter quantity..."
+    value={extraInventoryQty}
+    onChange={(event) => setExtraInventoryQty(event.target.value)}
+    style={styles.searchInput}
+  />
+
+  <label style={styles.label}>Take / upload photo optional</label>
+  <input
+    key={extraInventoryPhotoInputKey}
+    type="file"
+    accept="image/*"
+    capture="environment"
+    onChange={(event) =>
+      setExtraInventoryPhotoFile(event.target.files?.[0] || null)
+    }
+    style={styles.fileInput}
+  />
+
+  {extraInventoryPhotoFile && (
+    <div style={styles.statusNeutral}>
+      Photo selected: {extraInventoryPhotoFile.name}
+    </div>
+  )}
+
+  <button
+    type="button"
+    style={styles.primaryButton}
+    onClick={saveExtraInventoryItem}
+    disabled={extraInventorySaving || !inventoryReady || currentStationSubmitted}
+  >
+    {extraInventorySaving ? "Saving..." : "Save Extra Item"}
+  </button>
+
+  {extraInventoryMessage && (
+    <p style={styles.message}>{extraInventoryMessage}</p>
+  )}
+
+  {!inventoryReady && (
+    <p style={styles.warningText}>
+      Choose ship, station and user before saving an extra item.
+    </p>
+  )}
+
+  {currentStationSubmitted && (
+    <p style={styles.warningText}>
+      This station already submitted count. Extra items cannot be added now.
+    </p>
+  )}
+</div>
         </section>
 
                 <section style={styles.card}>
