@@ -6695,21 +6695,6 @@ const getEquipmentFallbackImage = (item) => {
     }));
   };
 
-  const parseMusterItems = () => {
-    const grouped = {};
-
-    musterItems.forEach((item) => {
-      const searchText = `${item.sheetName} ${item.category} ${item.code} ${item.name}`.toLowerCase();
-      if (musterSearch && !searchText.includes(musterSearch.toLowerCase())) return;
-
-      const groupKey = `${item.sheetName} / ${item.category}`;
-      if (!grouped[groupKey]) grouped[groupKey] = [];
-      grouped[groupKey].push(item);
-    });
-
-    return grouped;
-  };
-
   const combinedBreakdown = selectedProduct ? getCombinedVenueBreakdown(selectedProduct) : [];
   const recipesForProduct = selectedProduct ? getRecipesUsingProduct(selectedProduct) : [];
   const productsInRecipe = selectedRecipe ? getProductsInRecipe(selectedRecipe) : [];
