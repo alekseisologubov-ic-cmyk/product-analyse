@@ -4871,60 +4871,87 @@ const uploadEquipmentPictureZipFile = async (event) => {
   }
 };
     const loadDrivePictureLibrary = async ({ silent = false } = {}) => {
-    try {
-      if (!silent) {
-        setPictureLibraryMessage("Loading picture folder...");
-      }
+  try {
+    if (!silent) {
+      setPictureLibraryMessage("Loading picture folder...");
+    }
 
-      const response = await fetch("/api/drive-picture-library");
-      const data = await response.json();
+    const response = await fetch("/api/drive-picture-library", {
+      cache: "no-store",
+    });
 
-      if (!response.ok) {
-        throw new Error(data?.error || "Could not load picture folder.");
-      }
+    const data = await response.json().catch(() => ({}));
 
-      const byCode = {};
+    if (!response.ok) {
+      throw new Error(data?.error || "Could not load picture folder.");
+    }
 
-      (data.files || []).forEach((file) => {
-        const pictureUrl =
-          file.webViewLink ||
-          file.imageUrl ||
-          file.thumbnailUrl ||
-          "";
+    const byCode = {};
 
-        (file.numbers || []).forEach((number) => {
-          const rawNumber = String(number || "").trim();
-          const cleanNumber = rawNumber.replace(/^0+(?=\d)/g, "");
+    const addPictureKey = (key, pictureUrl) => {
+      const rawKey = String(key || "").trim();
+      const url = String(pictureUrl || "").trim();
 
-          if (rawNumber && pictureUrl && !byCode[rawNumber]) {
-            byCode[rawNumber] = pictureUrl;
-          }
+      if (!rawKey || !url) return;
 
-          if (cleanNumber && pictureUrl && !byCode[cleanNumber]) {
-            byCode[cleanNumber] = pictureUrl;
-          }
-        });
+      const cleanKey = rawKey.replace(/^0+(?=\d)/g, "");
+
+      [rawKey, cleanKey].forEach((candidateKey) => {
+        if (!candidateKey) return;
+        if (byCode[candidateKey]) return;
+
+        byCode[candidateKey] = url;
+      });
+    };
+
+    (data.files || []).forEach((file) => {
+      const pictureUrl =
+        file.webViewLink ||
+        file.imageUrl ||
+        file.thumbnailUrl ||
+        "";
+
+      if (!pictureUrl) return;
+
+      (file.numbers || []).forEach((number) => {
+        addPictureKey(number, pictureUrl);
       });
 
-      setDrivePictureLibraryByCode(byCode);
+      const fileName = String(file.name || "").trim();
 
-      if (!silent) {
-        setPictureLibraryMessage(
-          `Picture folder loaded. ${data.count || 0} Drive image(s) found.`
-        );
-      }
+      addPictureKey(normalizeEquipmentPictureCode(fileName), pictureUrl);
+      addPictureKey(getEquipmentImageMatchCode(fileName), pictureUrl);
 
-      return byCode;
-    } catch (error) {
-      if (!silent) {
-        const text = error?.message || "Could not load picture folder.";
-        setPictureLibraryMessage(text);
-        window.alert(text);
-      }
+      const numberMatches = fileName.match(/\d{4,}/g) || [];
 
-      return {};
+      numberMatches.forEach((numberText) => {
+        addPictureKey(numberText, pictureUrl);
+      });
+    });
+
+    setDrivePictureLibraryByCode(byCode);
+
+    if (!silent) {
+      setPictureLibraryMessage(
+        "Picture folder loaded. " +
+          (data.count || 0) +
+          " Drive image(s) found. " +
+          Object.keys(byCode).length +
+          " picture code key(s) prepared."
+      );
     }
-  };
+
+    return byCode;
+  } catch (error) {
+    if (!silent) {
+      const text = error?.message || "Could not load picture folder.";
+      setPictureLibraryMessage(text);
+      window.alert(text);
+    }
+
+    return {};
+  }
+};
 
 const isTemporaryGoogleThumbnail = (value) => {
   const text = String(value || "").trim().toLowerCase();
