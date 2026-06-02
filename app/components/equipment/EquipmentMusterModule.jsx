@@ -4,6 +4,67 @@ import React, { useEffect, useMemo, useState } from "react";
 
 const cleanMusterSearchText = (value) =>
   String(value || "").toLowerCase().replace(/\s+/g, " ").trim();
+const getMusterDuplicateKey = (item) => {
+  const code = String(item?.code || "")
+    .trim()
+    .replace(/\.0+$/g, "")
+    .replace(/^0+(?=\d)/g, "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
+
+  if (code) return "CODE:" + code;
+
+  const name = String(item?.name || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+
+  return name ? "NAME:" + name : "";
+};
+
+const getMusterLocationText = (item) =>
+  [item?.sheetName, item?.category].filter(Boolean).join(" / ");
+
+const getMusterItemSearchText = (item) =>
+  `${item?.sheetName || ""} ${item?.category || ""} ${item?.code || ""} ${
+    item?.name || ""
+  }`;
+
+const createDedupedMusterItem = (item) => ({
+  ...item,
+  duplicateCount: 1,
+  duplicateSearchText: getMusterItemSearchText(item),
+  duplicateLocations: [getMusterLocationText(item)].filter(Boolean),
+});
+
+const mergeDedupedMusterItem = (existing, duplicate) => {
+  const duplicateLocation = getMusterLocationText(duplicate);
+
+  return {
+    ...existing,
+
+    // Keep the first visible row, but rescue image data from duplicate rows.
+    image: existing.image || duplicate.image || "",
+    imageFallback:
+      existing.imageFallback ||
+      duplicate.imageFallback ||
+      duplicate.image ||
+      "",
+
+    duplicateCount: Number(existing.duplicateCount || 1) + 1,
+    duplicateSearchText:
+      String(existing.duplicateSearchText || "") +
+      " " +
+      getMusterItemSearchText(duplicate),
+
+    duplicateLocations: [
+      ...new Set([
+        ...(existing.duplicateLocations || []),
+        duplicateLocation,
+      ].filter(Boolean)),
+    ],
+  };
+};
 
 const getGoogleDriveId = (value) => {
   const text = String(value || "").trim();
