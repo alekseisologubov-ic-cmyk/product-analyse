@@ -2190,20 +2190,6 @@ const imageFallback = imageCandidates.find((value) => value !== image) || "";
     setMasterInventoryLoading(false);
   };
 
-    const cleanSharedMasterImage = (value) => {
-    const text = String(value || "").trim();
-
-    if (!text) return "";
-
-    // Do not save embedded/base64 images into Supabase.
-    // They are too large and can cause statement timeout.
-    if (text.startsWith("data:image/")) return "";
-
-    // Also protect database from very large accidental values.
-    if (text.length > 5000) return "";
-
-    return text;
-  };
   const getImageMimeFromDataUrl = (dataUrl) => {
   const match = String(dataUrl || "").match(/^data:([^;]+);base64,/);
   return match?.[1] || "image/png";
