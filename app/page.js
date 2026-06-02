@@ -5460,8 +5460,18 @@ const getEquipmentFallbackImage = (item) => {
     })();
   };
 
-  const consumptionData = useMemo(() => consumptionRows.slice(1), [consumptionRows]);
-  const recipeData = useMemo(() => recipeRows.slice(1), [recipeRows]);
+    const shouldBuildProductDashboardData =
+    module === "product" && productMode === "dashboard";
+
+  const consumptionData = useMemo(
+    () => (shouldBuildProductDashboardData ? consumptionRows.slice(1) : []),
+    [consumptionRows, shouldBuildProductDashboardData]
+  );
+
+  const recipeData = useMemo(
+    () => (shouldBuildProductDashboardData ? recipeRows.slice(1) : []),
+    [recipeRows, shouldBuildProductDashboardData]
+  );
 
   const productMatches = (selectedProductName, row) => {
     const selected = String(selectedProductName || "").trim();
