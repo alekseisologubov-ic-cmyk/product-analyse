@@ -2257,19 +2257,6 @@ const getPersistentEquipmentImageUrl = async (item, scope, index) => {
 
   return "";
 };
-  const getEquipmentImageMatchCode = (value) => {
-  const text = String(value || "")
-    .trim()
-    .replace(/\.0+$/g, "");
-
-  const match = text.match(/\d{4,}/);
-
-  if (match) {
-    return match[0].replace(/^0+/, "");
-  }
-
-  return cleanText(text).replace(/[^A-Z0-9]/g, "");
-};
 
 const loadExistingMasterImagesByCode = async (scope) => {
   const imageByCode = {};
