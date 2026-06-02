@@ -7123,11 +7123,29 @@ const getEquipmentFallbackImage = (item) => {
     }));
   };
 
-  const combinedBreakdown = selectedProduct ? getCombinedVenueBreakdown(selectedProduct) : [];
-  const recipesForProduct = selectedProduct ? getRecipesUsingProduct(selectedProduct) : [];
-  const productsInRecipe = selectedRecipe ? getProductsInRecipe(selectedRecipe) : [];
-  const allergenWarnings = selectedRecipe ? detectAllergens(productsInRecipe) : [];
-  const filteredProducts = products.filter((p) => p.toLowerCase().includes(search.toLowerCase()));
+    const combinedBreakdown =
+    shouldBuildProductDashboardData && selectedProduct
+      ? getCombinedVenueBreakdown(selectedProduct)
+      : [];
+
+  const recipesForProduct =
+    shouldBuildProductDashboardData && selectedProduct
+      ? getRecipesUsingProduct(selectedProduct)
+      : [];
+
+  const productsInRecipe =
+    shouldBuildProductDashboardData && selectedRecipe
+      ? getProductsInRecipe(selectedRecipe)
+      : [];
+
+  const allergenWarnings =
+    shouldBuildProductDashboardData && selectedRecipe
+      ? detectAllergens(productsInRecipe)
+      : [];
+
+  const filteredProducts = shouldBuildProductDashboardData
+    ? products.filter((p) => p.toLowerCase().includes(search.toLowerCase()))
+    : [];
 
   const productCostReportRows = useMemo(() => {
   try {
