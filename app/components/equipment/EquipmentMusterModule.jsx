@@ -599,6 +599,19 @@ export default function EquipmentMusterModule({
                 <strong>Category:</strong>{" "}
                 {selectedEquipment.category || "N/A"}
               </p>
+              {Number(selectedEquipment.duplicateCount || 1) > 1 && (
+  <>
+    <p>
+      <strong>Duplicate rows hidden:</strong>{" "}
+      {Number(selectedEquipment.duplicateCount || 1) - 1}
+    </p>
+
+    <p>
+      <strong>Found in:</strong>{" "}
+      {(selectedEquipment.duplicateLocations || []).join(", ") || "N/A"}
+    </p>
+  </>
+)}
 
               <MusterImagePreview
                 styles={styles}
