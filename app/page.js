@@ -2985,23 +2985,46 @@ const inventoryRecordMatchesCurrentDepartment = (item) =>
       ? makeInventoryItems
       : myRows;
 
-    return sourceItems.map((item) => {
-      const key = getInventoryProductGroupKey(item);
-      const count = key && countMap.has(key) ? countMap.get(key) : 0;
+    const getMyInventoryExportItems = () => {
+  const myRows = getMyInventoryRows();
+  const countMap = buildInventoryQtyMap(myRows);
 
-      return {
-        ...item,
-        code: item.code || "",
-        name: item.name || "",
-        count,
-        Count: count,
-        qty: count,
-        quantity: count,
-        Quantity: count,
-        totalQty: count,
-      };
-    });
-  };
+  const masterItems = makeInventoryItems.length ? makeInventoryItems : [];
+  const masterKeys = new Set(
+    masterItems.map((item) => getInventoryProductGroupKey(item)).filter(Boolean)
+  );
+
+  const extraRows = myRows.filter((item) => {
+    const key = getInventoryProductGroupKey(item);
+    const isExtra =
+      cleanText(item.sheetName) === "EXTRA ITEM" ||
+      cleanText(item.category).includes("NOT IN MASTER");
+
+    return isExtra || !masterKeys.has(key);
+  });
+
+  const sourceItems = masterItems.length
+    ? [...masterItems, ...extraRows]
+    : myRows;
+
+  return sourceItems.map((item) => {
+    const key = getInventoryProductGroupKey(item);
+    const count = key && countMap.has(key) ? countMap.get(key) : 0;
+
+    return {
+      ...item,
+      code: item.code || "",
+      name: item.name || "",
+      image: item.image || "",
+      count,
+      Count: count,
+      qty: count,
+      quantity: count,
+      Quantity: count,
+      totalQty: count,
+    };
+  });
+};
 
   const getSummaryInventoryRecordsForDownload = () => {
     const ship = makeInventoryShip || userShip;
