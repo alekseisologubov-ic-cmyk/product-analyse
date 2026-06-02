@@ -8367,46 +8367,6 @@ setCurrentInventoryItem({
               style={styles.searchInput}
             />
 
-            {isAdmin && (
-  <>
-    <label style={styles.label}>Upload / Replace Shared Master Inventory List</label>
-    <input
-      type="file"
-      accept=".xlsx,.xls,.xlsm"
-      onChange={uploadMakeInventoryFile}
-      style={styles.fileInput}
-    />
-
-    <button
-      style={styles.backButton}
-      onClick={syncMasterInventoryPicturesFromDrive}
-      disabled={pictureLibraryBusy || masterInventoryLoading}
-    >
-      {pictureLibraryBusy ? "Syncing pictures..." : "🖼️ Sync Picture Library"}
-    </button>
-      <button
-  type="button"
-  style={styles.backButton}
-  onClick={writeDrivePictureLinksToGoogleSheetColumnH}
-  disabled={pictureLibraryBusy || masterInventoryLoading}
->
-  🔗 Write Drive Links to Sheet Column H
-</button>
-<label style={styles.label}>Admin: write Drive picture links into column H</label>
-<input
-  type="file"
-  accept=".xlsx,.xls,.xlsm"
-  onChange={downloadMasterWithDrivePictureLinksInColumnH}
-  style={styles.fileInput}
-  disabled={pictureLibraryBusy || masterInventoryLoading}
-/>
-
-    {pictureLibraryMessage && (
-      <p style={styles.message}>{pictureLibraryMessage}</p>
-    )}
-  </>
-)}
-
             {makeInventoryMessage && <p style={styles.message}>{makeInventoryMessage}</p>}
 
             <div style={styles.infoBox}>
