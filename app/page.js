@@ -4602,7 +4602,7 @@ const getEquipmentFallbackImage = (item) => {
 
         return {
           ...item,
-          image: match.thumbnailUrl || match.imageUrl || match.webViewLink || "",
+          image: match.webViewLink || match.imageUrl || match.thumbnailUrl || "",
           pictureFileName: match.name,
         };
       });
