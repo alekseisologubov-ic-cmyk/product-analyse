@@ -4639,35 +4639,35 @@ const getEquipmentFallbackImage = (item) => {
     const unmatchedCodes = [];
 
     const updatedItems = sourceItems.map((item) => {
-      const codeKeys =
-        typeof getEquipmentPictureCandidateCodes === "function"
-          ? getEquipmentPictureCandidateCodes(item)
-          : [
-              normalizeEquipmentPictureCode(item?.code),
-              getEquipmentImageMatchCode(item?.code),
-            ].filter(Boolean);
+  const codeKeys =
+    typeof getEquipmentPictureCandidateCodes === "function"
+      ? getEquipmentPictureCandidateCodes(item)
+      : [
+          normalizeEquipmentPictureCode(item?.code),
+          getEquipmentImageMatchCode(item?.code),
+        ].filter(Boolean);
 
-      const matchedCodeKey = codeKeys.find((codeKey) =>
-        pictureByNumber.has(codeKey)
-      );
+  const matchedCodeKey = codeKeys.find((codeKey) =>
+    pictureByNumber.has(codeKey)
+  );
 
-      const match = matchedCodeKey ? pictureByNumber.get(matchedCodeKey) : null;
+  const match = matchedCodeKey ? pictureByNumber.get(matchedCodeKey) : null;
 
-      if (!match) {
-        if (codeKeys[0]) unmatchedCodes.push(codeKeys[0]);
-        return item;
-      }
+  if (!match) {
+    if (codeKeys[0]) unmatchedCodes.push(codeKeys[0]);
+    return item;
+  }
 
-      matchedCount += 1;
+  matchedCount += 1;
 
-      return {
-        ...item,
-        image: match.webViewLink || match.imageUrl || match.thumbnailUrl || "",
-        imageFallback: item.imageFallback || item.image || "",
-        pictureFileName: match.name || matchedCodeKey,
-        pictureMatchCode: matchedCodeKey,
-      };
-    });
+  return {
+    ...item,
+    image: match.webViewLink || match.imageUrl || match.thumbnailUrl || "",
+    imageFallback: item.imageFallback || item.image || "",
+    pictureFileName: match.name || matchedCodeKey,
+    pictureMatchCode: matchedCodeKey,
+  };
+});
 
     setMakeInventoryItems(updatedItems);
     setMusterItems(updatedItems);
