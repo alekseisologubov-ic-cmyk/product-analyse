@@ -2955,31 +2955,6 @@ const inventoryRecordMatchesCurrentDepartment = (item) =>
     return `${ship} - ${department} - ${stationName} - ${userName}`;
   };
 
-  const buildInventoryQtyMap = (rows = []) => {
-    const map = new Map();
-
-    rows.forEach((item) => {
-      const key = getInventoryProductGroupKey(item);
-      if (!key) return;
-
-      const rawQty =
-        item.qty ??
-        item.count ??
-        item.Count ??
-        item.Quantity ??
-        item.quantity ??
-        item.totalQty ??
-        0;
-
-      const qty = Number(rawQty || 0);
-      const safeQty = Number.isFinite(qty) ? qty : 0;
-
-      map.set(key, Number(map.get(key) || 0) + safeQty);
-    });
-
-    return map;
-  };
-
   const getMyInventoryExportItems = () => {
     const myRows = getMyInventoryRows();
     const countMap = buildInventoryQtyMap(myRows);
