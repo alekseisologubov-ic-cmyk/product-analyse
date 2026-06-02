@@ -8825,6 +8825,16 @@ setCurrentInventoryItem({
                 ))
               : visibleReportRows.map((item) => (
                   <div key={item.id} style={styles.equipmentCard}>
+                {item.image && (
+  <img
+    src={getImageUrl(item.image, "w360")}
+    alt={item.name}
+    style={styles.equipmentImage}
+    onError={(event) => {
+      event.currentTarget.style.display = "none";
+    }}
+  />
+)}
                     <div style={styles.recipeName}>{item.name}</div>
                     <div style={styles.recipeMeta}>Ship: {item.ship}</div>
                     <div style={styles.recipeMeta}>Station: {item.station}</div>
