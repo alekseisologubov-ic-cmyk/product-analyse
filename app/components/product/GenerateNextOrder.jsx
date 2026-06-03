@@ -2339,12 +2339,12 @@ export default function GenerateNextOrder({
 
                 {orderMeta.isFreshProduceOrder && item.produceRuleType !== "standard" && (
                   <div
-                    style={
-                      item.produceRuleType === "fast"
-                        ? styles.statusWarning
-                        : styles.statusNeutral
-                    }
-                  >
+  style={
+    item.produceRuleType === "fast"
+      ? localStyles.compactWarning
+      : localStyles.compactInfoBox
+  }
+>
                     {item.produceRuleLabel}
                     {item.produceOrderFullTarget
                       ? " — order full target quantity."
