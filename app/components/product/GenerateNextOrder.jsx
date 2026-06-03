@@ -3204,4 +3204,107 @@ export default function GenerateNextOrder({
     display: "grid",
     gap: 4,
   },
+      fmlCompactGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 150px), 1fr))",
+    gap: 8,
+    marginTop: 12,
+  },
+
+  fmlCompactCard: {
+    border: "1px solid #ddd",
+    borderRadius: 14,
+    padding: 9,
+    background: "#fff",
+    display: "grid",
+    gap: 6,
+    fontSize: 11,
+    alignContent: "start",
+    minWidth: 0,
+  },
+
+  fmlCompactCardMissing: {
+    border: "2px solid #b00020",
+    background: "#fff0f0",
+  },
+
+  fmlCompactCardLow: {
+    border: "2px solid #0057b8",
+    background: "#eef5ff",
+  },
+
+  fmlTopLine: {
+    color: "#555",
+    fontSize: 11,
+    fontWeight: "bold",
+  },
+
+  fmlName: {
+    fontWeight: "bold",
+    fontSize: 12.5,
+    lineHeight: 1.12,
+    overflowWrap: "anywhere",
+  },
+
+  fmlMeta: {
+    color: "#555",
+    fontSize: 11,
+    lineHeight: 1.2,
+    overflowWrap: "anywhere",
+  },
+
+  fmlMiniGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: 5,
+  },
+
+  fmlMiniBox: {
+    padding: 5,
+    borderRadius: 9,
+    background: "#fff",
+    border: "1px solid #ddd",
+    display: "grid",
+    gap: 2,
+    textAlign: "center",
+    fontSize: 10,
+    lineHeight: 1.1,
+  },
+
+  fmlMiniBoxStrong: {
+    gridColumn: "1 / -1",
+    padding: 5,
+    borderRadius: 9,
+    background: "#111",
+    color: "#fff",
+    border: "1px solid #111",
+    display: "grid",
+    gap: 2,
+    textAlign: "center",
+    fontSize: 10,
+    lineHeight: 1.1,
+  },
+
+  fmlReason: {
+    padding: 6,
+    borderRadius: 9,
+    background: "#fff4d6",
+    color: "#8a5a00",
+    fontWeight: "bold",
+    textAlign: "center",
+    fontSize: 10.5,
+    lineHeight: 1.15,
+  },
+
+  fmlRecipeButton: {
+    border: "1px solid #ccc",
+    borderRadius: 999,
+    background: "#fff",
+    color: "#111",
+    padding: "7px 8px",
+    cursor: "pointer",
+    fontWeight: "bold",
+    fontSize: 11,
+    lineHeight: 1.1,
+  },
 };
