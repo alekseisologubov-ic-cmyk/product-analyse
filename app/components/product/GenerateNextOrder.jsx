@@ -894,6 +894,7 @@ const rawOrderDate = rows[1]?.[1];
       shipName: orderShipName,
       shipCode: orderShipCode,
       shipDisplayName: getShipDisplayName(orderShipCode),
+      isFreshProduceOrder,
       orderDate: formatDateCell(rawOrderDate),
       arrivalDate: formatDateCell(rawArrivalDate),
       targetSailors,
