@@ -18,6 +18,9 @@ const SHIP_DISPLAY_NAMES = {
   RL: "Resilient",
 };
 
+const ORDER_BUFFER_PERCENT = 25;
+const ORDER_BUFFER_MULTIPLIER = 1 + ORDER_BUFFER_PERCENT / 100;
+
 const cleanText = (value) =>
   String(value || "").toUpperCase().replace(/\s+/g, " ").trim();
 
@@ -46,6 +49,8 @@ const formatMoney = (value) => "$" + Number(value || 0).toFixed(2);
 
 const getShipDisplayName = (shipCode) =>
   SHIP_DISPLAY_NAMES[shipCode] || shipCode || "";
+
+const sx = (...parts) => Object.assign({}, ...parts.filter(Boolean));
 
 const normalizeShipCode = (value) => {
   const text = cleanText(value)
@@ -109,6 +114,9 @@ const normalizeOrderCode = (value) => {
 
   return cleanText(raw).replace(/\.0+$/, "");
 };
+
+const normalizeProductCodeForMatch = (value) =>
+  normalizeOrderCode(value).replace(/^0+(?=\d)/g, "").trim();
 
 const excelDateToDate = (value) => {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
@@ -314,6 +322,7 @@ const PRODUCT_MATCH_STOP_WORDS = new Set([
 
 const singularizeProductToken = (token) => {
   if (!token) return "";
+
   if (token.length > 4 && token.endsWith("IES")) {
     return `${token.slice(0, -3)}Y`;
   }
@@ -394,7 +403,12 @@ const sanitizeFileName = (value) =>
     .toLowerCase()
     .slice(0, 60);
 
-const sx = (...parts) => Object.assign({}, ...parts.filter(Boolean));
+const getOrderItemStableKey = (item) =>
+  [
+    item?.excelRow || "",
+    normalizeProductCodeForMatch(item?.code),
+    cleanText(item?.product),
+  ].join("|");
 
 const sortNextOrderRows = (rows) =>
   [...rows].sort((a, b) => {
@@ -404,6 +418,141 @@ const sortNextOrderRows = (rows) =>
 
     return String(a.product || "").localeCompare(String(b.product || ""));
   });
+
+const aggregateYearlyRows = (rows = []) => {
+  const regions = new Set();
+  const ships = new Set();
+  const months = new Set();
+  const productCodes = new Set();
+  const productNames = new Set();
+
+  let totalQty = 0;
+  let totalValue = 0;
+  let totalDays = 0;
+  let priceSum = 0;
+  let priceCount = 0;
+
+  rows.forEach((row) => {
+    const qty = Number(row.qty || 0);
+    const value = Number(row.value || 0);
+    const days = Number(row.days || 0);
+    const price = Number(row.price || 0);
+
+    totalQty += Number.isFinite(qty) ? qty : 0;
+    totalValue += Number.isFinite(value) ? value : 0;
+    totalDays += Number.isFinite(days) ? days : 0;
+
+    if (Number.isFinite(price) && price > 0) {
+      priceSum += price;
+      priceCount += 1;
+    }
+
+    if (row.region) regions.add(String(row.region));
+    if (row.ship) ships.add(String(row.ship));
+    if (row.monthName || row.monthKey) {
+      months.add(String(row.monthName || row.monthKey));
+    }
+
+    if (row.productCode) productCodes.add(String(row.productCode));
+    if (row.productName) productNames.add(String(row.productName));
+  });
+
+  return {
+    rows: rows.length,
+    totalQty,
+    totalValue,
+    totalDays,
+    avgDailyQty: totalDays > 0 ? totalQty / totalDays : 0,
+    avgPrice:
+      priceCount > 0
+        ? priceSum / priceCount
+        : totalQty > 0
+        ? totalValue / totalQty
+        : 0,
+    regions: [...regions].sort(),
+    ships: [...ships].sort(),
+    months: [...months].sort(),
+    productCodes: [...productCodes].sort(),
+    productNames: [...productNames].sort(),
+  };
+};
+
+const getYearlyRegionalStatsForItem = ({
+  item,
+  yearlyRegionalConsumption,
+  selectedRegion,
+}) => {
+  const sourceRows = Array.isArray(yearlyRegionalConsumption?.rows)
+    ? yearlyRegionalConsumption.rows
+    : [];
+
+  if (!item || !sourceRows.length) {
+    return {
+      hasData: false,
+      yearTotal: aggregateYearlyRows([]),
+      market: aggregateYearlyRows([]),
+      marketLabel: selectedRegion || "",
+      matchedBy: "",
+      matchedProductName: "",
+      matchedProductCode: "",
+    };
+  }
+
+  const itemCode = normalizeProductCodeForMatch(item.code);
+  const itemProductKey = getProductReportKey(item.product);
+
+  const codeMatches = [];
+  const nameMatches = [];
+
+  sourceRows.forEach((row) => {
+    const rowCode = normalizeProductCodeForMatch(row.productCode);
+    const rowProductName = String(row.productName || "").trim();
+
+    if (!rowCode && !rowProductName) return;
+
+    if (itemCode && rowCode && itemCode === rowCode) {
+      codeMatches.push(row);
+      return;
+    }
+
+    const rowProductKey =
+      String(row.productKey || "").trim() || getProductReportKey(rowProductName);
+
+    if (itemProductKey && rowProductKey && itemProductKey === rowProductKey) {
+      nameMatches.push(row);
+      return;
+    }
+
+    if (productNamesMatch(item.product, rowProductName)) {
+      nameMatches.push(row);
+    }
+  });
+
+  const matchedRows = codeMatches.length ? codeMatches : nameMatches;
+  const matchedBy = codeMatches.length ? "Code" : nameMatches.length ? "Name" : "";
+
+  const marketRows =
+    selectedRegion && selectedRegion !== YEARLY_REGION_ALL
+      ? matchedRows.filter((row) => String(row.region || "").trim() === selectedRegion)
+      : matchedRows;
+
+  const yearTotal = aggregateYearlyRows(matchedRows);
+  const market = aggregateYearlyRows(marketRows);
+
+  return {
+    hasData: matchedRows.length > 0,
+    yearTotal,
+    market,
+    marketLabel:
+      !selectedRegion || selectedRegion === YEARLY_REGION_ALL
+        ? "All markets"
+        : selectedRegion,
+    matchedBy,
+    matchedProductName:
+      yearTotal.productNames[0] || String(item.product || "").trim(),
+    matchedProductCode: yearTotal.productCodes[0] || String(item.code || "").trim(),
+  };
+};
 
 const parseTemplateWorkbook = (workbook) => {
   const map = {};
@@ -944,6 +1093,7 @@ const parseNextOrderWorkbook = ({ workbook, templateMap, fallbackShipCode }) => 
   const targetSailors = toNumber(rows[4]?.[1]);
   const targetDays = toNumber(rows[5]?.[1]);
   const daysUntilArrival = getDaysBetweenCells(rawOrderDate, rawArrivalDate);
+  const totalDaysToCover = daysUntilArrival + targetDays;
   const currentPeriodSailorDays = targetSailors * targetDays;
 
   const futureOrderColumns = [5, 6, 7, 8, 9, 10, 11, 12, 13];
@@ -970,6 +1120,7 @@ const parseNextOrderWorkbook = ({ workbook, templateMap, fallbackShipCode }) => 
 
     const stockOnHand = toNumber(row[3]);
     const parLevel = toNumber(row[16]);
+
     const futureOrders = futureOrderColumns.reduce(
       (sum, colIndex) => sum + toNumber(row[colIndex]),
       0
@@ -986,41 +1137,23 @@ const parseNextOrderWorkbook = ({ workbook, templateMap, fallbackShipCode }) => 
     const averageConsumptionPerDay =
       averageConsumptionPerSailorDay * targetSailors;
 
-    const projectedNeed = averageConsumptionPerDay * targetDays;
     const consumptionUntilArrival = averageConsumptionPerDay * daysUntilArrival;
+    const voyageConsumptionNeed = averageConsumptionPerDay * targetDays;
+    const requiredQtyBeforeBuffer = averageConsumptionPerDay * totalDaysToCover;
+    const bufferQty = requiredQtyBeforeBuffer * (ORDER_BUFFER_PERCENT / 100);
+    const requiredQtyWithBuffer = requiredQtyBeforeBuffer * ORDER_BUFFER_MULTIPLIER;
+    const availableForFullPeriod = stockOnHand + futureOrders;
     const availableAtArrival = stockOnHand + futureOrders - consumptionUntilArrival;
-    const rawSuggestedOrder = Math.max(projectedNeed - availableAtArrival, 0);
-
-    const isFourteenDayLoad = Math.abs(Number(targetDays || 0) - 14) < 0.01;
-    const parMaxAllowed = parLevel > 0 ? parLevel * 1.1 : 0;
-    const parCapApplied = Boolean(
-      isFourteenDayLoad &&
-        parLevel > 0 &&
-        rawSuggestedOrder > parMaxAllowed
-    );
-
-    const suggestedOrder = parCapApplied ? parMaxAllowed : rawSuggestedOrder;
-
-    let parLevelNote = "Par level ignored because B6 is not exactly 14 days.";
-
-    if (isFourteenDayLoad && parLevel > 0 && parCapApplied) {
-      parLevelNote =
-        "Par cap applied: 14-day load cannot exceed par level Q + 10%.";
-    } else if (isFourteenDayLoad && parLevel > 0) {
-      parLevelNote =
-        "Par level considered: calculated order is within par level Q + 10%.";
-    } else if (isFourteenDayLoad && parLevel <= 0) {
-      parLevelNote = "14-day load, but no par level found in column Q.";
-    }
+    const suggestedOrder = Math.max(requiredQtyWithBuffer - availableForFullPeriod, 0);
 
     const hasNoPastConsumption = pastConsumption <= 0;
     const hasNoStockOnHand = stockOnHand <= 0;
 
     let alertType = suggestedOrder > 0 ? "order" : "normal";
     let alertLabel = suggestedOrder > 0 ? "Needs order" : "No order suggested";
+
     let alertDescription =
-      "Average daily consumption x voyage days, adjusted for stock/future orders until order arrival. " +
-      parLevelNote;
+      "Past consumption average x days until arrival + voyage days, plus 25% buffer, minus stock on hand and future orders.";
 
     if (hasNoPastConsumption && hasNoStockOnHand) {
       alertType = "blue";
@@ -1043,18 +1176,27 @@ const parseNextOrderWorkbook = ({ workbook, templateMap, fallbackShipCode }) => 
       parLevel,
       futureOrders,
       pastConsumption,
-      rawSuggestedOrder,
-      parMaxAllowed,
-      parCapApplied,
-      parLevelNote,
       historicalSailorDays,
       currentPeriodSailorDays,
       daysUntilArrival,
+      voyageDays: targetDays,
+      totalDaysToCover,
       averageConsumptionPerSailorDay,
       averageConsumptionPerDay,
-      projectedNeed,
       consumptionUntilArrival,
+      voyageConsumptionNeed,
+      requiredQtyBeforeBuffer,
+      bufferPercent: ORDER_BUFFER_PERCENT,
+      bufferQty,
+      requiredQtyWithBuffer,
+      availableForFullPeriod,
       availableAtArrival,
+      projectedNeed: voyageConsumptionNeed,
+      rawSuggestedOrder: suggestedOrder,
+      parMaxAllowed: 0,
+      parCapApplied: false,
+      parLevelNote:
+        "Simple calculation used: past average × total days to cover + 25% buffer. Par level Q is shown only for reference.",
       suggestedOrder,
       alertType,
       alertLabel,
@@ -1093,13 +1235,13 @@ const parseNextOrderWorkbook = ({ workbook, templateMap, fallbackShipCode }) => 
       targetSailors,
       targetDays,
       daysUntilArrival,
+      totalDaysToCover,
       currentPeriodSailorDays,
       historicalSailorDays,
       totalItems: sortedRows.length,
       itemsNeedingOrder: sortedRows.filter(
         (item) => Number(item.suggestedOrder || 0) > 0
       ).length,
-      parCapItems: sortedRows.filter((item) => item.parCapApplied).length,
       blueReviewItems: sortedRows.filter((item) => item.alertType === "blue")
         .length,
       redReviewItems: sortedRows.filter((item) => item.alertType === "red")
@@ -1126,8 +1268,6 @@ export default function GenerateNextOrder({
   setYearlyRegionalFileName = () => {},
   selectedRegionalConsumptionRegion = "",
   setSelectedRegionalConsumptionRegion = () => {},
-  regionalParBufferPercent = 0,
-  setRegionalParBufferPercent = () => {},
 }) {
   const [templateMap, setTemplateMap] = useState({});
   const [templateStatus, setTemplateStatus] = useState("Loading default ERP template...");
@@ -1151,10 +1291,37 @@ export default function GenerateNextOrder({
   const [nextOrderLoading, setNextOrderLoading] = useState(false);
   const [nextOrderMessage, setNextOrderMessage] = useState("");
   const [yearlyRegionalMessage, setYearlyRegionalMessage] = useState("");
+  const [selectedOrderItem, setSelectedOrderItem] = useState(null);
 
-  const activeRows = nextOrderRows.length
-    ? nextOrderRows
-    : sortNextOrderRows(nextOrderSourceRows);
+  const activeRows = useMemo(
+    () =>
+      nextOrderRows.length
+        ? nextOrderRows
+        : sortNextOrderRows(nextOrderSourceRows),
+    [nextOrderRows, nextOrderSourceRows]
+  );
+
+  const yearlyStatsByItemKey = useMemo(() => {
+    const map = {};
+
+    activeRows.forEach((item) => {
+      map[getOrderItemStableKey(item)] = getYearlyRegionalStatsForItem({
+        item,
+        yearlyRegionalConsumption,
+        selectedRegion: selectedRegionalConsumptionRegion,
+      });
+    });
+
+    return map;
+  }, [activeRows, yearlyRegionalConsumption, selectedRegionalConsumptionRegion]);
+
+  const selectedOrderItemStats = selectedOrderItem
+    ? getYearlyRegionalStatsForItem({
+        item: selectedOrderItem,
+        yearlyRegionalConsumption,
+        selectedRegion: selectedRegionalConsumptionRegion,
+      })
+    : null;
 
   const filterNextOrderRows = (rows) => {
     const term = nextOrderSearch.toLowerCase().trim();
@@ -1164,7 +1331,6 @@ export default function GenerateNextOrder({
         nextOrderFilter === "all" ||
         (nextOrderFilter === "needsOrder" &&
           Number(item.suggestedOrder || 0) > 0) ||
-        (nextOrderFilter === "parCap" && item.parCapApplied) ||
         (nextOrderFilter === "blue" && item.alertType === "blue") ||
         (nextOrderFilter === "red" && item.alertType === "red") ||
         (nextOrderFilter === "noConsumption" &&
@@ -1254,7 +1420,6 @@ export default function GenerateNextOrder({
       all: rows.length,
       needsOrder: rows.filter((item) => Number(item.suggestedOrder || 0) > 0)
         .length,
-      parCap: rows.filter((item) => item.parCapApplied).length,
       blue: rows.filter((item) => item.alertType === "blue").length,
       red: rows.filter((item) => item.alertType === "red").length,
       noConsumption: rows.filter((item) => Number(item.pastConsumption || 0) <= 0)
@@ -1374,6 +1539,7 @@ export default function GenerateNextOrder({
       setFmlLowSearch("");
       setNextOrderFilter("all");
       setNextOrderView("order");
+      setSelectedOrderItem(null);
 
       setNextOrderMessage(
         "Order file loaded. " +
@@ -1383,8 +1549,6 @@ export default function GenerateNextOrder({
           ". " +
           parsed.meta.itemsNeedingOrder +
           " need order, " +
-          parsed.meta.parCapItems +
-          " par cap, " +
           parsed.meta.blueReviewItems +
           " blue review, " +
           parsed.meta.redReviewItems +
@@ -1403,7 +1567,6 @@ export default function GenerateNextOrder({
         shipCode: parsed.meta.shipCode,
         totalItems: parsed.meta.totalItems,
         itemsNeedingOrder: parsed.meta.itemsNeedingOrder,
-        parCapItems: parsed.meta.parCapItems,
         blueReviewItems: parsed.meta.blueReviewItems,
         redReviewItems: parsed.meta.redReviewItems,
         fmlMissingItems: parsed.meta.fmlMissingItems,
@@ -1418,6 +1581,7 @@ export default function GenerateNextOrder({
       setNextOrderMeta({});
       setFmlMissingRows([]);
       setFmlLowRows([]);
+      setSelectedOrderItem(null);
       setNextOrderMessage(text);
       window.alert(text);
     } finally {
@@ -1455,7 +1619,7 @@ export default function GenerateNextOrder({
               nextOrderMeta.shipCode ||
               userShip ||
               "N/A") +
-            ". Use filters and search to review products."
+            ". Formula uses days until arrival + voyage days + 25% buffer."
         );
 
         logUsageEvent("next_order_generated", {
@@ -1464,7 +1628,6 @@ export default function GenerateNextOrder({
           ship: nextOrderMeta.shipCode || userShip,
           rowsGenerated: rows.length,
           itemsNeedingOrder: nextOrderMeta.itemsNeedingOrder || 0,
-          parCapItems: nextOrderMeta.parCapItems || 0,
           blueReviewItems: nextOrderMeta.blueReviewItems || 0,
           redReviewItems: nextOrderMeta.redReviewItems || 0,
         });
@@ -1525,48 +1688,57 @@ export default function GenerateNextOrder({
     }
   };
 
-  const getRowsForOrderExport = () => visibleOrderRows;
-
   const exportNextOrderToExcel = () => {
-    const rows = getRowsForOrderExport();
+    const rows = visibleOrderRows;
 
     if (!rows.length) {
       window.alert("No next-order lines found.");
       return;
     }
 
-    const exportRows = rows.map((item, index) => ({
-      Line: index + 1,
-      ExcelRow: item.excelRow,
-      ShipCode: nextOrderMeta.shipCode || "",
-      Ship: nextOrderMeta.shipDisplayName || nextOrderMeta.shipName || "",
-      Code: item.code || "",
-      Product: item.product,
-      UM: item.uom,
-      StockOnHand: Number(item.stockOnHand || 0),
-      ParLevel_Q_14Days: Number(item.parLevel || 0),
-      FutureOrders_F_to_N: Number(item.futureOrders || 0),
-      PastConsumption_AI_to_AN: Number(item.pastConsumption || 0),
-      HistoricalSailorDays_AI5_AI6: Number(item.historicalSailorDays || 0),
-      AverageConsumptionPerSailorDay: Number(
-        item.averageConsumptionPerSailorDay || 0
-      ),
-      AverageConsumptionPerDay: Number(item.averageConsumptionPerDay || 0),
-      DaysUntilArrival_B2_to_B3: Number(item.daysUntilArrival || 0),
-      ConsumptionUntilArrival: Number(item.consumptionUntilArrival || 0),
-      AvailableAtArrival: Number(item.availableAtArrival || 0),
-      ProjectedVoyageNeed_B6: Number(item.projectedNeed || 0),
-      RawSuggestedBeforePar: Number(item.rawSuggestedOrder || 0),
-      ParMaxAllowed_Q_plus_10_percent: Number(item.parMaxAllowed || 0),
-      ParCapApplied: item.parCapApplied ? "Yes" : "No",
-      SuggestedNextOrder: Number(item.suggestedOrder || 0),
-      Alert: item.alertLabel || "",
-      AlertType: item.alertType || "",
-      ParNote: item.parLevelNote || "",
-      Reason:
-        item.orderReason ||
-        "Average daily consumption x voyage days, adjusted for stock/future orders until order arrival.",
-    }));
+    const exportRows = rows.map((item, index) => {
+      const stats = yearlyStatsByItemKey[getOrderItemStableKey(item)];
+
+      return {
+        Line: index + 1,
+        ExcelRow: item.excelRow,
+        ShipCode: nextOrderMeta.shipCode || "",
+        Ship: nextOrderMeta.shipDisplayName || nextOrderMeta.shipName || "",
+        Code: item.code || "",
+        Product: item.product,
+        UM: item.uom,
+        StockOnHand: Number(item.stockOnHand || 0),
+        FutureOrders_F_to_N: Number(item.futureOrders || 0),
+        PastConsumption_AI_to_AN: Number(item.pastConsumption || 0),
+        HistoricalSailorDays_AI5_AI6: Number(item.historicalSailorDays || 0),
+        AverageConsumptionPerDay: Number(item.averageConsumptionPerDay || 0),
+        DaysUntilArrival: Number(item.daysUntilArrival || 0),
+        VoyageDays: Number(item.voyageDays || 0),
+        TotalDaysToCover: Number(item.totalDaysToCover || 0),
+        NeedBeforeBuffer: Number(item.requiredQtyBeforeBuffer || 0),
+        BufferPercent: ORDER_BUFFER_PERCENT,
+        BufferQty: Number(item.bufferQty || 0),
+        NeedWithBuffer: Number(item.requiredQtyWithBuffer || 0),
+        StockPlusFutureOrders: Number(item.availableForFullPeriod || 0),
+        SuggestedNextOrder: Number(item.suggestedOrder || 0),
+        Alert: item.alertLabel || "",
+        AlertType: item.alertType || "",
+        Reason: item.orderReason || "",
+        PreviousYearMatched: stats?.hasData ? "Yes" : "No",
+        PreviousYearMatchBy: stats?.matchedBy || "",
+        PreviousYearProductCode: stats?.matchedProductCode || "",
+        PreviousYearProductName: stats?.matchedProductName || "",
+        PreviousYearTotalQty: Number(stats?.yearTotal?.totalQty || 0),
+        PreviousYearTotalDays: Number(stats?.yearTotal?.totalDays || 0),
+        PreviousYearAverageDailyQty: Number(stats?.yearTotal?.avgDailyQty || 0),
+        Market: stats?.marketLabel || "",
+        MarketTotalQty: Number(stats?.market?.totalQty || 0),
+        MarketTotalDays: Number(stats?.market?.totalDays || 0),
+        MarketAverageDailyQty: Number(stats?.market?.avgDailyQty || 0),
+        MarketShips: (stats?.market?.ships || []).join(", "),
+        MarketRegions: (stats?.market?.regions || []).join(", "),
+      };
+    });
 
     const ws = XLSX.utils.json_to_sheet(exportRows);
     const wb = XLSX.utils.book_new();
@@ -1715,11 +1887,10 @@ export default function GenerateNextOrder({
                   <td>${formatQty(item.stockOnHand)}</td>
                   <td>${formatQty(item.futureOrders)}</td>
                   <td>${formatQty(item.pastConsumption)}</td>
-                  <td>${formatQty(item.averageConsumptionPerDay)}</td>
-                  <td>${formatQty(item.availableAtArrival)}</td>
-                  <td class="qty">${formatQty(item.suggestedOrder)}${
-                item.parCapApplied ? " (Par cap)" : ""
-              }</td>
+                  <td>${formatQty(item.totalDaysToCover)}</td>
+                  <td>${formatQty(item.requiredQtyBeforeBuffer)}</td>
+                  <td>${formatQty(item.bufferQty)}</td>
+                  <td class="qty">${formatQty(item.suggestedOrder)}</td>
                   <td class="${
                     item.alertType === "red"
                       ? "red"
@@ -1767,10 +1938,11 @@ export default function GenerateNextOrder({
             <th>Product</th>
             <th>UM</th>
             <th>Stock</th>
-            <th>Future Orders</th>
+            <th>Future</th>
             <th>Past Consumption</th>
-            <th>Avg / Day</th>
-            <th>At Arrival</th>
+            <th>Days Cover</th>
+            <th>Need Before Buffer</th>
+            <th>25% Buffer</th>
             <th>Suggested</th>
             <th>Alert</th>
           </tr>
@@ -1819,6 +1991,7 @@ export default function GenerateNextOrder({
             nextOrderMeta.shipCode || "N/A"
           )}</div>
           <div class="meta"><strong>Rows:</strong> ${rows.length}</div>
+          <div class="meta"><strong>Formula:</strong> Past avg/day × (days until arrival + voyage days) + 25% buffer - stock - future orders.</div>
           <div class="meta"><strong>Generated:</strong> ${escapeHtml(
             new Date().toLocaleString()
           )}</div>
@@ -1892,9 +2065,9 @@ export default function GenerateNextOrder({
     "N/A";
 
   const activeRegionalRegionLabel = !selectedRegionalConsumptionRegion
-    ? "Not selected"
+    ? "All markets"
     : selectedRegionalConsumptionRegion === YEARLY_REGION_ALL
-    ? "All regions"
+    ? "All markets"
     : selectedRegionalConsumptionRegion;
 
   return (
@@ -1977,13 +2150,22 @@ export default function GenerateNextOrder({
             </div>
 
             <div>
-              📆 Days B6:{" "}
+              📆 Voyage days B6:{" "}
               <strong>{formatQty(nextOrderMeta.targetDays)}</strong>
             </div>
 
             <div>
               ⏳ Days until arrival:{" "}
               <strong>{formatQty(nextOrderMeta.daysUntilArrival)}</strong>
+            </div>
+
+            <div>
+              📆 Total days to cover:{" "}
+              <strong>{formatQty(nextOrderMeta.totalDaysToCover)}</strong>
+            </div>
+
+            <div>
+              ➕ Order buffer: <strong>{ORDER_BUFFER_PERCENT}%</strong>
             </div>
 
             <div>
@@ -2027,7 +2209,7 @@ export default function GenerateNextOrder({
         </div>
 
         <div style={styles.card}>
-          <h2 style={styles.cardTitle}>🌎 Regional Par Optional</h2>
+          <h2 style={styles.cardTitle}>🌎 Previous Year / Market Comparison</h2>
 
           <label style={styles.label}>
             Yearly regional consumption file May 2025 - April 2026
@@ -2040,7 +2222,7 @@ export default function GenerateNextOrder({
             style={styles.fileInput}
           />
 
-          <label style={styles.label}>Region / home port</label>
+          <label style={styles.label}>Market / region</label>
           <select
             value={selectedRegionalConsumptionRegion}
             onChange={(event) =>
@@ -2048,8 +2230,8 @@ export default function GenerateNextOrder({
             }
             style={styles.searchInput}
           >
-            <option value="">Select region / origin</option>
-            <option value={YEARLY_REGION_ALL}>All regions</option>
+            <option value="">All markets</option>
+            <option value={YEARLY_REGION_ALL}>All markets</option>
 
             {(yearlyRegionalConsumption?.regionOptions || []).map((region) => (
               <option key={region} value={region}>
@@ -2058,30 +2240,19 @@ export default function GenerateNextOrder({
             ))}
           </select>
 
-          <label style={styles.label}>Regional par buffer %</label>
-          <input
-            type="number"
-            min="0"
-            step="1"
-            value={regionalParBufferPercent}
-            onChange={(event) =>
-              setRegionalParBufferPercent(Number(event.target.value || 0))
-            }
-            style={styles.searchInput}
-          />
-
           <div style={styles.infoBox}>
             <div>
-              📄 File: <strong>{yearlyRegionalFileName || "Not loaded"}</strong>
+              📄 Yearly file:{" "}
+              <strong>{yearlyRegionalFileName || "Not loaded"}</strong>
             </div>
 
             <div>
-              🧭 Region: <strong>{activeRegionalRegionLabel}</strong>
+              🧭 Market shown: <strong>{activeRegionalRegionLabel}</strong>
             </div>
 
             <div>
-              🧮 Buffer:{" "}
-              <strong>{formatRegionalQty(regionalParBufferPercent)}%</strong>
+              📊 This comparison does not change the order. It only shows previous
+              year average consumption beside the new suggested order.
             </div>
 
             {yearlyRegionalMessage && <div>{yearlyRegionalMessage}</div>}
@@ -2100,8 +2271,8 @@ export default function GenerateNextOrder({
           <div>
             <h2 style={styles.productTitle}>🧭 Report View</h2>
             <p style={sx(styles.emptyText, { margin: 0 })}>
-              Review suggested order, FML not ordered/not used, and FML running
-              low.
+              Formula: past consumption average × days until arrival + voyage
+              days, plus 25% buffer, minus stock and future orders.
             </p>
           </div>
 
@@ -2161,10 +2332,6 @@ export default function GenerateNextOrder({
               </div>
 
               <div>
-                📏 Par cap: <strong>{filterCounts.parCap}</strong>
-              </div>
-
-              <div>
                 🔵 Blue review: <strong>{filterCounts.blue}</strong>
               </div>
 
@@ -2177,7 +2344,6 @@ export default function GenerateNextOrder({
               {[
                 ["all", "📋 All", filterCounts.all],
                 ["needsOrder", "🛒 Needs Order", filterCounts.needsOrder],
-                ["parCap", "📏 Par Cap", filterCounts.parCap],
                 ["blue", "🔵 Blue Review", filterCounts.blue],
                 ["red", "🔴 Red Review", filterCounts.red],
                 ["noConsumption", "0️⃣ No Consumption", filterCounts.noConsumption],
@@ -2237,72 +2403,106 @@ export default function GenerateNextOrder({
             )}
 
             <div style={styles.equipmentGrid}>
-              {visibleOrderRows.map((item, index) => (
-                <div
-                  key={`${item.excelRow}-${item.code}-${index}`}
-                  style={sx(
-                    styles.equipmentCard,
-                    item.alertType === "red" ? styles.orderWarningCard : {},
-                    item.alertType === "blue" || Number(item.suggestedOrder || 0) > 0
-                      ? styles.orderNeededCard
-                      : {}
-                  )}
-                >
-                  <div style={styles.recipeMeta}>Excel row: {item.excelRow}</div>
+              {visibleOrderRows.map((item, index) => {
+                const stats = yearlyStatsByItemKey[getOrderItemStableKey(item)];
 
-                  <div style={styles.recipeName}>{item.product}</div>
-
-                  <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                  <div style={styles.recipeMeta}>UM: {item.uom || "N/A"}</div>
-
-                  <div style={styles.recipeMeta}>
-                    Stock on hand: {formatQty(item.stockOnHand)}
-                  </div>
-
-                  <div style={styles.recipeMeta}>
-                    Future orders F:N: {formatQty(item.futureOrders)}
-                  </div>
-
-                  <div style={styles.recipeMeta}>
-                    Past consumption AI:AN: {formatQty(item.pastConsumption)}
-                  </div>
-
-                  <div style={styles.recipeMeta}>
-                    Avg / day: {formatQty(item.averageConsumptionPerDay)}
-                  </div>
-
-                  <div style={styles.recipeMeta}>
-                    Available at arrival: {formatQty(item.availableAtArrival)}
-                  </div>
-
+                return (
                   <div
-                    style={
-                      Number(item.suggestedOrder || 0) > 0
-                        ? styles.suggestedOrderBad
-                        : styles.suggestedOrderGood
-                    }
+                    key={`${item.excelRow}-${item.code}-${index}`}
+                    style={sx(
+                      styles.equipmentCard,
+                      item.alertType === "red" ? styles.orderWarningCard : {},
+                      item.alertType === "blue" ||
+                        Number(item.suggestedOrder || 0) > 0
+                        ? styles.orderNeededCard
+                        : {}
+                    )}
                   >
-                    Suggested next order: {formatQty(item.suggestedOrder)}
-                    {item.parCapApplied ? " / Par cap" : ""}
-                  </div>
+                    <div style={styles.recipeMeta}>Excel row: {item.excelRow}</div>
 
-                  {item.alertLabel && (
+                    <div style={styles.recipeName}>{item.product}</div>
+
+                    <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
+                    <div style={styles.recipeMeta}>UM: {item.uom || "N/A"}</div>
+
+                    <div style={styles.recipeMeta}>
+                      Stock on hand: {formatQty(item.stockOnHand)}
+                    </div>
+
+                    <div style={styles.recipeMeta}>
+                      Future orders F:N: {formatQty(item.futureOrders)}
+                    </div>
+
+                    <div style={styles.recipeMeta}>
+                      Past consumption AI:AN: {formatQty(item.pastConsumption)}
+                    </div>
+
+                    <div style={styles.recipeMeta}>
+                      Avg / day from order: {formatQty(item.averageConsumptionPerDay)}
+                    </div>
+
+                    <div style={styles.recipeMeta}>
+                      Days cover: {formatQty(item.totalDaysToCover)} ={" "}
+                      {formatQty(item.daysUntilArrival)} until arrival +{" "}
+                      {formatQty(item.voyageDays)} voyage
+                    </div>
+
+                    <div style={styles.recipeMeta}>
+                      Need before buffer: {formatQty(item.requiredQtyBeforeBuffer)}
+                    </div>
+
+                    <div style={styles.recipeMeta}>
+                      25% buffer: {formatQty(item.bufferQty)}
+                    </div>
+
+                    {stats?.hasData ? (
+                      <div style={styles.statusNeutral}>
+                        Year avg/day:{" "}
+                        {formatRegionalQty(stats.yearTotal.avgDailyQty)} •{" "}
+                        Market avg/day:{" "}
+                        {formatRegionalQty(stats.market.avgDailyQty)}
+                      </div>
+                    ) : (
+                      <div style={styles.statusNeutral}>
+                        No previous-year market match
+                      </div>
+                    )}
+
                     <div
                       style={
-                        item.alertType === "red"
-                          ? styles.statusBad
-                          : item.alertType === "blue" || item.alertType === "order"
-                          ? styles.statusWarning
-                          : styles.statusNeutral
+                        Number(item.suggestedOrder || 0) > 0
+                          ? styles.suggestedOrderBad
+                          : styles.suggestedOrderGood
                       }
                     >
-                      {item.alertLabel}
+                      Suggested next order: {formatQty(item.suggestedOrder)}
                     </div>
-                  )}
 
-                  <div style={styles.recipeMeta}>{item.parLevelNote}</div>
-                </div>
-              ))}
+                    {item.alertLabel && (
+                      <div
+                        style={
+                          item.alertType === "red"
+                            ? styles.statusBad
+                            : item.alertType === "blue" ||
+                              item.alertType === "order"
+                            ? styles.statusWarning
+                            : styles.statusNeutral
+                        }
+                      >
+                        {item.alertLabel}
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      style={styles.backButton}
+                      onClick={() => setSelectedOrderItem(item)}
+                    >
+                      🔎 Details / Yearly Comparison
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </>
         )}
@@ -2319,11 +2519,6 @@ export default function GenerateNextOrder({
               <div>
                 🚢 Ship matched as:{" "}
                 <strong>{nextOrderMeta.shipCode || userShip || "N/A"}</strong>
-              </div>
-
-              <div>
-                This report uses the ERP template and supports Scarlet aliases:
-                SC, SCL, V1, V 1, V-1.
               </div>
             </div>
 
@@ -2412,11 +2607,6 @@ export default function GenerateNextOrder({
               <div>
                 🚢 Ship matched as:{" "}
                 <strong>{nextOrderMeta.shipCode || userShip || "N/A"}</strong>
-              </div>
-
-              <div>
-                This report uses the ERP template and supports Scarlet aliases:
-                SC, SCL, V1, V 1, V-1.
               </div>
             </div>
 
@@ -2508,6 +2698,242 @@ export default function GenerateNextOrder({
           </>
         )}
       </section>
+
+      {selectedOrderItem && (
+        <div
+          style={styles.modalBackdrop}
+          onClick={() => setSelectedOrderItem(null)}
+        >
+          <div
+            style={styles.modalCard}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              style={styles.closeButton}
+              onClick={() => setSelectedOrderItem(null)}
+            >
+              ✕
+            </button>
+
+            <h2 style={styles.productTitle}>{selectedOrderItem.product}</h2>
+
+            <p>
+              <strong>Code:</strong> {selectedOrderItem.code || "N/A"}
+            </p>
+
+            <p>
+              <strong>U/M:</strong> {selectedOrderItem.uom || "N/A"}
+            </p>
+
+            <p>
+              <strong>Ship:</strong> {orderShipLabel} /{" "}
+              {nextOrderMeta.shipCode || "N/A"}
+            </p>
+
+            <section style={styles.grid}>
+              <div style={styles.card}>
+                <h3 style={styles.cardTitle}>🧮 Order Calculation</h3>
+
+                <div style={styles.infoBox}>
+                  <div>
+                    Past consumption AI:AN:{" "}
+                    <strong>{formatQty(selectedOrderItem.pastConsumption)}</strong>
+                  </div>
+
+                  <div>
+                    Historical sailor-days:{" "}
+                    <strong>{formatQty(selectedOrderItem.historicalSailorDays)}</strong>
+                  </div>
+
+                  <div>
+                    Average / day:{" "}
+                    <strong>
+                      {formatQty(selectedOrderItem.averageConsumptionPerDay)}
+                    </strong>
+                  </div>
+
+                  <div>
+                    Days until arrival:{" "}
+                    <strong>{formatQty(selectedOrderItem.daysUntilArrival)}</strong>
+                  </div>
+
+                  <div>
+                    Voyage days:{" "}
+                    <strong>{formatQty(selectedOrderItem.voyageDays)}</strong>
+                  </div>
+
+                  <div>
+                    Total days to cover:{" "}
+                    <strong>{formatQty(selectedOrderItem.totalDaysToCover)}</strong>
+                  </div>
+
+                  <div>
+                    Need before buffer:{" "}
+                    <strong>
+                      {formatQty(selectedOrderItem.requiredQtyBeforeBuffer)}
+                    </strong>
+                  </div>
+
+                  <div>
+                    25% buffer:{" "}
+                    <strong>{formatQty(selectedOrderItem.bufferQty)}</strong>
+                  </div>
+
+                  <div>
+                    Need with buffer:{" "}
+                    <strong>
+                      {formatQty(selectedOrderItem.requiredQtyWithBuffer)}
+                    </strong>
+                  </div>
+
+                  <div>
+                    Stock on hand:{" "}
+                    <strong>{formatQty(selectedOrderItem.stockOnHand)}</strong>
+                  </div>
+
+                  <div>
+                    Future orders:{" "}
+                    <strong>{formatQty(selectedOrderItem.futureOrders)}</strong>
+                  </div>
+
+                  <div>
+                    Stock + future orders:{" "}
+                    <strong>
+                      {formatQty(selectedOrderItem.availableForFullPeriod)}
+                    </strong>
+                  </div>
+
+                  <div style={{ color: "#0057b8", fontWeight: "bold" }}>
+                    Suggested order:{" "}
+                    <strong>{formatQty(selectedOrderItem.suggestedOrder)}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div style={styles.card}>
+                <h3 style={styles.cardTitle}>🌎 Previous Year Comparison</h3>
+
+                {!selectedOrderItemStats?.hasData ? (
+                  <div style={styles.warningText}>
+                    No previous-year consumption match found for this product.
+                    Check product code/name in the yearly regional file.
+                  </div>
+                ) : (
+                  <div style={styles.infoBox}>
+                    <div>
+                      Matched by:{" "}
+                      <strong>{selectedOrderItemStats.matchedBy || "N/A"}</strong>
+                    </div>
+
+                    <div>
+                      Matched product code:{" "}
+                      <strong>
+                        {selectedOrderItemStats.matchedProductCode || "N/A"}
+                      </strong>
+                    </div>
+
+                    <div>
+                      Matched product name:{" "}
+                      <strong>
+                        {selectedOrderItemStats.matchedProductName || "N/A"}
+                      </strong>
+                    </div>
+
+                    <hr />
+
+                    <div>
+                      Previous year total quantity:{" "}
+                      <strong>
+                        {formatRegionalQty(
+                          selectedOrderItemStats.yearTotal.totalQty
+                        )}
+                      </strong>
+                    </div>
+
+                    <div>
+                      Previous year total days:{" "}
+                      <strong>
+                        {formatQty(selectedOrderItemStats.yearTotal.totalDays)}
+                      </strong>
+                    </div>
+
+                    <div>
+                      Previous year average / day:{" "}
+                      <strong>
+                        {formatRegionalQty(
+                          selectedOrderItemStats.yearTotal.avgDailyQty
+                        )}
+                      </strong>
+                    </div>
+
+                    <div>
+                      Previous year rows matched:{" "}
+                      <strong>{selectedOrderItemStats.yearTotal.rows}</strong>
+                    </div>
+
+                    <hr />
+
+                    <div>
+                      Market:{" "}
+                      <strong>{selectedOrderItemStats.marketLabel}</strong>
+                    </div>
+
+                    <div>
+                      Market total quantity:{" "}
+                      <strong>
+                        {formatRegionalQty(selectedOrderItemStats.market.totalQty)}
+                      </strong>
+                    </div>
+
+                    <div>
+                      Market total days:{" "}
+                      <strong>
+                        {formatQty(selectedOrderItemStats.market.totalDays)}
+                      </strong>
+                    </div>
+
+                    <div>
+                      Market average / day:{" "}
+                      <strong>
+                        {formatRegionalQty(
+                          selectedOrderItemStats.market.avgDailyQty
+                        )}
+                      </strong>
+                    </div>
+
+                    <div>
+                      Market rows matched:{" "}
+                      <strong>{selectedOrderItemStats.market.rows}</strong>
+                    </div>
+
+                    <div>
+                      Market ships:{" "}
+                      <strong>
+                        {selectedOrderItemStats.market.ships.join(", ") || "N/A"}
+                      </strong>
+                    </div>
+
+                    <div>
+                      Market regions:{" "}
+                      <strong>
+                        {selectedOrderItemStats.market.regions.join(", ") ||
+                          "N/A"}
+                      </strong>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <div style={styles.warningText}>
+              Previous-year and market data is for comparison only. The suggested
+              order uses the current order file calculation with a fixed 25%
+              buffer.
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
