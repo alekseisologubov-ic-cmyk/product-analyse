@@ -8132,6 +8132,7 @@ const exportYearlyRegionalConsumptionReportToExcel = () => {
   setSelectedRegionalConsumptionRegion={setSelectedRegionalConsumptionRegion}
   regionalParBufferPercent={regionalParBufferPercent}
   setRegionalParBufferPercent={setRegionalParBufferPercent}
+  recipeRows={recipeRows}
 />
       </Suspense>
     );
