@@ -2978,22 +2978,22 @@ export default function GenerateNextOrder({
   );
 }
 
-const localStyles = {
   orderGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 280px), 1fr))",
-    gap: 12,
-    marginTop: 14,
+    gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 165px), 1fr))",
+    gap: 8,
+    marginTop: 12,
   },
 
   orderCard: {
     border: "1px solid #ddd",
-    borderRadius: 16,
-    padding: 14,
+    borderRadius: 14,
+    padding: 9,
     background: "#fff",
     display: "grid",
-    gap: 10,
-    boxShadow: "0 6px 18px rgba(0,0,0,0.06)",
+    gap: 6,
+    boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
+    fontSize: 12,
   },
 
   orderCardNeed: {
@@ -3012,26 +3012,25 @@ const localStyles = {
   },
 
   orderCardHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: 10,
-    alignItems: "flex-start",
+    display: "grid",
+    gap: 5,
   },
 
   productName: {
     fontWeight: "bold",
-    fontSize: 15,
-    lineHeight: 1.2,
+    fontSize: 13,
+    lineHeight: 1.12,
     overflowWrap: "anywhere",
   },
 
   statusPill: {
-    padding: "6px 9px",
+    justifySelf: "start",
+    padding: "4px 7px",
     borderRadius: 999,
     background: "#f2f2f2",
     color: "#555",
     fontWeight: "bold",
-    fontSize: 11,
+    fontSize: 10,
     whiteSpace: "nowrap",
   },
 
@@ -3053,102 +3052,62 @@ const localStyles = {
   metricGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-    gap: 8,
+    gap: 5,
   },
 
   metricBox: {
-    padding: 9,
-    borderRadius: 12,
+    padding: 6,
+    borderRadius: 10,
     background: "#fff",
     border: "1px solid #ddd",
     display: "grid",
-    gap: 3,
+    gap: 2,
     textAlign: "center",
-    fontSize: 12,
+    fontSize: 10,
+    lineHeight: 1.15,
   },
 
   metricBoxStrong: {
-    padding: 9,
-    borderRadius: 12,
+    padding: 6,
+    borderRadius: 10,
     background: "#111",
     color: "#fff",
     border: "1px solid #111",
     display: "grid",
-    gap: 3,
+    gap: 2,
     textAlign: "center",
-    fontSize: 12,
+    fontSize: 10,
+    lineHeight: 1.15,
   },
 
-  reportList: {
+  compactInfoBox: {
+    padding: 7,
+    borderRadius: 10,
+    background: "#f2f2f2",
     display: "grid",
-    gap: 8,
-    marginTop: 14,
+    gap: 3,
+    fontSize: 11,
+    lineHeight: 1.2,
   },
 
-  reportRow: {
-    border: "1px solid #ddd",
-    borderRadius: 14,
-    padding: 12,
-    background: "#fafafa",
-    display: "grid",
-    gap: 9,
+  compactWarning: {
+    padding: 7,
+    borderRadius: 10,
+    background: "#fff4d6",
+    color: "#8a5a00",
+    fontWeight: "bold",
+    fontSize: 11,
+    lineHeight: 1.2,
+    textAlign: "center",
   },
 
-  reportMetrics: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: 7,
-    fontSize: 12,
-    color: "#555",
+  compactBad: {
+    padding: 7,
+    borderRadius: 10,
+    background: "#b00020",
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 11,
+    lineHeight: 1.2,
+    textAlign: "center",
   },
-
-  parRow: {
-    border: "1px solid #ddd",
-    borderRadius: 14,
-    padding: 12,
-    background: "#fafafa",
-    display: "grid",
-    gap: 10,
-  },
-
-  parMetricGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(135px, 1fr))",
-    gap: 8,
-  },
-
-  infoModal: {
-    background: "#fff",
-    borderRadius: 18,
-    padding: 22,
-    maxWidth: 1100,
-    width: "96%",
-    maxHeight: "90vh",
-    overflowY: "auto",
-    position: "relative",
-    boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
-  },
-
-  detailGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-    gap: 12,
-    marginBottom: 12,
-  },
-
-  recipeUsageList: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))",
-    gap: 10,
-    marginTop: 14,
-  },
-
-  recipeUsageCard: {
-    border: "1px solid #ddd",
-    borderRadius: 14,
-    padding: 12,
-    background: "#fafafa",
-    display: "grid",
-    gap: 4,
-  },
-};
