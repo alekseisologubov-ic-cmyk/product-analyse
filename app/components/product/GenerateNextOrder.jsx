@@ -1689,6 +1689,12 @@ export default function GenerateNextOrder({
               🧮 Main order buffer: <strong>{ORDER_BUFFER_PERCENT}%</strong>
             </div>
             <div>
+  🥬 Fresh produce spoilage rules:{" "}
+  <strong>
+    {orderMeta.isFreshProduceOrder ? "Applied" : "Not applied"}
+  </strong>
+</div>
+            <div>
               🍽️ Ingredient by Location rows:{" "}
               <strong>{recipeRowsLoadedCount}</strong>
             </div>
