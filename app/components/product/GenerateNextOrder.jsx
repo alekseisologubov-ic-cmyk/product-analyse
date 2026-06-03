@@ -43,8 +43,10 @@ const normalizeShipCode = (value) => {
   if (!text) return "";
 
   if (
-    /^V\s*1$/.test(text) ||
-    /(^|\s)V\s*1($|\s)/.test(text) ||
+    text === "V1" ||
+    text === "V 1" ||
+    text.includes(" V1 ") ||
+    text.includes(" V 1 ") ||
     text === "SCL" ||
     text === "SC" ||
     text.includes("SCARLET")
@@ -194,9 +196,11 @@ const PRODUCT_MATCH_STOP_WORDS = new Set([
 const singularizeProductToken = (token) => {
   if (!token) return "";
   if (token.length > 4 && token.endsWith("IES")) return `${token.slice(0, -3)}Y`;
+
   if (token.length > 4 && token.endsWith("ES") && !token.endsWith("SES")) {
     return token.slice(0, -2);
   }
+
   if (token.length > 3 && token.endsWith("S") && !token.endsWith("SS")) {
     return token.slice(0, -1);
   }
@@ -229,13 +233,9 @@ const productNamesMatch = (left, right) => {
   if (!aTokens.length || !bTokens.length) return false;
 
   const shortTokens = aTokens.length <= bTokens.length ? aTokens : bTokens;
-  const longTokenSet = new Set(
-    aTokens.length <= bTokens.length ? bTokens : aTokens
-  );
+  const longTokenSet = new Set(aTokens.length <= bTokens.length ? bTokens : aTokens);
 
-  const matchedCount = shortTokens.filter((token) =>
-    longTokenSet.has(token)
-  ).length;
+  const matchedCount = shortTokens.filter((token) => longTokenSet.has(token)).length;
 
   if (shortTokens.length === 1) {
     const token = shortTokens[0];
@@ -255,12 +255,6 @@ const getProductReportKey = (value) => {
   return tokens.length ? tokens.join("|") : cleanText(displayValue);
 };
 
-const extractCodesFromText = (value) =>
-  String(value || "")
-    .match(/\b\d{3,}\b/g)
-    ?.map((item) => normalizeCode(item))
-    .filter(Boolean) || [];
-
 const escapeHtml = (value) =>
   String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -268,6 +262,157 @@ const escapeHtml = (value) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+
+const escapeRegex = (value) =>
+  String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const textHasWordOrPhrase = (text, word) => {
+  const source = cleanText(text).replace(/[^A-Z0-9 ]/g, " ");
+  const target = cleanText(word).replace(/[^A-Z0-9 ]/g, " ");
+
+  if (!source || !target) return false;
+
+  return new RegExp(
+    `(^|[^A-Z0-9])${escapeRegex(target)}([^A-Z0-9]|$)`
+  ).test(source);
+};
+
+const FAST_SPOILAGE_PRODUCE_WORDS = [
+  "HERB",
+  "HERBS",
+  "BASIL",
+  "CILANTRO",
+  "CORIANDER",
+  "PARSLEY",
+  "MINT",
+  "DILL",
+  "CHIVES",
+  "TARRAGON",
+
+  "LETTUCE",
+  "ROMAINE",
+  "SPRING MIX",
+  "MIXED GREENS",
+  "BABY GREENS",
+  "ARUGULA",
+  "ROCKET",
+  "SPINACH",
+  "WATERCRESS",
+
+  "BERRY",
+  "BERRIES",
+  "STRAWBERRY",
+  "STRAWBERRIES",
+  "BLUEBERRY",
+  "BLUEBERRIES",
+  "RASPBERRY",
+  "RASPBERRIES",
+  "BLACKBERRY",
+  "BLACKBERRIES",
+
+  "BANANA",
+  "BANANAS",
+  "AVOCADO",
+  "AVOCADOS",
+
+  "PEACH",
+  "PEACHES",
+  "NECTARINE",
+  "NECTARINES",
+  "PLUM",
+  "PLUMS",
+
+  "FRESH CUT",
+  "CUT FRUIT",
+  "CUT MELON",
+  "FRUIT SALAD",
+];
+
+const LONG_HOLD_PRODUCE_WORDS = [
+  "POTATO",
+  "POTATOES",
+  "SWEET POTATO",
+  "SWEET POTATOES",
+  "YAM",
+  "YAMS",
+
+  "ONION",
+  "ONIONS",
+  "YELLOW ONION",
+  "WHITE ONION",
+  "RED ONION",
+
+  "CARROT",
+  "CARROTS",
+  "BEET",
+  "BEETS",
+  "BEETROOT",
+  "TURNIP",
+  "TURNIPS",
+  "PARSNIP",
+  "PARSNIPS",
+  "RUTABAGA",
+
+  "BUTTERNUT",
+  "BUTTERNUT SQUASH",
+  "SQUASH",
+  "PUMPKIN",
+  "CABBAGE",
+  "RED CABBAGE",
+  "GREEN CABBAGE",
+
+  "APPLE",
+  "APPLES",
+  "ORANGE",
+  "ORANGES",
+  "LEMON",
+  "LEMONS",
+  "LIME",
+  "LIMES",
+  "GRAPEFRUIT",
+];
+
+const getFreshProduceOrderRule = (productName) => {
+  const text = cleanText(productName);
+
+  if (!text) {
+    return {
+      type: "standard",
+      label: "Standard item",
+      orderFullTarget: false,
+    };
+  }
+
+  const isFastSpoilage = FAST_SPOILAGE_PRODUCE_WORDS.some((word) =>
+    textHasWordOrPhrase(text, word)
+  );
+
+  if (isFastSpoilage) {
+    return {
+      type: "fast",
+      label: "Quick-spoil produce",
+      orderFullTarget: true,
+    };
+  }
+
+  const isLongHoldProduce = LONG_HOLD_PRODUCE_WORDS.some((word) =>
+    textHasWordOrPhrase(text, word)
+  );
+
+  if (isLongHoldProduce) {
+    return {
+      type: "long",
+      label: "Long-hold produce",
+      orderFullTarget: false,
+    };
+  }
+
+  return {
+    type: "standard",
+    label: "Standard item",
+    orderFullTarget: false,
+  };
+};
 
 const exportRowsToExcel = (rows, sheetName, fileName) => {
   if (!rows.length) {
@@ -352,7 +497,16 @@ const getStatusForOrderItem = (item) => {
     return {
       type: "review",
       label: "Review",
-      description: "No current average consumption/day could be calculated.",
+      description: "No current consumption/day could be calculated.",
+    };
+  }
+
+  if (item.produceRule?.type === "fast") {
+    return {
+      type: "need",
+      label: "Order Full Par",
+      description:
+        "Quick-spoil produce. Order the full calculated target for the voyage even if some stock may remain.",
     };
   }
 
@@ -361,7 +515,7 @@ const getStatusForOrderItem = (item) => {
       type: "need",
       label: "Order Suggested",
       description:
-        "Estimated quantity at arrival is below voyage need plus 25% buffer.",
+        "Estimated usable quantity at arrival is below voyage need plus 25% buffer.",
     };
   }
 
@@ -369,7 +523,7 @@ const getStatusForOrderItem = (item) => {
     type: "covered",
     label: "Covered",
     description:
-      "Stock plus future order covers voyage need plus 25% buffer.",
+      "Future order / usable stock covers voyage need plus 25% buffer.",
   };
 };
 
@@ -528,7 +682,7 @@ const buildFmlReports = ({ fmlRows, orderRows }) => {
         targetQtyForVoyage,
         suggestedOrder,
         reason:
-          "FML item has consumption and no future order. Estimated quantity at arrival is below voyage need plus 25% buffer.",
+          "FML item has consumption and no future order. Estimated usable arrival quantity is below voyage need plus 25% buffer.",
       });
     }
   });
@@ -604,31 +758,48 @@ const parseNextOrderWorkbook = (workbook) => {
       0
     );
 
-    const averageConsumptionPerSailorDay =
-      historicalSailorDays > 0 ? pastConsumption / historicalSailorDays : 0;
+    const averageConsumptionFromSailorDays =
+      historicalSailorDays > 0 && targetSailors > 0
+        ? (pastConsumption / historicalSailorDays) * targetSailors
+        : 0;
+
+    const fallbackAverageConsumption =
+      voyageDays > 0 ? pastConsumption / voyageDays : 0;
 
     const averageConsumptionPerDay =
-      averageConsumptionPerSailorDay > 0 && targetSailors > 0
-        ? averageConsumptionPerSailorDay * targetSailors
-        : voyageDays > 0
-          ? pastConsumption / voyageDays
-          : 0;
+      averageConsumptionFromSailorDays || fallbackAverageConsumption;
+
+    const averageConsumptionPerSailorDay =
+      historicalSailorDays > 0 ? pastConsumption / historicalSailorDays : 0;
 
     const consumptionUntilArrival = averageConsumptionPerDay * daysUntilArrival;
 
     const estimatedQtyAtArrival =
       stockOnHand + futureOrders - consumptionUntilArrival;
 
+    const arrivalDeficitBeforeNextOrder = Math.max(
+      0,
+      -estimatedQtyAtArrival
+    );
+
+    // Important:
+    // If arrival quantity is negative, we show the warning,
+    // but we do NOT add that negative number into the next order.
+    const usableQtyAtArrivalForOrder = Math.max(estimatedQtyAtArrival, 0);
+
     const voyageNeed = averageConsumptionPerDay * voyageDays;
     const orderBufferQty = voyageNeed * (ORDER_BUFFER_PERCENT / 100);
     const targetQtyForVoyage = voyageNeed + orderBufferQty;
 
-    const suggestedOrder = Math.max(
-      targetQtyForVoyage - estimatedQtyAtArrival,
-      0
-    );
+    const produceRule = getFreshProduceOrderRule(product);
+
+    const suggestedOrder = produceRule.orderFullTarget
+      ? targetQtyForVoyage
+      : Math.max(targetQtyForVoyage - usableQtyAtArrivalForOrder, 0);
 
     const currentUsageSuggestedPar = targetQtyForVoyage;
+
+    // Keep this based on real estimated arrival quantity so we still show shortage.
     const futureCoverageDifference = estimatedQtyAtArrival - targetQtyForVoyage;
 
     const itemKey =
@@ -641,6 +812,7 @@ const parseNextOrderWorkbook = (workbook) => {
     const status = getStatusForOrderItem({
       averageConsumptionPerDay,
       suggestedOrder,
+      produceRule,
     });
 
     parsedRows.push({
@@ -661,12 +833,17 @@ const parseNextOrderWorkbook = (workbook) => {
       averageConsumptionPerDay,
       consumptionUntilArrival,
       estimatedQtyAtArrival,
+      arrivalDeficitBeforeNextOrder,
+      usableQtyAtArrivalForOrder,
       voyageNeed,
       orderBufferQty,
       targetQtyForVoyage,
       suggestedOrder,
       currentUsageSuggestedPar,
       futureCoverageDifference,
+      produceRule,
+      produceRuleType: produceRule.type,
+      produceRuleLabel: produceRule.label,
       statusType: status.type,
       statusLabel: status.label,
       statusDescription: status.description,
@@ -706,6 +883,10 @@ const parseNextOrderWorkbook = (workbook) => {
       reviewItems: parsedRows.filter(
         (item) => item.averageConsumptionPerDay <= 0
       ).length,
+      fastSpoilageItems: parsedRows.filter((item) => item.produceRuleType === "fast")
+        .length,
+      longHoldProduceItems: parsedRows.filter((item) => item.produceRuleType === "long")
+        .length,
       fmlRows: fmlRows.length,
       fmlMissingItems: fmlMissingRows.length,
       fmlRunningLowItems: fmlRunningLowRows.length,
@@ -713,98 +894,70 @@ const parseNextOrderWorkbook = (workbook) => {
   };
 };
 
-const getIngredientByLocationHeaderInfo = (recipeRows = []) => {
-  const rows = Array.isArray(recipeRows) ? recipeRows : [];
-
-  let headerRowIndex = 0;
-
-  rows.slice(0, 40).some((row, index) => {
-    const compactRow = (row || [])
+const getRecipeHeaderIndexes = (recipeRows = []) => {
+  const headerRowIndex = recipeRows.findIndex((row) => {
+    const compactText = row
       .map((cell) => cleanText(cell).replace(/[^A-Z0-9]/g, ""))
       .join("|");
 
-    const hasRestaurant =
-      compactRow.includes("RESTAURANTNAME") ||
-      compactRow.includes("LOCATION") ||
-      compactRow.includes("VENUE");
-
-    const hasRecipe =
-      compactRow.includes("RECIPENAME") ||
-      compactRow.includes("RECIPECODE");
-
-    const hasIngredient =
-      compactRow.includes("INGREDIENTNAME") ||
-      compactRow.includes("PRODUCTNAME") ||
-      compactRow.includes("|NAME|");
-
-    if (hasRestaurant && hasRecipe && hasIngredient) {
-      headerRowIndex = index;
-      return true;
-    }
-
-    return false;
+    return (
+      compactText.includes("RESTAURANTNAME") &&
+      compactText.includes("RECIPENAME") &&
+      (compactText.includes("INGREDIENTNAME") ||
+        compactText.includes("PRODUCTNAME") ||
+        compactText.includes("|NAME|"))
+    );
   });
 
-  const headers = rows[headerRowIndex] || rows[0] || [];
-  const compactHeaders = headers.map((header) =>
-    cleanText(header).replace(/[^A-Z0-9]/g, "")
+  const safeHeaderRowIndex = headerRowIndex >= 0 ? headerRowIndex : 0;
+  const headers = recipeRows[safeHeaderRowIndex] || [];
+
+  const cleanHeaders = headers.map((header) => cleanText(header));
+  const compactHeaders = cleanHeaders.map((header) =>
+    header.replace(/[^A-Z0-9]/g, "")
   );
 
-  const compactName = (value) =>
-    cleanText(value).replace(/[^A-Z0-9]/g, "");
+  const compactName = (value) => cleanText(value).replace(/[^A-Z0-9]/g, "");
 
-  const findExact = (names, fallback) => {
+  const findExact = (names, fallback = -1) => {
     const wanted = names.map(compactName).filter(Boolean);
-    const index = compactHeaders.findIndex((header) =>
-      wanted.includes(header)
-    );
+    const index = compactHeaders.findIndex((header) => wanted.includes(header));
 
     return index >= 0 ? index : fallback;
   };
 
   return {
-    headerRowIndex,
-
-    restaurantCode: findExact(["RestaurantCode", "Restaurant Code"], 0),
-    restaurantName: findExact(
-      ["RestaurantName", "Restaurant Name", "Venue", "Location"],
-      1
-    ),
-
-    menuCode: findExact(["MenuCode", "Menu Code"], 2),
-    menuName: findExact(["MenuName", "Menu Name", "Menu"], 3),
-
-    category: findExact(["Category"], 4),
-    subCategory: findExact(["SubCategory", "Sub Category"], 5),
-
+    headerRowIndex: safeHeaderRowIndex,
+    restaurantName: findExact(["RestaurantName", "Restaurant Name"], 1),
+    menuName: findExact(["MenuName", "Menu Name"], 3),
     ingredientCode: findExact(
-      [
-        "Code",
-        "IngredientCode",
-        "Ingredient Code",
-        "ProductCode",
-        "Product Code",
-      ],
+      ["Code", "IngredientCode", "Ingredient Code", "ProductCode", "Product Code"],
       6
     ),
-
     ingredientName: findExact(
-      [
-        "Name",
-        "IngredientName",
-        "Ingredient Name",
-        "ProductName",
-        "Product Name",
-      ],
+      ["Name", "IngredientName", "Ingredient Name", "ProductName", "Product Name"],
       7
     ),
-
-    assigned: findExact(["Assigned", "AssignedProduct", "Assigned Product"], 12),
-    assignedType: findExact(["AssignedType", "Assigned Type"], 13),
-
+    assigned: findExact(["Assigned"], 12),
     recipeCode: findExact(["RecipeCode", "Recipe Code"], 15),
     recipeName: findExact(["RecipeName", "Recipe Name"], 16),
   };
+};
+
+const getUsableRecipeRowCount = (recipeRows = []) => {
+  if (!Array.isArray(recipeRows) || recipeRows.length <= 1) return 0;
+
+  const indexes = getRecipeHeaderIndexes(recipeRows);
+
+  return recipeRows
+    .slice(indexes.headerRowIndex + 1)
+    .filter((row) => {
+      const venue = safeText(row[indexes.restaurantName]);
+      const recipeName = safeText(row[indexes.recipeName]);
+      const ingredientName = safeText(row[indexes.ingredientName]);
+
+      return venue && recipeName && ingredientName;
+    }).length;
 };
 
 const getRecipeUsageForItem = (item, recipeRows = []) => {
@@ -812,40 +965,30 @@ const getRecipeUsageForItem = (item, recipeRows = []) => {
   const productCode = normalizeCode(item?.code);
 
   if (!productName && !productCode) return [];
+  if (!Array.isArray(recipeRows) || recipeRows.length <= 1) return [];
 
-  const rows = Array.isArray(recipeRows) ? recipeRows : [];
-
-  if (!rows.length) return [];
-
-  const indexes = getIngredientByLocationHeaderInfo(rows);
-  const bodyRows = rows.slice(indexes.headerRowIndex + 1);
+  const indexes = getRecipeHeaderIndexes(recipeRows);
+  const rows = recipeRows.slice(indexes.headerRowIndex + 1);
   const usageRows = [];
 
-  bodyRows.forEach((row) => {
-    const get = (index) => (index >= 0 ? row[index] : "");
-
-    const venue = safeText(get(indexes.restaurantName));
-    const menuName = safeText(get(indexes.menuName));
-
-    const ingredientCode = normalizeCode(get(indexes.ingredientCode));
-    const ingredientName = safeText(get(indexes.ingredientName));
-    const assignedProduct = safeText(get(indexes.assigned));
-
-    const recipeCode = normalizeCode(get(indexes.recipeCode));
-    const recipeName = safeText(get(indexes.recipeName));
+  rows.forEach((row) => {
+    const venue = safeText(row[indexes.restaurantName]);
+    const ingredientCode = normalizeCode(row[indexes.ingredientCode]);
+    const ingredientName = safeText(row[indexes.ingredientName]);
+    const assignedProduct = safeText(row[indexes.assigned]);
+    const recipeCode = normalizeCode(row[indexes.recipeCode]);
+    const recipeName = safeText(row[indexes.recipeName]);
+    const menuName = safeText(row[indexes.menuName]);
 
     if (!venue || !recipeName) return;
 
-    const possibleCodes = [
-      ingredientCode,
-      normalizeCode(ingredientName),
-      normalizeCode(assignedProduct),
-      ...extractCodesFromText(ingredientName),
-      ...extractCodesFromText(assignedProduct),
-    ].filter(Boolean);
-
     const matchedByCode =
-      productCode && possibleCodes.some((code) => code === productCode);
+      productCode &&
+      [
+        ingredientCode,
+        normalizeCode(ingredientName),
+        normalizeCode(assignedProduct),
+      ].includes(productCode);
 
     const matchedByName =
       productName &&
@@ -891,7 +1034,7 @@ const getRegionalStatsForItem = ({
   regionFilter,
   shipFilter,
   voyageDays,
-  bufferPercent,
+  bufferPercent = ORDER_BUFFER_PERCENT,
 }) => {
   const sourceRows = Array.isArray(yearlyRegionalConsumption?.rows)
     ? yearlyRegionalConsumption.rows
@@ -906,8 +1049,8 @@ const getRegionalStatsForItem = ({
       avgDailyQty: 0,
       suggestedPar: 0,
       blocks: 0,
-      matchedProducts: [],
       bufferPercent,
+      matchedProducts: [],
     };
   }
 
@@ -935,7 +1078,9 @@ const getRegionalStatsForItem = ({
     }
 
     if (itemCode && rowCode && itemCode === rowCode) return true;
-    if (itemProductKey && rowProductKey && itemProductKey === rowProductKey) return true;
+    if (itemProductKey && rowProductKey && itemProductKey === rowProductKey) {
+      return true;
+    }
 
     return productNamesMatch(itemProduct, rowProductName);
   });
@@ -946,8 +1091,8 @@ const getRegionalStatsForItem = ({
   const blocks = matchedRows.length;
 
   const avgDailyQty = totalDays > 0 ? totalQty / totalDays : 0;
-  const bufferMultiplier = 1 + Number(bufferPercent || 0) / 100;
-  const suggestedPar = avgDailyQty * Number(voyageDays || 0) * bufferMultiplier;
+  const suggestedPar =
+    avgDailyQty * Number(voyageDays || 0) * (1 + Number(bufferPercent || 0) / 100);
 
   const matchedProducts = [
     ...new Set(
@@ -967,8 +1112,8 @@ const getRegionalStatsForItem = ({
     avgDailyQty,
     suggestedPar,
     blocks,
-    matchedProducts,
     bufferPercent,
+    matchedProducts,
   };
 };
 
@@ -1010,15 +1155,20 @@ export default function GenerateNextOrder({
   const activeShipName =
     orderMeta.shipDisplayName || getShipDisplayName(activeShipCode);
 
+  const recipeRowsLoadedCount = useMemo(
+    () => getUsableRecipeRowCount(recipeRows),
+    [recipeRows]
+  );
+
+  const referenceRegionalBufferPercent =
+    Number(regionalParBufferPercent || 0) > 0
+      ? Number(regionalParBufferPercent || 0)
+      : ORDER_BUFFER_PERCENT;
+
   const regionalRegionOptions = useMemo(
     () => yearlyRegionalConsumption?.regionOptions || [],
     [yearlyRegionalConsumption]
   );
-
-  const regionalComparisonBufferPercent =
-    Number(regionalParBufferPercent || 0) > 0
-      ? Number(regionalParBufferPercent || 0)
-      : ORDER_BUFFER_PERCENT;
 
   const uploadOrderFile = async (event) => {
     const file = event.target.files?.[0];
@@ -1054,8 +1204,6 @@ export default function GenerateNextOrder({
       setSearch("");
       setFmlSearch("");
       setFilter("all");
-      setSelectedInfoItem(null);
-      setSelectedRecipeUsageItem(null);
 
       setMessage(
         "Order file loaded. " +
@@ -1065,6 +1213,8 @@ export default function GenerateNextOrder({
           " suggested order item(s), " +
           parsed.meta.coveredItems +
           " covered item(s), " +
+          parsed.meta.fastSpoilageItems +
+          " quick-spoil item(s), " +
           parsed.meta.fmlMissingItems +
           " FML not ordered/not used item(s), " +
           parsed.meta.fmlRunningLowItems +
@@ -1079,6 +1229,8 @@ export default function GenerateNextOrder({
         shipCode: parsed.meta.shipCode,
         totalItems: parsed.meta.totalItems,
         itemsNeedingOrder: parsed.meta.itemsNeedingOrder,
+        fastSpoilageItems: parsed.meta.fastSpoilageItems,
+        longHoldProduceItems: parsed.meta.longHoldProduceItems,
         fmlMissingItems: parsed.meta.fmlMissingItems,
         fmlRunningLowItems: parsed.meta.fmlRunningLowItems,
       });
@@ -1156,7 +1308,9 @@ export default function GenerateNextOrder({
         (filter === "covered" &&
           Number(item.suggestedOrder || 0) <= 0 &&
           Number(item.averageConsumptionPerDay || 0) > 0) ||
-        (filter === "review" && Number(item.averageConsumptionPerDay || 0) <= 0);
+        (filter === "review" && Number(item.averageConsumptionPerDay || 0) <= 0) ||
+        (filter === "fastSpoilage" && item.produceRuleType === "fast") ||
+        (filter === "longHoldProduce" && item.produceRuleType === "long");
 
       if (!matchesFilter) return false;
 
@@ -1167,6 +1321,7 @@ export default function GenerateNextOrder({
         item.product,
         item.uom,
         item.statusLabel,
+        item.produceRuleLabel,
         item.excelRow,
       ]
         .join(" ")
@@ -1236,6 +1391,10 @@ export default function GenerateNextOrder({
       review: orderRows.filter(
         (item) => Number(item.averageConsumptionPerDay || 0) <= 0
       ).length,
+      fastSpoilage: orderRows.filter((item) => item.produceRuleType === "fast")
+        .length,
+      longHoldProduce: orderRows.filter((item) => item.produceRuleType === "long")
+        .length,
     }),
     [orderRows]
   );
@@ -1254,6 +1413,13 @@ export default function GenerateNextOrder({
       DaysUntilArrival: Number(item.daysUntilArrival || 0),
       ConsumptionUntilArrival: Number(item.consumptionUntilArrival || 0),
       EstimatedQtyAtArrival: Number(item.estimatedQtyAtArrival || 0),
+      ArrivalDeficitShownNotAddedToOrder: Number(
+        item.arrivalDeficitBeforeNextOrder || 0
+      ),
+      UsableQtyAtArrivalForOrderCalculation: Number(
+        item.usableQtyAtArrivalForOrder || 0
+      ),
+      ProduceRule: item.produceRuleLabel || "Standard item",
       VoyageDays: Number(item.voyageDays || 0),
       VoyageNeed: Number(item.voyageNeed || 0),
       OrderBufferPercent: ORDER_BUFFER_PERCENT,
@@ -1355,7 +1521,7 @@ export default function GenerateNextOrder({
       regionFilter: YEARLY_REGION_ALL,
       shipFilter: "",
       voyageDays,
-      bufferPercent: regionalComparisonBufferPercent,
+      bufferPercent: referenceRegionalBufferPercent,
     });
 
     const selectedMarket =
@@ -1367,7 +1533,7 @@ export default function GenerateNextOrder({
             regionFilter: selectedRegionalConsumptionRegion,
             shipFilter: "",
             voyageDays,
-            bufferPercent: regionalComparisonBufferPercent,
+            bufferPercent: referenceRegionalBufferPercent,
           })
         : null;
 
@@ -1379,7 +1545,7 @@ export default function GenerateNextOrder({
             selectedRegionalConsumptionRegion || YEARLY_REGION_ALL,
           shipFilter: activeShipCode,
           voyageDays,
-          bufferPercent: regionalComparisonBufferPercent,
+          bufferPercent: referenceRegionalBufferPercent,
         })
       : null;
 
@@ -1394,7 +1560,7 @@ export default function GenerateNextOrder({
     selectedRegionalConsumptionRegion,
     activeShipCode,
     orderMeta.voyageDays,
-    regionalComparisonBufferPercent,
+    referenceRegionalBufferPercent,
   ]);
 
   const renderRegionalStatsBox = (title, stats) => (
@@ -1409,9 +1575,6 @@ export default function GenerateNextOrder({
             Total qty: <strong>{formatRegionalQty(stats.totalQty)}</strong>
           </div>
           <div>
-            Total value: <strong>{formatMoney(stats.totalValue)}</strong>
-          </div>
-          <div>
             Total days: <strong>{formatQty(stats.totalDays)}</strong>
           </div>
           <div>
@@ -1420,6 +1583,9 @@ export default function GenerateNextOrder({
           <div>
             Suggested par for this voyage + {stats.bufferPercent}%:{" "}
             <strong>{formatRegionalQty(stats.suggestedPar)}</strong>
+          </div>
+          <div>
+            Total value: <strong>{formatMoney(stats.totalValue)}</strong>
           </div>
           <div>
             Evidence blocks: <strong>{stats.blocks}</strong>
@@ -1496,6 +1662,10 @@ export default function GenerateNextOrder({
             <div>
               🧮 Main order buffer: <strong>{ORDER_BUFFER_PERCENT}%</strong>
             </div>
+            <div>
+              🍽️ Ingredient by Location rows:{" "}
+              <strong>{recipeRowsLoadedCount}</strong>
+            </div>
             {loading && <div>Loading...</div>}
           </div>
 
@@ -1519,10 +1689,6 @@ export default function GenerateNextOrder({
                     ? "All regions"
                     : selectedRegionalConsumptionRegion}
               </strong>
-            </div>
-            <div>
-              📊 Regional comparison buffer:{" "}
-              <strong>{regionalComparisonBufferPercent}%</strong>
             </div>
           </div>
 
@@ -1552,12 +1718,12 @@ export default function GenerateNextOrder({
             ))}
           </select>
 
-          <label style={styles.label}>Regional comparison buffer %</label>
+          <label style={styles.label}>Regional par buffer % reference only</label>
           <input
             type="number"
             min="0"
             step="1"
-            value={regionalComparisonBufferPercent}
+            value={regionalParBufferPercent || 0}
             onChange={(event) =>
               setRegionalParBufferPercent?.(Number(event.target.value || 0))
             }
@@ -1565,8 +1731,8 @@ export default function GenerateNextOrder({
           />
 
           <p style={styles.emptyText}>
-            Main order calculation is fixed: voyage need + 25% buffer. Regional
-            comparison appears in the More Info popup.
+            Main order calculation always uses voyage need + 25% order buffer.
+            Regional data is shown inside the More Info popup for comparison.
           </p>
         </div>
       </section>
@@ -1657,11 +1823,15 @@ export default function GenerateNextOrder({
                 ⚠️ Review items: <strong>{orderMeta.reviewItems || 0}</strong>
               </div>
               <div>
-                📋 FML rows found: <strong>{fmlRows.length}</strong>
+                ⚡ Quick-spoil items:{" "}
+                <strong>{orderMeta.fastSpoilageItems || 0}</strong>
               </div>
               <div>
-                🍽️ Recipe rows loaded:{" "}
-                <strong>{Math.max((recipeRows || []).length - 1, 0)}</strong>
+                🥔 Long-hold produce items:{" "}
+                <strong>{orderMeta.longHoldProduceItems || 0}</strong>
+              </div>
+              <div>
+                📋 FML rows found: <strong>{fmlRows.length}</strong>
               </div>
             </div>
 
@@ -1715,6 +1885,30 @@ export default function GenerateNextOrder({
                 onClick={() => setFilter("review")}
               >
                 Review ({filterCounts.review})
+              </button>
+
+              <button
+                type="button"
+                style={{
+                  ...styles.viewModeButton,
+                  ...(filter === "fastSpoilage" ? styles.viewModeButtonActive : {}),
+                }}
+                onClick={() => setFilter("fastSpoilage")}
+              >
+                Quick Spoil ({filterCounts.fastSpoilage})
+              </button>
+
+              <button
+                type="button"
+                style={{
+                  ...styles.viewModeButton,
+                  ...(filter === "longHoldProduce"
+                    ? styles.viewModeButtonActive
+                    : {}),
+                }}
+                onClick={() => setFilter("longHoldProduce")}
+              >
+                Long Hold ({filterCounts.longHoldProduce})
               </button>
 
               <button
@@ -1796,7 +1990,16 @@ export default function GenerateNextOrder({
 
                   <div style={localStyles.metricBox}>
                     <span>Est. at arrival</span>
-                    <strong>{formatQty(item.estimatedQtyAtArrival)}</strong>
+                    <strong
+                      style={{
+                        color:
+                          Number(item.estimatedQtyAtArrival || 0) < 0
+                            ? "#b00020"
+                            : "#111",
+                      }}
+                    >
+                      {formatQty(item.estimatedQtyAtArrival)}
+                    </strong>
                   </div>
 
                   <div style={localStyles.metricBoxStrong}>
@@ -1810,6 +2013,7 @@ export default function GenerateNextOrder({
                     Voyage need + 25% buffer:{" "}
                     <strong>{formatQty(item.targetQtyForVoyage)}</strong>
                   </div>
+
                   <div>
                     Coverage after future order:{" "}
                     <strong
@@ -1824,6 +2028,26 @@ export default function GenerateNextOrder({
                       {formatQty(item.futureCoverageDifference)}
                     </strong>
                   </div>
+
+                  {Number(item.arrivalDeficitBeforeNextOrder || 0) > 0 && (
+                    <div style={styles.statusWarning}>
+                      Arrival shortage warning:{" "}
+                      {formatQty(item.arrivalDeficitBeforeNextOrder)} not added to
+                      next order
+                    </div>
+                  )}
+
+                  {item.produceRuleType === "fast" && (
+                    <div style={styles.statusWarning}>
+                      Quick-spoil produce: ordering full calculated target
+                    </div>
+                  )}
+
+                  {item.produceRuleType === "long" && (
+                    <div style={styles.statusNeutral}>
+                      Long-hold produce: normal stock deduction used
+                    </div>
+                  )}
                 </div>
 
                 <div style={styles.headerActions}>
@@ -1866,9 +2090,14 @@ export default function GenerateNextOrder({
                   <span>Past: {formatQty(item.pastConsumption)}</span>
                   <span>Avg/day: {formatQty(item.averageConsumptionPerDay)}</span>
                   <span>Arrival: {formatQty(item.estimatedQtyAtArrival)}</span>
+                  <span>
+                    Arrival shortage not added:{" "}
+                    {formatQty(item.arrivalDeficitBeforeNextOrder)}
+                  </span>
                   <span>Suggested: {formatQty(item.suggestedOrder)}</span>
                   <span>Current par Q: {formatQty(item.parLevel)}</span>
                   <span>Suggested par: {formatQty(item.currentUsageSuggestedPar)}</span>
+                  <span>Rule: {item.produceRuleLabel}</span>
                 </div>
 
                 <div style={styles.headerActions}>
@@ -2081,8 +2310,27 @@ export default function GenerateNextOrder({
                 </div>
                 <div>
                   Estimated qty at arrival:{" "}
-                  <strong>
+                  <strong
+                    style={{
+                      color:
+                        Number(selectedInfoItem.estimatedQtyAtArrival || 0) < 0
+                          ? "#b00020"
+                          : "#111",
+                    }}
+                  >
                     {formatQty(selectedInfoItem.estimatedQtyAtArrival)}
+                  </strong>
+                </div>
+                <div>
+                  Arrival shortage not added to order:{" "}
+                  <strong>
+                    {formatQty(selectedInfoItem.arrivalDeficitBeforeNextOrder)}
+                  </strong>
+                </div>
+                <div>
+                  Usable arrival qty for order calc:{" "}
+                  <strong>
+                    {formatQty(selectedInfoItem.usableQtyAtArrivalForOrder)}
                   </strong>
                 </div>
               </div>
@@ -2135,6 +2383,12 @@ export default function GenerateNextOrder({
                       ? "+"
                       : ""}
                     {formatQty(selectedInfoItem.futureCoverageDifference)}
+                  </strong>
+                </div>
+                <div>
+                  Rule:{" "}
+                  <strong>
+                    {selectedInfoItem.produceRuleLabel || "Standard item"}
                   </strong>
                 </div>
                 <div>
@@ -2214,24 +2468,26 @@ export default function GenerateNextOrder({
             </h2>
 
             <p style={styles.emptyText}>
-              Uses the permanent Ingredient by Location file from page.js.
+              Uses the permanent Ingredient by Location file loaded in page.js.
             </p>
 
             <div style={styles.infoBox}>
               <div>
-                Recipe rows loaded:{" "}
-                <strong>{Math.max((recipeRows || []).length - 1, 0)}</strong>
+                Ingredient by Location usable rows:{" "}
+                <strong>{recipeRowsLoadedCount}</strong>
               </div>
               <div>
                 Matches found: <strong>{selectedRecipeUsageRows.length}</strong>
               </div>
-              {!recipeRows?.length && (
-                <div style={{ color: "#b00020" }}>
-                  No recipeRows received. Check page.js and pass recipeRows to
-                  GenerateNextOrder.
-                </div>
-              )}
             </div>
+
+            {recipeRowsLoadedCount === 0 && (
+              <p style={styles.warningText}>
+                Ingredient by Location rows are not loaded into Generate Next Order.
+                Check page.js and make sure recipeRows is passed to this component
+                and the permanent file loads when productMode is nextorder.
+              </p>
+            )}
 
             {selectedRecipeUsageRows.length === 0 ? (
               <p style={styles.emptyText}>
