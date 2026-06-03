@@ -12,6 +12,7 @@ import {
 const ORDER_BUFFER_PERCENT = 25;
 const ORDER_BUFFER_MULTIPLIER = 1 + ORDER_BUFFER_PERCENT / 100;
 const PAR_REPORT_DAYS = 7;
+const PAR_REPORT_DISPLAY_LIMIT = 500;
 
 const cleanText = (value) =>
   String(value || "")
@@ -37,6 +38,12 @@ const normalizeCode = (value) => {
 
   return cleanText(raw).replace(/\.0+$/, "");
 };
+
+const getExactProductNameKey = (value) =>
+  cleanText(value)
+    .replace(/[^A-Z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
 const normalizeShipCode = (value) => {
   const text = cleanText(value)
@@ -789,9 +796,8 @@ const parseNextOrderWorkbook = (workbook, sourceFileName = "") => {
 
     const preArrivalShortage = Math.max(-estimatedQtyAtArrival, 0);
 
-    // Important:
-    // If estimated qty at arrival is negative, we highlight the shortage,
-    // but we do NOT add that negative amount to the next order.
+    // If arrival estimate is negative, we highlight the shortage,
+    // but we do NOT add the negative amount to the next order.
     const usableQtyAtArrivalForOrder = Math.max(estimatedQtyAtArrival, 0);
 
     const voyageNeed = averageConsumptionPerDay * voyageDays;
@@ -1033,17 +1039,92 @@ const getRecipeUsageForItem = (item, recipeRows = []) => {
   });
 };
 
+const buildYearlyRegionalLookup = (yearlyRegionalConsumption) => {
+  const sourceRows = Array.isArray(yearlyRegionalConsumption?.rows)
+    ? yearlyRegionalConsumption.rows
+    : [];
+
+  const byCode = new Map();
+  const byExactName = new Map();
+
+  const addToMap = (map, key, row) => {
+    const cleanKey = String(key || "").trim();
+
+    if (!cleanKey) return;
+
+    if (!map.has(cleanKey)) {
+      map.set(cleanKey, []);
+    }
+
+    map.get(cleanKey).push(row);
+  };
+
+  sourceRows.forEach((row, index) => {
+    const productCode = normalizeCode(row.productCode);
+    const productName = safeText(row.productName);
+    const exactNameKey = getExactProductNameKey(productName);
+
+    const preparedRow = {
+      ...row,
+      __lookupId: index,
+      __region: safeText(row.region),
+      __ship: normalizeShipCode(row.ship) || safeText(row.ship),
+      __productCode: productCode,
+      __productName: productName,
+      __exactNameKey: exactNameKey,
+    };
+
+    addToMap(byCode, productCode, preparedRow);
+    addToMap(byExactName, exactNameKey, preparedRow);
+  });
+
+  return {
+    rows: sourceRows,
+    byCode,
+    byExactName,
+  };
+};
+
+const getRegionalCandidateRowsForItem = (item, regionalLookup) => {
+  if (!regionalLookup) return [];
+
+  const itemCode = normalizeCode(item?.code);
+  const itemExactNameKey = getExactProductNameKey(item?.product || item?.name);
+
+  // Important:
+  // If item has a code, last-year comparison matches by code only.
+  // No loose name matching is used.
+  if (itemCode) {
+    return regionalLookup.byCode.get(itemCode) || [];
+  }
+
+  // If item has no code, match only exact normalized product description.
+  if (itemExactNameKey) {
+    return regionalLookup.byExactName.get(itemExactNameKey) || [];
+  }
+
+  return [];
+};
+
 const getRegionalStatsForItem = ({
   item,
   yearlyRegionalConsumption,
+  regionalLookup,
   regionFilter,
   shipFilter,
   parDays,
   bufferPercent = ORDER_BUFFER_PERCENT,
 }) => {
-  const sourceRows = Array.isArray(yearlyRegionalConsumption?.rows)
-    ? yearlyRegionalConsumption.rows
-    : [];
+  const usingLookup = Boolean(regionalLookup);
+
+  const sourceRows = usingLookup
+    ? getRegionalCandidateRowsForItem(item, regionalLookup)
+    : Array.isArray(yearlyRegionalConsumption?.rows)
+      ? yearlyRegionalConsumption.rows
+      : [];
+
+  const itemCode = normalizeCode(item?.code);
+  const itemExactNameKey = getExactProductNameKey(item?.product || item?.name);
 
   if (!sourceRows.length || !item) {
     return {
@@ -1059,35 +1140,37 @@ const getRegionalStatsForItem = ({
     };
   }
 
-  const itemCode = normalizeCode(item.code);
-  const itemProduct = safeText(item.product || item.name);
-  const itemProductKey = getProductReportKey(itemProduct);
+  const wantedRegion = safeText(regionFilter);
+  const wantedShip = normalizeShipCode(shipFilter) || safeText(shipFilter);
 
   const matchedRows = sourceRows.filter((row) => {
-    const rowRegion = safeText(row.region);
-    const rowShip = normalizeShipCode(row.ship) || safeText(row.ship);
-    const rowCode = normalizeCode(row.productCode);
-    const rowProductName = safeText(row.productName);
-    const rowProductKey = getProductReportKey(rowProductName);
+    const rowRegion = row.__region ?? safeText(row.region);
+    const rowShip = row.__ship ?? normalizeShipCode(row.ship) ?? safeText(row.ship);
 
     if (
-      regionFilter &&
-      regionFilter !== YEARLY_REGION_ALL &&
-      rowRegion !== regionFilter
+      wantedRegion &&
+      wantedRegion !== YEARLY_REGION_ALL &&
+      rowRegion !== wantedRegion
     ) {
       return false;
     }
 
-    if (shipFilter && rowShip !== shipFilter) {
+    if (wantedShip && rowShip !== wantedShip) {
       return false;
     }
 
-    if (itemCode && rowCode && itemCode === rowCode) return true;
-    if (itemProductKey && rowProductKey && itemProductKey === rowProductKey) {
+    if (usingLookup) {
       return true;
     }
 
-    return productNamesMatch(itemProduct, rowProductName);
+    const rowCode = normalizeCode(row.productCode);
+    const rowExactNameKey = getExactProductNameKey(row.productName);
+
+    if (itemCode) {
+      return rowCode && itemCode === rowCode;
+    }
+
+    return itemExactNameKey && rowExactNameKey === itemExactNameKey;
   });
 
   const totalQty = matchedRows.reduce(
@@ -1109,7 +1192,9 @@ const getRegionalStatsForItem = ({
   const avgDailyQty = totalDays > 0 ? totalQty / totalDays : 0;
 
   const suggestedPar =
-    avgDailyQty * Number(parDays || 0) * (1 + Number(bufferPercent || 0) / 100);
+    avgDailyQty *
+    Number(parDays || 0) *
+    (1 + Number(bufferPercent || 0) / 100);
 
   const matchedProducts = [
     ...new Set(
@@ -1174,6 +1259,11 @@ export default function GenerateNextOrder({
 
   const regionalRegionOptions = useMemo(
     () => yearlyRegionalConsumption?.regionOptions || [],
+    [yearlyRegionalConsumption]
+  );
+
+  const yearlyRegionalLookup = useMemo(
+    () => buildYearlyRegionalLookup(yearlyRegionalConsumption),
     [yearlyRegionalConsumption]
   );
 
@@ -1451,6 +1541,7 @@ export default function GenerateNextOrder({
       const allRegionsStats = getRegionalStatsForItem({
         item,
         yearlyRegionalConsumption,
+        regionalLookup: yearlyRegionalLookup,
         regionFilter: YEARLY_REGION_ALL,
         shipFilter: "",
         parDays: PAR_REPORT_DAYS,
@@ -1462,6 +1553,7 @@ export default function GenerateNextOrder({
           ? getRegionalStatsForItem({
               item,
               yearlyRegionalConsumption,
+              regionalLookup: yearlyRegionalLookup,
               regionFilter: selectedRegionalConsumptionRegion,
               shipFilter: "",
               parDays: PAR_REPORT_DAYS,
@@ -1513,9 +1605,14 @@ export default function GenerateNextOrder({
   }, [
     view,
     visibleOrderRows,
-    yearlyRegionalConsumption,
+    yearlyRegionalLookup,
     selectedRegionalConsumptionRegion,
   ]);
+
+  const displayedParComparisonRows = useMemo(
+    () => parComparisonRows.slice(0, PAR_REPORT_DISPLAY_LIMIT),
+    [parComparisonRows]
+  );
 
   const exportOrderView = () => {
     exportRowsToExcel(
@@ -1621,6 +1718,7 @@ export default function GenerateNextOrder({
     const allRegions = getRegionalStatsForItem({
       item: selectedInfoItem,
       yearlyRegionalConsumption,
+      regionalLookup: yearlyRegionalLookup,
       regionFilter: YEARLY_REGION_ALL,
       shipFilter: "",
       parDays: voyageDays,
@@ -1632,6 +1730,7 @@ export default function GenerateNextOrder({
         ? getRegionalStatsForItem({
             item: selectedInfoItem,
             yearlyRegionalConsumption,
+            regionalLookup: yearlyRegionalLookup,
             regionFilter: selectedRegionalConsumptionRegion,
             shipFilter: "",
             parDays: voyageDays,
@@ -1642,6 +1741,7 @@ export default function GenerateNextOrder({
       ? getRegionalStatsForItem({
           item: selectedInfoItem,
           yearlyRegionalConsumption,
+          regionalLookup: yearlyRegionalLookup,
           regionFilter: selectedRegionalConsumptionRegion || YEARLY_REGION_ALL,
           shipFilter: activeShipCode,
           parDays: voyageDays,
@@ -1656,6 +1756,7 @@ export default function GenerateNextOrder({
   }, [
     selectedInfoItem,
     yearlyRegionalConsumption,
+    yearlyRegionalLookup,
     selectedRegionalConsumptionRegion,
     activeShipCode,
     orderMeta.voyageDays,
@@ -1790,6 +1891,12 @@ export default function GenerateNextOrder({
                   : selectedRegionalConsumptionRegion === YEARLY_REGION_ALL
                     ? "All regions"
                     : selectedRegionalConsumptionRegion}
+              </strong>
+            </div>
+            <div>
+              🔎 Match rule:{" "}
+              <strong>
+                Code only. If no code, exact product description only.
               </strong>
             </div>
           </div>
@@ -2309,11 +2416,25 @@ export default function GenerateNextOrder({
                 Report par basis: <strong>7 days + {ORDER_BUFFER_PERCENT}%</strong>
               </div>
               <div>
+                Last-year match rule:{" "}
+                <strong>
+                  code only; if no code, exact normalized product description only.
+                </strong>
+              </div>
+              <div>
                 Main order calculation is not changed by this report.
               </div>
             </div>
 
-            {parComparisonRows.map((row, index) => (
+            {parComparisonRows.length > PAR_REPORT_DISPLAY_LIMIT && (
+              <div style={styles.statusWarning}>
+                Showing first {PAR_REPORT_DISPLAY_LIMIT} row(s) on screen to keep
+                the app fast. Use search to narrow results or Export Order vs Par
+                to download all {parComparisonRows.length} row(s).
+              </div>
+            )}
+
+            {displayedParComparisonRows.map((row, index) => (
               <div key={`par-${row.ExcelRow}-${row.Code}-${index}`} style={localStyles.parRow}>
                 <div>
                   <strong>{row.Product}</strong>
@@ -2682,6 +2803,11 @@ export default function GenerateNextOrder({
             </section>
 
             <h3 style={styles.sectionTitle}>🌎 Last year consumption comparison</h3>
+
+            <div style={styles.infoBox}>
+              Match rule: <strong>code only</strong>. If this item has no code,
+              the system matches only the exact normalized product description.
+            </div>
 
             <section style={localStyles.detailGrid}>
               {renderRegionalStatsBox(
