@@ -734,8 +734,15 @@ const parseNextOrderWorkbook = (workbook, sourceFileName = "") => {
   });
 
   const orderShipName = safeText(rows[0]?.[1]);
-  const orderShipCode = normalizeShipCode(orderShipName);
-  const rawOrderDate = rows[1]?.[1];
+const orderShipCode = normalizeShipCode(orderShipName);
+
+const isFreshProduceOrder = isFreshProduceOrderFile(
+  sourceFileName,
+  sheetName,
+  orderShipName
+);
+
+const rawOrderDate = rows[1]?.[1];
   const rawArrivalDate = rows[2]?.[1];
   const targetSailors = toNumber(rows[4]?.[1]);
   const voyageDays = toNumber(rows[5]?.[1]);
