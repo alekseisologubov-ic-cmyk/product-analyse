@@ -14,6 +14,10 @@ const ORDER_BUFFER_MULTIPLIER = 1 + ORDER_BUFFER_PERCENT / 100;
 const PAR_REPORT_DAYS = 7;
 const PAR_REPORT_DISPLAY_LIMIT = 500;
 
+// Excel column Y = onboard / current ordered quantity.
+// A = 0, B = 1, ..., Y = 24.
+const ONBOARD_ORDERED_QTY_COLUMN_INDEX = 24;
+
 const cleanText = (value) =>
   String(value || "")
     .toUpperCase()
@@ -769,6 +773,11 @@ const parseNextOrderWorkbook = (workbook, sourceFileName = "") => {
     const stockOnHand = toNumber(row[3]);
     const parLevel = toNumber(row[16]);
 
+    // Column Y = onboard / current ordered quantity.
+    // Used only for Order vs Par comparison.
+    const onboardOrderedQty = toNumber(row[ONBOARD_ORDERED_QTY_COLUMN_INDEX]);
+
+    // F:N future orders remain used for estimated arrival coverage in main logic.
     const futureOrders = futureOrderColumns.reduce(
       (sum, colIndex) => sum + toNumber(row[colIndex]),
       0
@@ -847,6 +856,7 @@ const parseNextOrderWorkbook = (workbook, sourceFileName = "") => {
       uom,
       stockOnHand,
       parLevel,
+      onboardOrderedQty,
       futureOrders,
       pastConsumption,
       historicalSailorDays,
@@ -1510,7 +1520,8 @@ export default function GenerateNextOrder({
       Product: item.product,
       UOM: item.uom,
       StockOnHand: Number(item.stockOnHand || 0),
-      FutureOrdersShipOrdered: Number(item.futureOrders || 0),
+      OnboardOrderedQtyColumnY: Number(item.onboardOrderedQty || 0),
+      FutureOrdersFtoNUsedForArrivalCoverage: Number(item.futureOrders || 0),
       PastConsumption: Number(item.pastConsumption || 0),
       AverageConsumptionPerDay: Number(item.averageConsumptionPerDay || 0),
       DaysUntilArrival: Number(item.daysUntilArrival || 0),
@@ -1560,16 +1571,19 @@ export default function GenerateNextOrder({
             })
           : allRegionsStats;
 
+      const onboardOrderedQty = Number(item.onboardOrderedQty || 0);
+      const suggestedOrderQty = Number(item.suggestedOrder || 0);
+
       return {
         Line: index + 1,
         ExcelRow: item.excelRow,
         Code: item.code || "",
         Product: item.product,
         UOM: item.uom,
-        ShipOrderedQtyFutureOrders: Number(item.futureOrders || 0),
-        SuggestedOrderQty: Number(item.suggestedOrder || 0),
-        DifferenceSuggestedVsShipOrdered:
-          Number(item.suggestedOrder || 0) - Number(item.futureOrders || 0),
+        OnboardOrderedQtyColumnY: onboardOrderedQty,
+        SuggestedOrderQty: suggestedOrderQty,
+        DifferenceSuggestedVsOnboardOrdered:
+          suggestedOrderQty - onboardOrderedQty,
         CurrentParLevelQ: Number(item.parLevel || 0),
         CurrentUsageAvgPerDay: Number(item.averageConsumptionPerDay || 0),
         SuggestedParCurrentUsage7Days: Number(
@@ -1858,6 +1872,10 @@ export default function GenerateNextOrder({
             </div>
             <div>
               🧮 Main order buffer: <strong>{ORDER_BUFFER_PERCENT}%</strong>
+            </div>
+            <div>
+              📦 Column Y ordered qty:{" "}
+              <strong>Used only in Order vs Par comparison</strong>
             </div>
             <div>
               🥬 Fresh produce spoilage rules:{" "}
@@ -2261,7 +2279,7 @@ export default function GenerateNextOrder({
                   </div>
 
                   <div style={localStyles.metricBox}>
-                    <span>Ship ordered</span>
+                    <span>Future F:N</span>
                     <strong>{formatQty(item.futureOrders)}</strong>
                   </div>
 
@@ -2365,7 +2383,8 @@ export default function GenerateNextOrder({
 
                 <div style={localStyles.reportMetrics}>
                   <span>Stock: {formatQty(item.stockOnHand)}</span>
-                  <span>Ship ordered: {formatQty(item.futureOrders)}</span>
+                  <span>Ordered Y: {formatQty(item.onboardOrderedQty)}</span>
+                  <span>Future F:N: {formatQty(item.futureOrders)}</span>
                   <span>Past: {formatQty(item.pastConsumption)}</span>
                   <span>Avg/day: {formatQty(item.averageConsumptionPerDay)}</span>
                   <span>Arrival: {formatQty(item.estimatedQtyAtArrival)}</span>
@@ -2408,9 +2427,9 @@ export default function GenerateNextOrder({
           <div style={localStyles.reportList}>
             <div style={styles.infoBox}>
               <div>
-                This report compares: ship ordered quantity, suggested order
-                quantity, current par Q, current usage suggested 7-day par, and
-                last-year 7-day suggested par.
+                This report compares: current onboard ordered quantity from
+                column Y, suggested order quantity, current par Q, current usage
+                suggested 7-day par, and last-year 7-day suggested par.
               </div>
               <div>
                 Report par basis: <strong>7 days + {ORDER_BUFFER_PERCENT}%</strong>
@@ -2422,7 +2441,9 @@ export default function GenerateNextOrder({
                 </strong>
               </div>
               <div>
-                Main order calculation is not changed by this report.
+                Main order calculation still uses F:N future orders for arrival
+                coverage. This report compares suggested order only against
+                column Y ordered quantity.
               </div>
             </div>
 
@@ -2451,8 +2472,8 @@ export default function GenerateNextOrder({
 
                 <div style={localStyles.parMetricGrid}>
                   <div style={localStyles.metricBox}>
-                    <span>Ship ordered</span>
-                    <strong>{formatQty(row.ShipOrderedQtyFutureOrders)}</strong>
+                    <span>Ordered col Y</span>
+                    <strong>{formatQty(row.OnboardOrderedQtyColumnY)}</strong>
                   </div>
 
                   <div style={localStyles.metricBoxStrong}>
@@ -2461,19 +2482,19 @@ export default function GenerateNextOrder({
                   </div>
 
                   <div style={localStyles.metricBox}>
-                    <span>Suggested - ordered</span>
+                    <span>Suggested - ordered Y</span>
                     <strong
                       style={{
                         color:
-                          Number(row.DifferenceSuggestedVsShipOrdered || 0) > 0
+                          Number(row.DifferenceSuggestedVsOnboardOrdered || 0) > 0
                             ? "#b00020"
                             : "#2e7d32",
                       }}
                     >
-                      {Number(row.DifferenceSuggestedVsShipOrdered || 0) >= 0
+                      {Number(row.DifferenceSuggestedVsOnboardOrdered || 0) >= 0
                         ? "+"
                         : ""}
-                      {formatQty(row.DifferenceSuggestedVsShipOrdered)}
+                      {formatQty(row.DifferenceSuggestedVsOnboardOrdered)}
                     </strong>
                   </div>
 
@@ -2686,7 +2707,11 @@ export default function GenerateNextOrder({
                   <strong>{formatQty(selectedInfoItem.stockOnHand)}</strong>
                 </div>
                 <div>
-                  Ship ordered / future orders:{" "}
+                  Column Y ordered qty:{" "}
+                  <strong>{formatQty(selectedInfoItem.onboardOrderedQty)}</strong>
+                </div>
+                <div>
+                  F:N future orders for arrival coverage:{" "}
                   <strong>{formatQty(selectedInfoItem.futureOrders)}</strong>
                 </div>
                 <div>
@@ -2798,6 +2823,10 @@ export default function GenerateNextOrder({
                   <strong>
                     {formatQty(selectedInfoItem.currentUsageSuggestedPar7Days)}
                   </strong>
+                </div>
+                <div>
+                  Order vs Par compares suggested order against:{" "}
+                  <strong>column Y ordered quantity</strong>
                 </div>
               </div>
             </section>
