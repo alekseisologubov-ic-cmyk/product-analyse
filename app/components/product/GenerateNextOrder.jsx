@@ -1,13 +1,14 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 
 import {
   YEARLY_REGION_ALL,
   parseYearlyRegionalConsumptionWorkbook,
-  formatRegionalQty,
 } from "../../lib/yearlyRegionalConsumption";
+
+const ORDER_BUFFER_PERCENT = 25;
 
 const SHIPS = ["SC", "VL", "BRL", "RL"];
 
@@ -18,11 +19,23 @@ const SHIP_DISPLAY_NAMES = {
   RL: "Resilient",
 };
 
-const ORDER_BUFFER_PERCENT = 25;
-const ORDER_BUFFER_MULTIPLIER = 1 + ORDER_BUFFER_PERCENT / 100;
-
 const cleanText = (value) =>
-  String(value || "").toUpperCase().replace(/\s+/g, " ").trim();
+  String(value || "")
+    .toUpperCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
+const safeText = (value) =>
+  String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const formatQty = (value) => Number(value || 0).toFixed(2);
+
+const formatMoney = (value) => "$" + Number(value || 0).toFixed(2);
+
+const waitForBrowser = (ms = 0) =>
+  new Promise((resolve) => window.setTimeout(resolve, ms));
 
 const escapeHtml = (value) =>
   String(value ?? "")
@@ -41,82 +54,9 @@ const toNumber = (value) => {
     .trim();
 
   const number = Number(cleaned);
+
   return Number.isFinite(number) ? number : 0;
 };
-
-const formatQty = (value) => Number(value || 0).toFixed(2);
-const formatMoney = (value) => "$" + Number(value || 0).toFixed(2);
-
-const getShipDisplayName = (shipCode) =>
-  SHIP_DISPLAY_NAMES[shipCode] || shipCode || "";
-
-const sx = (...parts) => Object.assign({}, ...parts.filter(Boolean));
-
-const normalizeShipCode = (value) => {
-  const text = cleanText(value)
-    .replace(/RESILIANT/g, "RESILIENT")
-    .replace(/\bV\s*[-]?\s*1\b/g, "V1")
-    .replace(/\bS\s*C\s*L\b/g, "SCL");
-
-  if (!text) return "";
-
-  if (text === "BRL" || text.includes("BRILLIANT")) return "BRL";
-  if (text === "RL" || text.includes("RESILIENT")) return "RL";
-  if (text === "VL" || text.includes("VALIANT")) return "VL";
-
-  if (
-    text === "SC" ||
-    text === "SCL" ||
-    text === "V1" ||
-    text.includes("SCARLET") ||
-    text.includes("SCL") ||
-    /\bV\s*[-]?\s*1\b/.test(text)
-  ) {
-    return "SC";
-  }
-
-  return "";
-};
-
-const normalizeVenue = (value) =>
-  cleanText(value)
-    .replace(/^\d+\s*[-]?\s*/g, "")
-    .replace(/\s*-\s*VV$/g, "")
-    .replace(/\s*VV$/g, "")
-    .replace(/\bTHE\s+/g, "")
-    .replace(/\bSCL\b/g, "")
-    .replace(/\bSC\b/g, "")
-    .replace(/\bVAL\b/g, "")
-    .replace(/\bVL\b/g, "")
-    .replace(/\bRES\b/g, "")
-    .replace(/\bRL\b/g, "")
-    .replace(/\bBRL\b/g, "")
-    .replace(/\bV1\b/g, "")
-    .replace(/\bROJO\b/g, "")
-    .replace(/\bARIYA\b/g, "")
-    .replace(/\bONLY\b/g, "")
-    .replace(/\bMANNOR\b/g, "MANOR")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const normalizeOrderCode = (value) => {
-  const raw = String(value ?? "").trim();
-  if (!raw) return "";
-
-  const numberValue = Number(raw);
-
-  if (
-    Number.isFinite(numberValue) &&
-    raw.replace(/\.0+$/, "") === String(Math.trunc(numberValue))
-  ) {
-    return String(Math.trunc(numberValue));
-  }
-
-  return cleanText(raw).replace(/\.0+$/, "");
-};
-
-const normalizeProductCodeForMatch = (value) =>
-  normalizeOrderCode(value).replace(/^0+(?=\d)/g, "").trim();
 
 const excelDateToDate = (value) => {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
@@ -137,7 +77,11 @@ const excelDateToDate = (value) => {
 
 const formatDateCell = (value) => {
   const date = excelDateToDate(value);
-  if (!date) return String(value || "").trim();
+
+  if (!date) {
+    return String(value || "").trim();
+  }
+
   return date.toLocaleDateString();
 };
 
@@ -164,6 +108,50 @@ const getDaysBetweenCells = (startValue, endValue) => {
   return Number.isFinite(days) && days > 0 ? days : 0;
 };
 
+const normalizeOrderCode = (value) => {
+  const raw = String(value ?? "").trim();
+
+  if (!raw) return "";
+
+  const numberValue = Number(raw);
+
+  if (
+    Number.isFinite(numberValue) &&
+    raw.replace(/\.0+$/, "") === String(Math.trunc(numberValue))
+  ) {
+    return String(Math.trunc(numberValue));
+  }
+
+  return cleanText(raw).replace(/\.0+$/, "");
+};
+
+const normalizeShipCode = (value) => {
+  const text = cleanText(value).replace(/RESILIANT/g, "RESILIENT");
+  const compact = text.replace(/[^A-Z0-9]/g, "");
+
+  if (!text) return "";
+
+  // Important:
+  // Some old files show Scarlet as V1 / V 1 / SCL.
+  if (
+    compact === "V1" ||
+    compact === "SCL" ||
+    text === "SC" ||
+    text.includes("SCARLET")
+  ) {
+    return "SC";
+  }
+
+  if (compact === "VL" || text.includes("VALIANT")) return "VL";
+  if (compact === "BRL" || text.includes("BRILLIANT")) return "BRL";
+  if (compact === "RL" || text.includes("RESILIENT")) return "RL";
+
+  return "";
+};
+
+const getShipDisplayName = (shipCode) =>
+  SHIP_DISPLAY_NAMES[shipCode] || shipCode || "";
+
 const getHistoricalSailorDays = (cellA, cellB) => {
   const a = toNumber(cellA);
   const b = toNumber(cellB);
@@ -175,119 +163,11 @@ const getHistoricalSailorDays = (cellA, cellB) => {
   const low = Math.min(Math.abs(a), Math.abs(b));
   const high = Math.max(Math.abs(a), Math.abs(b));
 
+  // Some files store total sailor-days in one row and days in the other.
   if (low > 0 && high > low * 1000) return high;
 
+  // Otherwise treat the two cells as sailors x days.
   return a * b;
-};
-
-const cleanTemplateTitle = (value) =>
-  String(value || "")
-    .replace(/\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/g, "")
-    .replace(/\s+/g, " ")
-    .replace(/\s*-\s*$/g, "")
-    .trim();
-
-const cleanTemplateSheetDisplay = (sheetName) =>
-  String(sheetName || "")
-    .replace(/^\d+\s*[-]?\s*/g, "")
-    .replace(/\bSCL\b/gi, "")
-    .replace(/\bSC\b/gi, "")
-    .replace(/\bV\s*[-]?\s*1\b/gi, "")
-    .replace(/\bVAL\b/gi, "")
-    .replace(/\bVL\b/gi, "")
-    .replace(/\bRES\b/gi, "")
-    .replace(/\bRL\b/gi, "")
-    .replace(/\bBRL\b/gi, "")
-    .replace(/\bROJO\b/gi, "")
-    .replace(/\bARIYA\b/gi, "")
-    .replace(/\bONLY\b/gi, "")
-    .replace(/\s*-\s*$/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const getTemplateSectionName = (templateName) => {
-  const cleaned = cleanTemplateTitle(templateName);
-  const parts = cleaned
-    .split(/\s*-\s*/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  return parts.length > 1 ? parts[parts.length - 1] : cleaned;
-};
-
-const getTemplateLocationDisplay = (sheetName, templateName) => {
-  const sheetDisplay = cleanTemplateSheetDisplay(sheetName);
-  const sectionName = getTemplateSectionName(templateName);
-
-  if (!sheetDisplay && !sectionName) return "Template";
-  if (!sheetDisplay) return sectionName;
-  if (!sectionName) return sheetDisplay;
-
-  const sheetKey = normalizeVenue(sheetDisplay);
-  const sectionKey = normalizeVenue(sectionName);
-
-  if (!sectionKey || sheetKey === sectionKey || sheetKey.includes(sectionKey)) {
-    return sheetDisplay;
-  }
-
-  return `${sheetDisplay} - ${sectionName}`;
-};
-
-const getTemplateLocationKey = (sheetName, templateName) =>
-  normalizeVenue(getTemplateLocationDisplay(sheetName, templateName));
-
-const getTemplateSheetShipScope = (sheetName) => {
-  const text = cleanText(sheetName)
-    .replace(/RESILIANT/g, "RESILIENT")
-    .replace(/\bV\s*[-]?\s*1\b/g, "V1")
-    .replace(/\bS\s*C\s*L\b/g, "SCL");
-
-  const scope = [];
-
-  if (
-    /\bSCL\b/.test(text) ||
-    /\bSC\b/.test(text) ||
-    /\bV1\b/.test(text) ||
-    text.includes("SCARLET")
-  ) {
-    scope.push("SC");
-  }
-
-  if (
-    /\bVAL\b/.test(text) ||
-    /\bVL\b/.test(text) ||
-    text.includes("VALIANT")
-  ) {
-    scope.push("VL");
-  }
-
-  if (
-    /\bRES\b/.test(text) ||
-    /\bRL\b/.test(text) ||
-    text.includes("RESILIENT")
-  ) {
-    scope.push("RL");
-  }
-
-  if (/\bBRL\b/.test(text) || text.includes("BRILLIANT")) {
-    scope.push("BRL");
-  }
-
-  return [...new Set(scope)];
-};
-
-const getTemplateShipScopeLabel = (shipScope) => {
-  const scope = Array.isArray(shipScope) ? shipScope.filter(Boolean) : [];
-  return scope.length ? "Used only on " + scope.join(", ") : "Used by all ships";
-};
-
-const templateShipScopeMatches = (shipScope, currentShipCode) => {
-  const scope = Array.isArray(shipScope) ? shipScope.filter(Boolean) : [];
-
-  if (!scope.length) return true;
-  if (!currentShipCode) return false;
-
-  return scope.includes(currentShipCode);
 };
 
 const PRODUCT_MATCH_STOP_WORDS = new Set([
@@ -347,757 +227,227 @@ const getProductMatchTokens = (value) =>
     .filter((token) => !/^\d+$/.test(token))
     .filter((token) => !PRODUCT_MATCH_STOP_WORDS.has(token));
 
-const productNamesMatch = (left, right) => {
-  const a = cleanText(left);
-  const b = cleanText(right);
+const getProductNameMatchKey = (value) => {
+  const tokens = [...new Set(getProductMatchTokens(value))].sort();
 
-  if (!a || !b) return false;
-  if (a === b) return true;
+  return tokens.length ? tokens.join("|") : cleanText(value);
+};
 
-  if (a.length > 12 && (a.includes(b) || b.includes(a))) return true;
-  if (b.length > 12 && (a.includes(b) || b.includes(a))) return true;
+const sumColumns = (row, columnIndexes) =>
+  columnIndexes.reduce((sum, columnIndex) => sum + toNumber(row[columnIndex]), 0);
 
-  const aTokens = getProductMatchTokens(a);
-  const bTokens = getProductMatchTokens(b);
-
-  if (!aTokens.length || !bTokens.length) return false;
-
-  const shortTokens = aTokens.length <= bTokens.length ? aTokens : bTokens;
-  const longTokenSet = new Set(
-    aTokens.length <= bTokens.length ? bTokens : aTokens
-  );
-
-  const matchedCount = shortTokens.filter((token) =>
-    longTokenSet.has(token)
-  ).length;
-
-  if (shortTokens.length === 1) {
-    const token = shortTokens[0];
-    return token.length >= 4 && matchedCount === 1;
+const getOrderSheetName = (workbook) => {
+  if (workbook.SheetNames.includes("Standard Order Template")) {
+    return "Standard Order Template";
   }
 
-  return matchedCount >= Math.ceil(shortTokens.length * 0.75);
+  if (workbook.SheetNames.includes("Order Sheet")) {
+    return "Order Sheet";
+  }
+
+  return workbook.SheetNames[0];
 };
 
-const getProductReportKey = (value) => {
-  const displayValue = String(value || "").trim();
-  if (!displayValue) return "";
+const buildRegionalIndex = (yearlyRegionalConsumption) => {
+  const rows = Array.isArray(yearlyRegionalConsumption?.rows)
+    ? yearlyRegionalConsumption.rows
+    : [];
 
-  const tokens = [...new Set(getProductMatchTokens(displayValue))].sort();
-  return tokens.length ? tokens.join("|") : cleanText(displayValue);
-};
+  const byCode = new Map();
+  const byName = new Map();
 
-const getLooseVenueMatchKey = (value) =>
-  normalizeVenue(value).replace(/[^A-Z0-9]/g, "");
+  const addToMap = (map, key, row) => {
+    if (!key) return;
 
-const splitFmlVenues = (value) =>
-  String(value || "")
-    .split(",")
-    .map((venue) => venue.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
+    if (!map.has(key)) {
+      map.set(key, []);
+    }
 
-const sanitizeFileName = (value) =>
-  String(value || "ship")
-    .replace(/[^a-z0-9]+/gi, "-")
-    .replace(/^-+|-+$/g, "")
-    .toLowerCase()
-    .slice(0, 60);
+    map.get(key).push(row);
+  };
 
-const getOrderItemStableKey = (item) =>
-  [
-    item?.excelRow || "",
-    normalizeProductCodeForMatch(item?.code),
-    cleanText(item?.product),
-  ].join("|");
+  rows.forEach((row) => {
+    const codeKey = normalizeOrderCode(row.productCode);
+    const nameKey = getProductNameMatchKey(row.productName);
 
-const sortNextOrderRows = (rows) =>
-  [...rows].sort((a, b) => {
-    const rowDiff = Number(a.excelRow || 0) - Number(b.excelRow || 0);
-
-    if (rowDiff !== 0) return rowDiff;
-
-    return String(a.product || "").localeCompare(String(b.product || ""));
+    addToMap(byCode, codeKey, row);
+    addToMap(byName, nameKey, row);
   });
 
-const aggregateYearlyRows = (rows = []) => {
-  const regions = new Set();
-  const ships = new Set();
-  const months = new Set();
-  const productCodes = new Set();
-  const productNames = new Set();
+  return {
+    rows,
+    byCode,
+    byName,
+  };
+};
 
-  let totalQty = 0;
-  let totalValue = 0;
-  let totalDays = 0;
-  let priceSum = 0;
-  let priceCount = 0;
+const getRegionalRowsForOrderItem = (item, regionalIndex) => {
+  if (!regionalIndex) return [];
+
+  const codeKey = normalizeOrderCode(item.code);
+
+  if (codeKey && regionalIndex.byCode.has(codeKey)) {
+    return regionalIndex.byCode.get(codeKey) || [];
+  }
+
+  const nameKey = getProductNameMatchKey(item.product);
+
+  if (nameKey && regionalIndex.byName.has(nameKey)) {
+    return regionalIndex.byName.get(nameKey) || [];
+  }
+
+  return [];
+};
+
+const summarizeRegionalRows = (rows) => {
+  const summary = {
+    totalQty: 0,
+    totalValue: 0,
+    totalDays: 0,
+    blockCount: 0,
+    avgDailyQty: 0,
+    avgPrice: 0,
+    regions: new Set(),
+    ships: new Set(),
+    months: new Set(),
+  };
 
   rows.forEach((row) => {
     const qty = Number(row.qty || 0);
     const value = Number(row.value || 0);
     const days = Number(row.days || 0);
-    const price = Number(row.price || 0);
 
-    totalQty += Number.isFinite(qty) ? qty : 0;
-    totalValue += Number.isFinite(value) ? value : 0;
-    totalDays += Number.isFinite(days) ? days : 0;
+    summary.totalQty += Number.isFinite(qty) ? qty : 0;
+    summary.totalValue += Number.isFinite(value) ? value : 0;
+    summary.totalDays += Number.isFinite(days) ? days : 0;
+    summary.blockCount += 1;
 
-    if (Number.isFinite(price) && price > 0) {
-      priceSum += price;
-      priceCount += 1;
-    }
-
-    if (row.region) regions.add(String(row.region));
-    if (row.ship) ships.add(String(row.ship));
+    if (row.region) summary.regions.add(row.region);
+    if (row.ship) summary.ships.add(row.ship);
     if (row.monthName || row.monthKey) {
-      months.add(String(row.monthName || row.monthKey));
+      summary.months.add(row.monthName || row.monthKey);
     }
-
-    if (row.productCode) productCodes.add(String(row.productCode));
-    if (row.productName) productNames.add(String(row.productName));
   });
 
+  summary.avgDailyQty =
+    summary.totalDays > 0 ? summary.totalQty / summary.totalDays : 0;
+
+  summary.avgPrice =
+    summary.totalQty > 0 ? summary.totalValue / summary.totalQty : 0;
+
   return {
-    rows: rows.length,
-    totalQty,
-    totalValue,
-    totalDays,
-    avgDailyQty: totalDays > 0 ? totalQty / totalDays : 0,
-    avgPrice:
-      priceCount > 0
-        ? priceSum / priceCount
-        : totalQty > 0
-        ? totalValue / totalQty
-        : 0,
-    regions: [...regions].sort(),
-    ships: [...ships].sort(),
-    months: [...months].sort(),
-    productCodes: [...productCodes].sort(),
-    productNames: [...productNames].sort(),
+    ...summary,
+    regions: [...summary.regions].sort(),
+    ships: [...summary.ships].sort(),
+    months: [...summary.months].sort(),
   };
 };
 
-const getYearlyRegionalStatsForItem = ({
+const enrichOrderRowWithRegionalComparison = ({
   item,
-  yearlyRegionalConsumption,
+  regionalIndex,
   selectedRegion,
 }) => {
-  const sourceRows = Array.isArray(yearlyRegionalConsumption?.rows)
-    ? yearlyRegionalConsumption.rows
-    : [];
+  const matchedRows = getRegionalRowsForOrderItem(item, regionalIndex);
 
-  if (!item || !sourceRows.length) {
-    return {
-      hasData: false,
-      yearTotal: aggregateYearlyRows([]),
-      market: aggregateYearlyRows([]),
-      marketLabel: selectedRegion || "",
-      matchedBy: "",
-      matchedProductName: "",
-      matchedProductCode: "",
-    };
-  }
-
-  const itemCode = normalizeProductCodeForMatch(item.code);
-  const itemProductKey = getProductReportKey(item.product);
-
-  const codeMatches = [];
-  const nameMatches = [];
-
-  sourceRows.forEach((row) => {
-    const rowCode = normalizeProductCodeForMatch(row.productCode);
-    const rowProductName = String(row.productName || "").trim();
-
-    if (!rowCode && !rowProductName) return;
-
-    if (itemCode && rowCode && itemCode === rowCode) {
-      codeMatches.push(row);
-      return;
-    }
-
-    const rowProductKey =
-      String(row.productKey || "").trim() || getProductReportKey(rowProductName);
-
-    if (itemProductKey && rowProductKey && itemProductKey === rowProductKey) {
-      nameMatches.push(row);
-      return;
-    }
-
-    if (productNamesMatch(item.product, rowProductName)) {
-      nameMatches.push(row);
-    }
-  });
-
-  const matchedRows = codeMatches.length ? codeMatches : nameMatches;
-  const matchedBy = codeMatches.length ? "Code" : nameMatches.length ? "Name" : "";
+  const orderShipRows = matchedRows.filter(
+    (row) => normalizeShipCode(row.ship) === item.orderShipCode
+  );
 
   const marketRows =
     selectedRegion && selectedRegion !== YEARLY_REGION_ALL
-      ? matchedRows.filter((row) => String(row.region || "").trim() === selectedRegion)
-      : matchedRows;
+      ? matchedRows.filter((row) => String(row.region || "") === selectedRegion)
+      : selectedRegion === YEARLY_REGION_ALL
+      ? matchedRows
+      : [];
 
-  const yearTotal = aggregateYearlyRows(matchedRows);
-  const market = aggregateYearlyRows(marketRows);
+  const yearSummary = summarizeRegionalRows(matchedRows);
+  const marketSummary = summarizeRegionalRows(marketRows);
+  const shipSummary = summarizeRegionalRows(orderShipRows);
+
+  const suggestedParFromYearTotal =
+    yearSummary.avgDailyQty > 0
+      ? yearSummary.avgDailyQty * item.voyageDays * 1.25
+      : 0;
+
+  const suggestedParFromMarket =
+    marketSummary.avgDailyQty > 0
+      ? marketSummary.avgDailyQty * item.voyageDays * 1.25
+      : 0;
+
+  const suggestedParFromShip =
+    shipSummary.avgDailyQty > 0
+      ? shipSummary.avgDailyQty * item.voyageDays * 1.25
+      : 0;
+
+  const firstMatchedRow = matchedRows[0] || {};
 
   return {
-    hasData: matchedRows.length > 0,
-    yearTotal,
-    market,
-    marketLabel:
-      !selectedRegion || selectedRegion === YEARLY_REGION_ALL
-        ? "All markets"
-        : selectedRegion,
-    matchedBy,
-    matchedProductName:
-      yearTotal.productNames[0] || String(item.product || "").trim(),
-    matchedProductCode: yearTotal.productCodes[0] || String(item.code || "").trim(),
+    ...item,
+
+    regionalMatchedProductCode: firstMatchedRow.productCode || "",
+    regionalMatchedProductName: firstMatchedRow.productName || "",
+    regionalMatchCount: matchedRows.length,
+
+    yearAvgDailyQty: yearSummary.avgDailyQty,
+    yearTotalQty: yearSummary.totalQty,
+    yearTotalDays: yearSummary.totalDays,
+    yearTotalValue: yearSummary.totalValue,
+    yearBlockCount: yearSummary.blockCount,
+    yearRegions: yearSummary.regions,
+    yearShips: yearSummary.ships,
+
+    marketAvgDailyQty: marketSummary.avgDailyQty,
+    marketTotalQty: marketSummary.totalQty,
+    marketTotalDays: marketSummary.totalDays,
+    marketTotalValue: marketSummary.totalValue,
+    marketBlockCount: marketSummary.blockCount,
+    marketRegions: marketSummary.regions,
+    marketShips: marketSummary.ships,
+
+    shipYearAvgDailyQty: shipSummary.avgDailyQty,
+    shipYearTotalQty: shipSummary.totalQty,
+    shipYearTotalDays: shipSummary.totalDays,
+    shipYearBlockCount: shipSummary.blockCount,
+
+    suggestedParFromYearTotal,
+    suggestedParFromMarket,
+    suggestedParFromShip,
   };
 };
 
-const parseTemplateWorkbook = (workbook) => {
-  const map = {};
-
-  workbook.SheetNames.forEach((sheetName) => {
-    const venueKey = normalizeVenue(sheetName);
-    if (!venueKey) return;
-
-    if (!map[venueKey]) map[venueKey] = {};
-
-    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
-      header: 1,
-      defval: "",
-    });
-
-    if (!rows.length) return;
-
-    rows.forEach((row, rowIndex) => {
-      row.forEach((cell, colIndex) => {
-        if (cleanText(cell) !== "INGREDIENT NAME") return;
-
-        const templateName = cleanTemplateTitle(
-          rows[rowIndex - 1]?.[colIndex] ||
-            rows[rowIndex - 1]?.[colIndex - 1] ||
-            sheetName ||
-            "Template"
-        );
-
-        const shipScope = getTemplateSheetShipScope(sheetName);
-
-        const templateLocation = {
-          locationKey: getTemplateLocationKey(sheetName, templateName),
-          displayName: getTemplateLocationDisplay(sheetName, templateName),
-          sheetName,
-          templateName: templateName || sheetName || "Template",
-          shipScope,
-          shipScopeLabel: getTemplateShipScopeLabel(shipScope),
-        };
-
-        rows.slice(rowIndex + 1).forEach((dataRow) => {
-          const product = String(dataRow[colIndex] || "").trim();
-          if (!product) return;
-
-          const productKey = cleanText(product);
-          if (!productKey) return;
-
-          if (
-            productKey === "INGREDIENT NAME" ||
-            productKey === "CODE" ||
-            productKey === "UM" ||
-            productKey.includes("#REF")
-          ) {
-            return;
-          }
-
-          if (!map[venueKey][productKey]) {
-            map[venueKey][productKey] = {
-              product,
-              productCodes: new Set(),
-              templates: new Set(),
-              templateLocations: new Set(),
-            };
-          }
-
-          const templateCode = String(dataRow[colIndex - 1] || "").trim();
-
-          if (templateCode && cleanText(templateCode) !== "CODE") {
-            map[venueKey][productKey].productCodes.add(templateCode);
-          }
-
-          map[venueKey][productKey].templates.add(
-            templateName || sheetName || "Template"
-          );
-
-          map[venueKey][productKey].templateLocations.add(
-            JSON.stringify(templateLocation)
-          );
-        });
-      });
-    });
-  });
-
-  Object.keys(map).forEach((venueKey) => {
-    Object.keys(map[venueKey]).forEach((productKey) => {
-      map[venueKey][productKey].productCodes = [
-        ...(map[venueKey][productKey].productCodes || []),
-      ];
-
-      map[venueKey][productKey].templates = [
-        ...(map[venueKey][productKey].templates || []),
-      ];
-
-      map[venueKey][productKey].templateLocations = [
-        ...(map[venueKey][productKey].templateLocations || []),
-      ]
-        .map((locationText) => {
-          try {
-            return JSON.parse(locationText);
-          } catch {
-            return null;
-          }
-        })
-        .filter(Boolean);
-    });
-  });
-
-  return map;
-};
-
-const getTemplateMatchesForFmlProduct = (templateMap, fmlItem, currentShipCode) => {
-  const matches = [];
-  const seen = new Set();
-  const fmlVenues = fmlItem.venues || [];
-  const fmlVenueKeys = fmlVenues
-    .map((venue) => getLooseVenueMatchKey(venue))
-    .filter(Boolean);
-
-  const fmlCodeKey = normalizeOrderCode(fmlItem.code);
-
-  Object.entries(templateMap || {}).forEach(([venueKey, productsByKey]) => {
-    Object.values(productsByKey || {}).forEach((templateItem) => {
-      const templateCodes = Array.isArray(templateItem.productCodes)
-        ? templateItem.productCodes
-        : [];
-
-      const codeMatches =
-        fmlCodeKey &&
-        templateCodes.some((code) => normalizeOrderCode(code) === fmlCodeKey);
-
-      const nameMatches = productNamesMatch(
-        fmlItem.product,
-        templateItem.product
-      );
-
-      if (!codeMatches && !nameMatches) return;
-
-      const locations =
-        Array.isArray(templateItem.templateLocations) &&
-        templateItem.templateLocations.length
-          ? templateItem.templateLocations
-          : [
-              {
-                locationKey: venueKey,
-                displayName: venueKey,
-                sheetName: "",
-                templateName: "",
-                shipScope: [],
-                shipScopeLabel: "Used by all ships",
-              },
-            ];
-
-      locations.forEach((location) => {
-        const shipScope = Array.isArray(location.shipScope)
-          ? location.shipScope
-          : [];
-
-        if (!templateShipScopeMatches(shipScope, currentShipCode)) return;
-
-        const candidateKeys = [
-          location.locationKey,
-          location.displayName,
-          location.sheetName,
-          venueKey,
-        ]
-          .map((value) => getLooseVenueMatchKey(value))
-          .filter(Boolean);
-
-        const matchedFmlVenueIndexes = fmlVenueKeys
-          .map((fmlKey, index) =>
-            candidateKeys.some(
-              (candidateKey) =>
-                candidateKey === fmlKey ||
-                candidateKey.includes(fmlKey) ||
-                fmlKey.includes(candidateKey)
-            )
-              ? index
-              : -1
-          )
-          .filter((index) => index >= 0);
-
-        if (!matchedFmlVenueIndexes.length) return;
-
-        const uniqueKey = [
-          location.sheetName || venueKey,
-          location.templateName || "",
-          templateItem.product || "",
-          shipScope.join("-") || "ALL",
-        ].join("|");
-
-        if (seen.has(uniqueKey)) return;
-        seen.add(uniqueKey);
-
-        matches.push({
-          templateProduct: templateItem.product || fmlItem.product,
-          templateName: location.templateName || "Template",
-          sheetName: location.sheetName || "",
-          displayName: location.displayName || location.locationKey || venueKey,
-          shipScope,
-          shipScopeLabel: getTemplateShipScopeLabel(shipScope),
-          matchedVenues: [
-            ...new Set(
-              matchedFmlVenueIndexes
-                .map((index) => fmlVenues[index])
-                .filter(Boolean)
-            ),
-          ],
-        });
-      });
-    });
-  });
-
-  return matches;
-};
-
-const parseFmlNotOrderedUnusedReport = (
+const parseNextOrderWorkbook = async ({
   workbook,
-  orderRows,
-  currentShipCode,
-  templateMap
-) => {
-  const fmlSheetName =
-    workbook.SheetNames.find((name) => cleanText(name) === "FML") ||
-    workbook.SheetNames.find((name) => cleanText(name).includes("FML"));
+  fileName,
+  fallbackShip,
+  onProgress,
+}) => {
+  const sheetName = getOrderSheetName(workbook);
+  const worksheet = workbook.Sheets[sheetName];
 
-  if (!fmlSheetName) return [];
-
-  const ws = workbook.Sheets[fmlSheetName];
-  if (!ws) return [];
-
-  const decodedRange = XLSX.utils.decode_range(ws["!ref"] || "A1:I1");
-
-  const fmlRange = {
-    s: { r: decodedRange.s.r, c: 0 },
-    e: { r: decodedRange.e.r, c: Math.max(decodedRange.e.c, 8) },
-  };
-
-  const rows = XLSX.utils.sheet_to_json(ws, {
-    header: 1,
-    defval: "",
-    range: fmlRange,
-  });
-
-  const orderByCode = {};
-  const orderByProductKey = {};
-
-  orderRows.forEach((item) => {
-    const codeKey = normalizeOrderCode(item.code);
-    const productKey = getProductReportKey(item.product);
-
-    if (codeKey) orderByCode[codeKey] = item;
-    if (productKey && !orderByProductKey[productKey]) {
-      orderByProductKey[productKey] = item;
-    }
-  });
-
-  const reportRows = [];
-  const seen = new Set();
-
-  rows.slice(3).forEach((row, index) => {
-    const excelRow = index + 4;
-    const department = String(row[0] || "").trim();
-    const category = String(row[1] || "").trim();
-    const subCategory = String(row[2] || "").trim();
-    const code = String(row[3] || "").trim();
-    const product = String(row[4] || "").replace(/\s+/g, " ").trim();
-    const venueText = String(row[5] || "").replace(/\s+/g, " ").trim();
-    const uom = String(row[8] || "").trim();
-
-    if (!code || !product || !venueText) return;
-    if (cleanText(code) === "PRODUCT") return;
-    if (cleanText(product) === "PRODUCT NAME") return;
-
-    const venues = splitFmlVenues(venueText);
-    if (!venues.length) return;
-
-    const codeKey = normalizeOrderCode(code);
-    const productKey = getProductReportKey(product);
-    const orderItem = orderByCode[codeKey] || orderByProductKey[productKey] || null;
-
-    if (!orderItem) return;
-
-    const futureOrders = Number(orderItem.futureOrders || 0);
-    const pastConsumption = Number(orderItem.pastConsumption || 0);
-
-    if (futureOrders > 0 || pastConsumption > 0) return;
-
-    const templateMatches = getTemplateMatchesForFmlProduct(
-      templateMap,
-      { code, product, venues },
-      currentShipCode
-    );
-
-    if (!templateMatches.length) return;
-
-    const uniqueKey = codeKey || productKey || cleanText(product + "|" + excelRow);
-    if (seen.has(uniqueKey)) return;
-    seen.add(uniqueKey);
-
-    const matchedVenues = [
-      ...new Set(templateMatches.flatMap((match) => match.matchedVenues || [])),
-    ];
-
-    const templateShipScopeLabels = [
-      ...new Set(
-        templateMatches.map((match) => match.shipScopeLabel || "Used by all ships")
-      ),
-    ];
-
-    const templateLocationNames = [
-      ...new Set(
-        templateMatches.map(
-          (match) => match.displayName || match.templateName || "Template"
-        )
-      ),
-    ];
-
-    const templateSheetNames = [
-      ...new Set(templateMatches.map((match) => match.sheetName).filter(Boolean)),
-    ];
-
-    reportRows.push({
-      excelRow,
-      standardOrderRow: orderItem?.excelRow || "",
-      code,
-      product,
-      uom: orderItem?.uom || uom || "",
-      department,
-      category,
-      subCategory,
-      venues,
-      venueText,
-      matchedVenues,
-      templateMatches,
-      templateLocationNames,
-      templateSheetNames,
-      templateShipScopeLabels,
-      templateShipScopeNote: templateShipScopeLabels.join("; "),
-      stockOnHand: Number(orderItem?.stockOnHand || 0),
-      futureOrders,
-      pastConsumption,
-      foundInOrderTemplate: Boolean(orderItem),
-      foundInTemplate: true,
-      currentShipCode,
-      reason:
-        "FML product matches the ERP template for this ship and has 0 future orders plus 0 past consumption in Standard Order Template.",
-    });
-  });
-
-  return reportRows.sort(
-    (a, b) => Number(a.excelRow || 0) - Number(b.excelRow || 0)
-  );
-};
-
-const parseFmlRunningLowReport = (
-  workbook,
-  orderRows,
-  currentShipCode,
-  templateMap
-) => {
-  const fmlSheetName =
-    workbook.SheetNames.find((name) => cleanText(name) === "FML") ||
-    workbook.SheetNames.find((name) => cleanText(name).includes("FML"));
-
-  if (!fmlSheetName) return [];
-
-  const ws = workbook.Sheets[fmlSheetName];
-  if (!ws) return [];
-
-  const decodedRange = XLSX.utils.decode_range(ws["!ref"] || "A1:I1");
-
-  const fmlRange = {
-    s: { r: decodedRange.s.r, c: 0 },
-    e: { r: decodedRange.e.r, c: Math.max(decodedRange.e.c, 8) },
-  };
-
-  const rows = XLSX.utils.sheet_to_json(ws, {
-    header: 1,
-    defval: "",
-    range: fmlRange,
-  });
-
-  const orderByCode = {};
-  const orderByProductKey = {};
-
-  orderRows.forEach((item) => {
-    const codeKey = normalizeOrderCode(item.code);
-    const productKey = getProductReportKey(item.product);
-
-    if (codeKey) orderByCode[codeKey] = item;
-    if (productKey && !orderByProductKey[productKey]) {
-      orderByProductKey[productKey] = item;
-    }
-  });
-
-  const reportRows = [];
-  const seen = new Set();
-
-  rows.slice(3).forEach((row, index) => {
-    const excelRow = index + 4;
-    const department = String(row[0] || "").trim();
-    const category = String(row[1] || "").trim();
-    const subCategory = String(row[2] || "").trim();
-    const code = String(row[3] || "").trim();
-    const product = String(row[4] || "").replace(/\s+/g, " ").trim();
-    const venueText = String(row[5] || "").replace(/\s+/g, " ").trim();
-    const uom = String(row[8] || "").trim();
-
-    if (!code || !product || !venueText) return;
-    if (cleanText(code) === "PRODUCT") return;
-    if (cleanText(product) === "PRODUCT NAME") return;
-
-    const venues = splitFmlVenues(venueText);
-    if (!venues.length) return;
-
-    const codeKey = normalizeOrderCode(code);
-    const productKey = getProductReportKey(product);
-    const orderItem = orderByCode[codeKey] || orderByProductKey[productKey] || null;
-
-    if (!orderItem) return;
-
-    const futureOrders = Number(orderItem.futureOrders || 0);
-    const pastConsumption = Number(orderItem.pastConsumption || 0);
-    const averageConsumptionPerDay = Number(orderItem.averageConsumptionPerDay || 0);
-    const availableAtArrival = Number(orderItem.availableAtArrival || 0);
-
-    if (futureOrders > 0) return;
-    if (pastConsumption <= 0 || averageConsumptionPerDay <= 0) return;
-
-    const oneDayBuffer = averageConsumptionPerDay;
-    const isRunningLowAtArrival = availableAtArrival <= oneDayBuffer;
-
-    if (!isRunningLowAtArrival) return;
-
-    const templateMatches = getTemplateMatchesForFmlProduct(
-      templateMap,
-      { code, product, venues },
-      currentShipCode
-    );
-
-    if (!templateMatches.length) return;
-
-    const uniqueKey = codeKey || productKey || cleanText(product + "|" + excelRow);
-    if (seen.has(uniqueKey)) return;
-    seen.add(uniqueKey);
-
-    const matchedVenues = [
-      ...new Set(templateMatches.flatMap((match) => match.matchedVenues || [])),
-    ];
-
-    const templateShipScopeLabels = [
-      ...new Set(
-        templateMatches.map((match) => match.shipScopeLabel || "Used by all ships")
-      ),
-    ];
-
-    const templateLocationNames = [
-      ...new Set(
-        templateMatches.map(
-          (match) => match.displayName || match.templateName || "Template"
-        )
-      ),
-    ];
-
-    const templateSheetNames = [
-      ...new Set(templateMatches.map((match) => match.sheetName).filter(Boolean)),
-    ];
-
-    const daysOfCoverAtArrival =
-      averageConsumptionPerDay > 0 ? availableAtArrival / averageConsumptionPerDay : 0;
-
-    const reason =
-      availableAtArrival <= 0
-        ? "No future order. Based on average daily consumption, this product is expected to be out before or by arrival day."
-        : "No future order. Based on average daily consumption, this product will have less than one day of stock at arrival.";
-
-    reportRows.push({
-      excelRow,
-      standardOrderRow: orderItem?.excelRow || "",
-      code,
-      product,
-      uom: orderItem?.uom || uom || "",
-      department,
-      category,
-      subCategory,
-      venues,
-      venueText,
-      matchedVenues,
-      templateMatches,
-      templateLocationNames,
-      templateSheetNames,
-      templateShipScopeLabels,
-      templateShipScopeNote: templateShipScopeLabels.join("; "),
-      stockOnHand: Number(orderItem?.stockOnHand || 0),
-      futureOrders,
-      pastConsumption,
-      averageConsumptionPerDay,
-      consumptionUntilArrival: Number(orderItem?.consumptionUntilArrival || 0),
-      availableAtArrival,
-      daysOfCoverAtArrival,
-      suggestedOrder: Number(orderItem?.suggestedOrder || 0),
-      foundInOrderTemplate: Boolean(orderItem),
-      foundInTemplate: true,
-      currentShipCode,
-      reason,
-    });
-  });
-
-  return reportRows.sort(
-    (a, b) => Number(a.excelRow || 0) - Number(b.excelRow || 0)
-  );
-};
-
-const parseNextOrderWorkbook = ({ workbook, templateMap, fallbackShipCode }) => {
-  const sheetName = workbook.SheetNames.includes("Standard Order Template")
-    ? "Standard Order Template"
-    : workbook.SheetNames.includes("Order Sheet")
-    ? "Order Sheet"
-    : workbook.SheetNames[0];
-
-  const ws = workbook.Sheets[sheetName];
-
-  if (!ws) {
-    throw new Error("Could not find the order worksheet.");
+  if (!worksheet) {
+    throw new Error("Could not find an order worksheet.");
   }
 
-  const rows = XLSX.utils.sheet_to_json(ws, {
+  const rows = XLSX.utils.sheet_to_json(worksheet, {
     header: 1,
     defval: "",
-    cellDates: true,
   });
 
-  const orderShipName = String(rows[0]?.[1] || "").trim();
+  const orderShipName = safeText(rows[0]?.[1]);
   const orderShipCode =
-    normalizeShipCode(orderShipName) || normalizeShipCode(fallbackShipCode);
+    normalizeShipCode(orderShipName) || normalizeShipCode(fallbackShip);
 
-  const rawOrderDate = rows[1]?.[1];
-  const rawArrivalDate = rows[2]?.[1];
-  const targetSailors = toNumber(rows[4]?.[1]);
-  const targetDays = toNumber(rows[5]?.[1]);
+  const rawOrderDate = rows[1]?.[1]; // B2
+  const rawArrivalDate = rows[2]?.[1]; // B3
+  const targetSailors = toNumber(rows[4]?.[1]); // B5
+  const voyageDays = toNumber(rows[5]?.[1]); // B6
+
   const daysUntilArrival = getDaysBetweenCells(rawOrderDate, rawArrivalDate);
-  const totalDaysToCover = daysUntilArrival + targetDays;
-  const currentPeriodSailorDays = targetSailors * targetDays;
+  const currentPeriodSailorDays = targetSailors * voyageDays;
 
-  const futureOrderColumns = [5, 6, 7, 8, 9, 10, 11, 12, 13];
-  const pastConsumptionColumns = [34, 35, 36, 37, 38, 39];
+  const futureOrderColumns = [5, 6, 7, 8, 9, 10, 11, 12, 13]; // F:N
+  const pastConsumptionColumns = [34, 35, 36, 37, 38, 39]; // AI:AN
 
   const historicalSailorDays = pastConsumptionColumns.reduce(
     (sum, colIndex) =>
@@ -1107,548 +457,373 @@ const parseNextOrderWorkbook = ({ workbook, templateMap, fallbackShipCode }) => 
 
   const parsedRows = [];
 
-  rows.slice(9).forEach((row, rowOffset) => {
-    const excelRow = rowOffset + 10;
-    const code = String(row[0] || "").trim();
-    const product = String(row[1] || "").replace(/\s+/g, " ").trim();
-    const uom = String(row[2] || "").trim();
+  for (let rowIndex = 9; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex];
+    const excelRow = rowIndex + 1;
 
-    if (!product || !uom) return;
-    if (cleanText(code) === "CODE") return;
-    if (cleanText(product) === "PRODUCT") return;
-    if (cleanText(product) === "PRODUCT NAME") return;
+    const code = safeText(row[0]);
+    const product = safeText(row[1]);
+    const uom = safeText(row[2]);
 
-    const stockOnHand = toNumber(row[3]);
-    const parLevel = toNumber(row[16]);
+    if (!product || !uom) continue;
+    if (cleanText(product) === "PRODUCT") continue;
+    if (cleanText(product).includes("PRODUCT NAME")) continue;
 
-    const futureOrders = futureOrderColumns.reduce(
-      (sum, colIndex) => sum + toNumber(row[colIndex]),
-      0
-    );
-
-    const pastConsumption = pastConsumptionColumns.reduce(
-      (sum, colIndex) => sum + toNumber(row[colIndex]),
-      0
-    );
+    const stockOnHand = toNumber(row[3]); // D
+    const futureOrders = sumColumns(row, futureOrderColumns); // F:N
+    const currentFileParLevel = toNumber(row[16]); // Q
+    const pastConsumption = sumColumns(row, pastConsumptionColumns); // AI:AN
 
     const averageConsumptionPerSailorDay =
       historicalSailorDays > 0 ? pastConsumption / historicalSailorDays : 0;
 
     const averageConsumptionPerDay =
-      averageConsumptionPerSailorDay * targetSailors;
+      averageConsumptionPerSailorDay > 0 && targetSailors > 0
+        ? averageConsumptionPerSailorDay * targetSailors
+        : voyageDays > 0
+        ? pastConsumption / voyageDays
+        : 0;
 
-    const consumptionUntilArrival = averageConsumptionPerDay * daysUntilArrival;
-    const voyageConsumptionNeed = averageConsumptionPerDay * targetDays;
-    const requiredQtyBeforeBuffer = averageConsumptionPerDay * totalDaysToCover;
-    const bufferQty = requiredQtyBeforeBuffer * (ORDER_BUFFER_PERCENT / 100);
-    const requiredQtyWithBuffer = requiredQtyBeforeBuffer * ORDER_BUFFER_MULTIPLIER;
-    const availableForFullPeriod = stockOnHand + futureOrders;
-    const availableAtArrival = stockOnHand + futureOrders - consumptionUntilArrival;
-    const suggestedOrder = Math.max(requiredQtyWithBuffer - availableForFullPeriod, 0);
+    const arrivalLeadDays = daysUntilArrival;
+    const totalProjectionDays = arrivalLeadDays + voyageDays;
 
-    const hasNoPastConsumption = pastConsumption <= 0;
-    const hasNoStockOnHand = stockOnHand <= 0;
+    // Correct logic:
+    // Arrival days are only for estimating stock on arrival.
+    const consumptionUntilArrival =
+      averageConsumptionPerDay * arrivalLeadDays;
+
+    const estimatedQtyAtArrival =
+      stockOnHand + futureOrders - consumptionUntilArrival;
+
+    // Order cannot fix stock that runs out before arrival.
+    // For the new order calculation, negative arrival stock is treated as 0.
+    const usableQtyAtArrival = Math.max(estimatedQtyAtArrival, 0);
+
+    // New order is based only on voyage days + 25% buffer.
+    const voyageNeedBeforeBuffer = averageConsumptionPerDay * voyageDays;
+
+    const orderBufferQty =
+      voyageNeedBeforeBuffer * (ORDER_BUFFER_PERCENT / 100);
+
+    const targetQtyForVoyage = voyageNeedBeforeBuffer + orderBufferQty;
+
+    const suggestedParFromCurrentUsage = targetQtyForVoyage;
+
+    const suggestedOrder = Math.max(
+      targetQtyForVoyage - usableQtyAtArrival,
+      0
+    );
 
     let alertType = suggestedOrder > 0 ? "order" : "normal";
     let alertLabel = suggestedOrder > 0 ? "Needs order" : "No order suggested";
 
     let alertDescription =
-      "Past consumption average x days until arrival + voyage days, plus 25% buffer, minus stock on hand and future orders.";
+      "Stock on arrival is estimated from stock on hand + future orders - average daily consumption until arrival. Suggested order covers voyage days plus 25% buffer only.";
 
-    if (hasNoPastConsumption && hasNoStockOnHand) {
-      alertType = "blue";
-      alertLabel = "No stock and no past consumption";
-      alertDescription =
-        "Blue review: stock on hand is 0 and past consumption is 0.";
-    } else if (hasNoPastConsumption && stockOnHand > 0) {
+    if (estimatedQtyAtArrival < 0) {
       alertType = "red";
-      alertLabel = "Stock on hand but no past consumption";
+      alertLabel = "May run out before arrival";
       alertDescription =
-        "Red review: item has stock on hand but no past consumption.";
+        "Projected stock on arrival is below zero. The suggested order still covers only the voyage need plus 25% buffer.";
+    }
+
+    if (averageConsumptionPerDay <= 0 && stockOnHand <= 0 && futureOrders <= 0) {
+      alertType = "blue";
+      alertLabel = "No usage and no stock";
+      alertDescription =
+        "No average daily usage could be calculated and no stock/future order was found. Review manually.";
     }
 
     parsedRows.push({
       excelRow,
+      orderShipCode,
+      orderShipName,
+
       code,
       product,
       uom,
+
       stockOnHand,
-      parLevel,
       futureOrders,
       pastConsumption,
+
+      currentFileParLevel,
+      parLevel: currentFileParLevel,
+
+      targetSailors,
+      voyageDays,
+      arrivalLeadDays,
+      daysUntilArrival,
+      totalProjectionDays,
+
       historicalSailorDays,
       currentPeriodSailorDays,
-      daysUntilArrival,
-      voyageDays: targetDays,
-      totalDaysToCover,
       averageConsumptionPerSailorDay,
       averageConsumptionPerDay,
+
       consumptionUntilArrival,
-      voyageConsumptionNeed,
-      requiredQtyBeforeBuffer,
-      bufferPercent: ORDER_BUFFER_PERCENT,
-      bufferQty,
-      requiredQtyWithBuffer,
-      availableForFullPeriod,
-      availableAtArrival,
-      projectedNeed: voyageConsumptionNeed,
-      rawSuggestedOrder: suggestedOrder,
-      parMaxAllowed: 0,
-      parCapApplied: false,
-      parLevelNote:
-        "Simple calculation used: past average × total days to cover + 25% buffer. Par level Q is shown only for reference.",
+      estimatedQtyAtArrival,
+      availableAtArrival: estimatedQtyAtArrival,
+      usableQtyAtArrival,
+
+      voyageNeedBeforeBuffer,
+      orderBufferPercent: ORDER_BUFFER_PERCENT,
+      orderBufferQty,
+      targetQtyForVoyage,
+
+      suggestedParFromCurrentUsage,
+      parDifferenceVsCurrent:
+        suggestedParFromCurrentUsage - currentFileParLevel,
+
       suggestedOrder,
+
       alertType,
       alertLabel,
       alertDescription,
       orderReason: alertDescription,
     });
-  });
 
-  const sortedRows = sortNextOrderRows(parsedRows);
-
-  const fmlReportRows = parseFmlNotOrderedUnusedReport(
-    workbook,
-    sortedRows,
-    orderShipCode,
-    templateMap
-  );
-
-  const fmlRunningLowRows = parseFmlRunningLowReport(
-    workbook,
-    sortedRows,
-    orderShipCode,
-    templateMap
-  );
+    if (rowIndex % 250 === 0) {
+      onProgress?.(
+        `Reading order rows... ${rowIndex + 1} of ${rows.length}`
+      );
+      await waitForBrowser(0);
+    }
+  }
 
   return {
-    rows: sortedRows,
-    fmlReportRows,
-    fmlRunningLowRows,
+    rows: parsedRows,
     meta: {
+      fileName,
       sheetName,
-      shipName: orderShipName || fallbackShipCode || "",
-      shipCode: orderShipCode,
-      shipDisplayName: getShipDisplayName(orderShipCode),
+      orderShipName,
+      orderShipCode,
       orderDate: formatDateCell(rawOrderDate),
       arrivalDate: formatDateCell(rawArrivalDate),
       targetSailors,
-      targetDays,
+      voyageDays,
       daysUntilArrival,
-      totalDaysToCover,
-      currentPeriodSailorDays,
+      totalProjectionDays: daysUntilArrival + voyageDays,
       historicalSailorDays,
-      totalItems: sortedRows.length,
-      itemsNeedingOrder: sortedRows.filter(
+      currentPeriodSailorDays,
+      totalItems: parsedRows.length,
+      itemsNeedingOrder: parsedRows.filter(
         (item) => Number(item.suggestedOrder || 0) > 0
       ).length,
-      blueReviewItems: sortedRows.filter((item) => item.alertType === "blue")
-        .length,
-      redReviewItems: sortedRows.filter((item) => item.alertType === "red")
-        .length,
-      fmlMissingItems: fmlReportRows.length,
-      fmlRunningLowItems: fmlRunningLowRows.length,
-      scarletAliasNote:
-        orderShipCode === "SC" &&
-        /\b(V\s*[-]?\s*1|SCL|SCARLET|SC)\b/i.test(orderShipName || "")
-          ? "Scarlet detected from source ship value: " + orderShipName
-          : "",
+      runOutBeforeArrival: parsedRows.filter(
+        (item) => Number(item.estimatedQtyAtArrival || 0) < 0
+      ).length,
     },
   };
 };
 
 export default function GenerateNextOrder({
-  styles = {},
-  userShip = "",
-  onBack = () => {},
+  styles,
+  userShip,
+  onBack,
   logUsageEvent = () => {},
-  yearlyRegionalConsumption = null,
+  yearlyRegionalConsumption,
   setYearlyRegionalConsumption = () => {},
   yearlyRegionalFileName = "",
   setYearlyRegionalFileName = () => {},
   selectedRegionalConsumptionRegion = "",
   setSelectedRegionalConsumptionRegion = () => {},
 }) {
-  const [templateMap, setTemplateMap] = useState({});
-  const [templateStatus, setTemplateStatus] = useState("Loading default ERP template...");
-  const [templateFileName, setTemplateFileName] = useState("Default ERP template");
+  const [orderFileName, setOrderFileName] = useState("");
+  const [orderMeta, setOrderMeta] = useState(null);
+  const [baseRows, setBaseRows] = useState([]);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [sortMode, setSortMode] = useState("excel");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [selectedItem, setSelectedItem] = useState(null);
 
-  const [nextOrderFileName, setNextOrderFileName] = useState("");
-  const [nextOrderSourceRows, setNextOrderSourceRows] = useState([]);
-  const [nextOrderRows, setNextOrderRows] = useState([]);
-  const [nextOrderMeta, setNextOrderMeta] = useState({});
+  const regionalIndex = useMemo(
+    () => buildRegionalIndex(yearlyRegionalConsumption),
+    [yearlyRegionalConsumption]
+  );
 
-  const [fmlMissingRows, setFmlMissingRows] = useState([]);
-  const [fmlLowRows, setFmlLowRows] = useState([]);
-
-  const [nextOrderSearch, setNextOrderSearch] = useState("");
-  const [nextOrderFilter, setNextOrderFilter] = useState("all");
-  const [nextOrderView, setNextOrderView] = useState("order");
-
-  const [fmlMissingSearch, setFmlMissingSearch] = useState("");
-  const [fmlLowSearch, setFmlLowSearch] = useState("");
-
-  const [nextOrderLoading, setNextOrderLoading] = useState(false);
-  const [nextOrderMessage, setNextOrderMessage] = useState("");
-  const [yearlyRegionalMessage, setYearlyRegionalMessage] = useState("");
-  const [selectedOrderItem, setSelectedOrderItem] = useState(null);
-
-  const activeRows = useMemo(
+  const rowsWithRegional = useMemo(
     () =>
-      nextOrderRows.length
-        ? nextOrderRows
-        : sortNextOrderRows(nextOrderSourceRows),
-    [nextOrderRows, nextOrderSourceRows]
+      baseRows.map((item) =>
+        enrichOrderRowWithRegionalComparison({
+          item,
+          regionalIndex,
+          selectedRegion: selectedRegionalConsumptionRegion,
+        })
+      ),
+    [baseRows, regionalIndex, selectedRegionalConsumptionRegion]
   );
 
-  const yearlyStatsByItemKey = useMemo(() => {
-    const map = {};
-
-    activeRows.forEach((item) => {
-      map[getOrderItemStableKey(item)] = getYearlyRegionalStatsForItem({
-        item,
-        yearlyRegionalConsumption,
-        selectedRegion: selectedRegionalConsumptionRegion,
-      });
-    });
-
-    return map;
-  }, [activeRows, yearlyRegionalConsumption, selectedRegionalConsumptionRegion]);
-
-  const selectedOrderItemStats = selectedOrderItem
-    ? getYearlyRegionalStatsForItem({
-        item: selectedOrderItem,
-        yearlyRegionalConsumption,
-        selectedRegion: selectedRegionalConsumptionRegion,
-      })
-    : null;
-
-  const filterNextOrderRows = (rows) => {
-    const term = nextOrderSearch.toLowerCase().trim();
-
-    return rows.filter((item) => {
-      const matchesFilter =
-        nextOrderFilter === "all" ||
-        (nextOrderFilter === "needsOrder" &&
-          Number(item.suggestedOrder || 0) > 0) ||
-        (nextOrderFilter === "blue" && item.alertType === "blue") ||
-        (nextOrderFilter === "red" && item.alertType === "red") ||
-        (nextOrderFilter === "noConsumption" &&
-          Number(item.pastConsumption || 0) <= 0) ||
-        (nextOrderFilter === "noStock" && Number(item.stockOnHand || 0) <= 0);
-
-      if (!matchesFilter) return false;
-      if (!term) return true;
-
-      return [
-        item.code,
-        item.product,
-        item.uom,
-        item.alertLabel,
-        item.parLevelNote,
-        item.orderReason,
-        item.excelRow,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(term);
-    });
-  };
-
-  const visibleOrderRows = useMemo(
-    () => filterNextOrderRows(activeRows),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeRows, nextOrderSearch, nextOrderFilter]
+  const filterCounts = useMemo(
+    () => ({
+      all: rowsWithRegional.length,
+      needsOrder: rowsWithRegional.filter(
+        (item) => Number(item.suggestedOrder || 0) > 0
+      ).length,
+      noOrder: rowsWithRegional.filter(
+        (item) => Number(item.suggestedOrder || 0) <= 0
+      ).length,
+      runOut: rowsWithRegional.filter(
+        (item) => Number(item.estimatedQtyAtArrival || 0) < 0
+      ).length,
+      regionalMatched: rowsWithRegional.filter(
+        (item) => Number(item.regionalMatchCount || 0) > 0
+      ).length,
+    }),
+    [rowsWithRegional]
   );
 
-  const visibleFmlMissingRows = useMemo(() => {
-    const term = fmlMissingSearch.toLowerCase().trim();
-    if (!term) return fmlMissingRows;
+  const visibleRows = useMemo(() => {
+    const query = search.toLowerCase().trim();
 
-    return fmlMissingRows.filter((item) =>
-      [
-        item.code,
-        item.product,
-        item.uom,
-        item.department,
-        item.category,
-        item.subCategory,
-        item.venueText,
-        (item.matchedVenues || []).join(" "),
-        (item.templateLocationNames || []).join(" "),
-        item.templateShipScopeNote,
-        item.reason,
-        item.excelRow,
-        item.standardOrderRow,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(term)
-    );
-  }, [fmlMissingRows, fmlMissingSearch]);
+    let rows = rowsWithRegional.filter((item) => {
+      const matchesSearch =
+        !query ||
+        [
+          item.code,
+          item.product,
+          item.uom,
+          item.alertLabel,
+          item.excelRow,
+          item.regionalMatchedProductName,
+          item.regionalMatchedProductCode,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(query);
 
-  const visibleFmlLowRows = useMemo(() => {
-    const term = fmlLowSearch.toLowerCase().trim();
-    if (!term) return fmlLowRows;
+      if (!matchesSearch) return false;
 
-    return fmlLowRows.filter((item) =>
-      [
-        item.code,
-        item.product,
-        item.uom,
-        item.department,
-        item.category,
-        item.subCategory,
-        item.venueText,
-        (item.matchedVenues || []).join(" "),
-        (item.templateLocationNames || []).join(" "),
-        item.templateShipScopeNote,
-        item.reason,
-        item.excelRow,
-        item.standardOrderRow,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(term)
-    );
-  }, [fmlLowRows, fmlLowSearch]);
-
-  const filterCounts = useMemo(() => {
-    const rows = activeRows;
-
-    return {
-      all: rows.length,
-      needsOrder: rows.filter((item) => Number(item.suggestedOrder || 0) > 0)
-        .length,
-      blue: rows.filter((item) => item.alertType === "blue").length,
-      red: rows.filter((item) => item.alertType === "red").length,
-      noConsumption: rows.filter((item) => Number(item.pastConsumption || 0) <= 0)
-        .length,
-      noStock: rows.filter((item) => Number(item.stockOnHand || 0) <= 0).length,
-    };
-  }, [activeRows]);
-
-  const loadDefaultTemplate = async () => {
-    try {
-      setTemplateStatus("Loading default ERP template...");
-
-      const response = await fetch("/template.xlsx", {
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
-        setTemplateMap({});
-        setTemplateStatus("Default ERP template file was not found.");
-        return;
+      if (filter === "needsOrder") {
+        return Number(item.suggestedOrder || 0) > 0;
       }
 
-      const arrayBuffer = await response.arrayBuffer();
-      const workbook = XLSX.read(arrayBuffer, {
-        type: "array",
-        cellDates: true,
-      });
+      if (filter === "noOrder") {
+        return Number(item.suggestedOrder || 0) <= 0;
+      }
 
-      const parsedTemplate = parseTemplateWorkbook(workbook);
+      if (filter === "runOut") {
+        return Number(item.estimatedQtyAtArrival || 0) < 0;
+      }
 
-      setTemplateMap(parsedTemplate);
-      setTemplateFileName("Default ERP Food ordering template");
-      setTemplateStatus(
-        "Default ERP template loaded. " +
-          Object.keys(parsedTemplate).length +
-          " venue sheet(s) prepared."
+      if (filter === "regionalMatched") {
+        return Number(item.regionalMatchCount || 0) > 0;
+      }
+
+      return true;
+    });
+
+    rows = [...rows];
+
+    if (sortMode === "suggested") {
+      rows.sort(
+        (a, b) =>
+          Number(b.suggestedOrder || 0) - Number(a.suggestedOrder || 0) ||
+          String(a.product || "").localeCompare(String(b.product || ""))
       );
-    } catch (error) {
-      setTemplateMap({});
-      setTemplateStatus(
-        error?.message || "Could not load default ERP template."
+    } else if (sortMode === "arrivalStock") {
+      rows.sort(
+        (a, b) =>
+          Number(a.estimatedQtyAtArrival || 0) -
+            Number(b.estimatedQtyAtArrival || 0) ||
+          String(a.product || "").localeCompare(String(b.product || ""))
+      );
+    } else if (sortMode === "product") {
+      rows.sort((a, b) =>
+        String(a.product || "").localeCompare(String(b.product || ""))
+      );
+    } else {
+      rows.sort(
+        (a, b) =>
+          Number(a.excelRow || 0) - Number(b.excelRow || 0) ||
+          String(a.product || "").localeCompare(String(b.product || ""))
       );
     }
-  };
 
-  useEffect(() => {
-    loadDefaultTemplate();
-  }, []);
+    return rows;
+  }, [rowsWithRegional, search, filter, sortMode]);
 
-  const uploadTemplateFile = async (event) => {
+  const uploadOrderFile = async (event) => {
     const file = event.target.files?.[0];
+
     if (!file) return;
 
+    setLoading(true);
+    setMessage("Opening order workbook...");
+    setSelectedItem(null);
+
     try {
-      setTemplateStatus("Loading custom ERP template...");
+      await waitForBrowser(30);
 
       const arrayBuffer = await file.arrayBuffer();
+
+      setMessage("Reading Excel workbook...");
+      await waitForBrowser(30);
+
       const workbook = XLSX.read(arrayBuffer, {
         type: "array",
         cellDates: true,
       });
 
-      const parsedTemplate = parseTemplateWorkbook(workbook);
-
-      setTemplateMap(parsedTemplate);
-      setTemplateFileName(file.name || "Custom ERP template");
-      setTemplateStatus(
-        "Custom ERP template loaded. " +
-          Object.keys(parsedTemplate).length +
-          " venue sheet(s) prepared."
-      );
-
-      logUsageEvent("product_template_file_uploaded", {
-        module: "generate_next_order",
-        fileName: file.name,
-        sheetCount: workbook.SheetNames.length,
-        venueCount: Object.keys(parsedTemplate).length,
-      });
-    } catch (error) {
-      const text = error?.message || "Could not load custom template file.";
-      setTemplateStatus(text);
-      window.alert(text);
-    } finally {
-      event.target.value = "";
-    }
-  };
-
-  const uploadNextOrderFile = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setNextOrderLoading(true);
-    setNextOrderMessage("Reading order file...");
-
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      const workbook = XLSX.read(arrayBuffer, {
-        type: "array",
-        cellDates: true,
-      });
-
-      const parsed = parseNextOrderWorkbook({
+      const parsed = await parseNextOrderWorkbook({
         workbook,
-        templateMap,
-        fallbackShipCode: userShip,
+        fileName: file.name,
+        fallbackShip: userShip,
+        onProgress: setMessage,
       });
 
-      setNextOrderFileName(file.name);
-      setNextOrderSourceRows(parsed.rows);
-      setNextOrderRows([]);
-      setNextOrderMeta(parsed.meta);
-      setFmlMissingRows(parsed.fmlReportRows || []);
-      setFmlLowRows(parsed.fmlRunningLowRows || []);
+      setOrderFileName(file.name);
+      setOrderMeta(parsed.meta);
+      setBaseRows(parsed.rows);
+      setSearch("");
+      setFilter("all");
+      setSortMode("excel");
 
-      setNextOrderSearch("");
-      setFmlMissingSearch("");
-      setFmlLowSearch("");
-      setNextOrderFilter("all");
-      setNextOrderView("order");
-      setSelectedOrderItem(null);
-
-      setNextOrderMessage(
-        "Order file loaded. " +
-          parsed.meta.totalItems +
-          " product row(s) found. Ship detected: " +
-          (parsed.meta.shipDisplayName || parsed.meta.shipCode || "N/A") +
-          ". " +
-          parsed.meta.itemsNeedingOrder +
-          " need order, " +
-          parsed.meta.blueReviewItems +
-          " blue review, " +
-          parsed.meta.redReviewItems +
-          " red review, " +
-          parsed.meta.fmlMissingItems +
-          " FML not ordered/not used, " +
-          parsed.meta.fmlRunningLowItems +
-          " FML running low."
+      setMessage(
+        `Order file loaded. ${parsed.meta.totalItems} item(s). ${parsed.meta.itemsNeedingOrder} need order. ${parsed.meta.runOutBeforeArrival} may run out before arrival.`
       );
 
       logUsageEvent("next_order_file_uploaded", {
         module: "generate_next_order",
+        ship: parsed.meta.orderShipCode || userShip,
         fileName: file.name,
         sheetName: parsed.meta.sheetName,
-        shipName: parsed.meta.shipName,
-        shipCode: parsed.meta.shipCode,
         totalItems: parsed.meta.totalItems,
         itemsNeedingOrder: parsed.meta.itemsNeedingOrder,
-        blueReviewItems: parsed.meta.blueReviewItems,
-        redReviewItems: parsed.meta.redReviewItems,
-        fmlMissingItems: parsed.meta.fmlMissingItems,
-        fmlRunningLowItems: parsed.meta.fmlRunningLowItems,
+        runOutBeforeArrival: parsed.meta.runOutBeforeArrival,
+        orderDate: parsed.meta.orderDate,
+        arrivalDate: parsed.meta.arrivalDate,
+        voyageDays: parsed.meta.voyageDays,
+        daysUntilArrival: parsed.meta.daysUntilArrival,
       });
     } catch (error) {
-      const text = error?.message || "Could not read the order file.";
+      setOrderFileName(file.name);
+      setOrderMeta(null);
+      setBaseRows([]);
 
-      setNextOrderFileName(file.name);
-      setNextOrderSourceRows([]);
-      setNextOrderRows([]);
-      setNextOrderMeta({});
-      setFmlMissingRows([]);
-      setFmlLowRows([]);
-      setSelectedOrderItem(null);
-      setNextOrderMessage(text);
+      const text = error?.message || "Could not read the order file.";
+      setMessage(text);
       window.alert(text);
     } finally {
-      setNextOrderLoading(false);
+      setLoading(false);
       event.target.value = "";
     }
   };
 
-  const generateNextOrderReport = () => {
-    setNextOrderLoading(true);
-    setNextOrderMessage("Generating next order...");
-
-    window.setTimeout(() => {
-      try {
-        if (!nextOrderSourceRows.length) {
-          setNextOrderRows([]);
-          setNextOrderMessage("Upload the latest order file first.");
-          return;
-        }
-
-        const rows = sortNextOrderRows(nextOrderSourceRows);
-
-        setNextOrderRows(
-          rows.map((item, index) => ({
-            ...item,
-            orderRank: index + 1,
-          }))
-        );
-
-        setNextOrderMessage(
-          "Generated " +
-            rows.length +
-            " product line(s). Ship: " +
-            (nextOrderMeta.shipDisplayName ||
-              nextOrderMeta.shipCode ||
-              userShip ||
-              "N/A") +
-            ". Formula uses days until arrival + voyage days + 25% buffer."
-        );
-
-        logUsageEvent("next_order_generated", {
-          module: "generate_next_order",
-          fileName: nextOrderFileName,
-          ship: nextOrderMeta.shipCode || userShip,
-          rowsGenerated: rows.length,
-          itemsNeedingOrder: nextOrderMeta.itemsNeedingOrder || 0,
-          blueReviewItems: nextOrderMeta.blueReviewItems || 0,
-          redReviewItems: nextOrderMeta.redReviewItems || 0,
-        });
-      } catch (error) {
-        setNextOrderRows([]);
-        setNextOrderMessage(error?.message || "Could not generate next order.");
-      } finally {
-        setNextOrderLoading(false);
-      }
-    }, 25);
-  };
-
-  const uploadYearlyRegionalConsumptionFile = async (event) => {
+  const uploadYearlyRegionalFile = async (event) => {
     const file = event.target.files?.[0];
+
     if (!file) return;
 
+    setLoading(true);
+    setMessage("Loading yearly regional consumption file...");
+
     try {
-      setYearlyRegionalMessage("Loading yearly regional consumption file...");
+      await waitForBrowser(30);
 
       const arrayBuffer = await file.arrayBuffer();
-
       const workbook = XLSX.read(arrayBuffer, {
         type: "array",
         cellDates: true,
@@ -1660,345 +835,205 @@ export default function GenerateNextOrder({
       setYearlyRegionalFileName(file.name);
       setSelectedRegionalConsumptionRegion("");
 
-      setYearlyRegionalMessage(
-        "Yearly regional file loaded. " +
-          (parsed.aggregates?.length || 0) +
-          " regional product record(s) found."
+      setMessage(
+        `Yearly regional file loaded. ${parsed.aggregates?.length || 0} product record(s), ${
+          parsed.regionOptions?.length || 0
+        } region(s).`
       );
 
-      logUsageEvent("yearly_regional_consumption_uploaded", {
+      logUsageEvent("yearly_regional_consumption_uploaded_in_next_order", {
         module: "generate_next_order",
+        ship: userShip,
         fileName: file.name,
-        sourceSheet: parsed.sourceSheet,
         regions: parsed.regionOptions || [],
-        aggregates: parsed.aggregates?.length || 0,
+        rows: parsed.rows?.length || 0,
       });
     } catch (error) {
-      setYearlyRegionalConsumption(null);
-      setYearlyRegionalFileName("");
-      setSelectedRegionalConsumptionRegion("");
-
       const text =
         error?.message || "Could not load yearly regional consumption file.";
 
-      setYearlyRegionalMessage(text);
+      setMessage(text);
       window.alert(text);
     } finally {
+      setLoading(false);
       event.target.value = "";
     }
   };
 
-  const exportNextOrderToExcel = () => {
-    const rows = visibleOrderRows;
-
-    if (!rows.length) {
-      window.alert("No next-order lines found.");
+  const exportToExcel = () => {
+    if (!rowsWithRegional.length) {
+      window.alert("Upload the latest order workbook first.");
       return;
     }
 
-    const exportRows = rows.map((item, index) => {
-      const stats = yearlyStatsByItemKey[getOrderItemStableKey(item)];
-
-      return {
-        Line: index + 1,
-        ExcelRow: item.excelRow,
-        ShipCode: nextOrderMeta.shipCode || "",
-        Ship: nextOrderMeta.shipDisplayName || nextOrderMeta.shipName || "",
-        Code: item.code || "",
-        Product: item.product,
-        UM: item.uom,
-        StockOnHand: Number(item.stockOnHand || 0),
-        FutureOrders_F_to_N: Number(item.futureOrders || 0),
-        PastConsumption_AI_to_AN: Number(item.pastConsumption || 0),
-        HistoricalSailorDays_AI5_AI6: Number(item.historicalSailorDays || 0),
-        AverageConsumptionPerDay: Number(item.averageConsumptionPerDay || 0),
-        DaysUntilArrival: Number(item.daysUntilArrival || 0),
-        VoyageDays: Number(item.voyageDays || 0),
-        TotalDaysToCover: Number(item.totalDaysToCover || 0),
-        NeedBeforeBuffer: Number(item.requiredQtyBeforeBuffer || 0),
-        BufferPercent: ORDER_BUFFER_PERCENT,
-        BufferQty: Number(item.bufferQty || 0),
-        NeedWithBuffer: Number(item.requiredQtyWithBuffer || 0),
-        StockPlusFutureOrders: Number(item.availableForFullPeriod || 0),
-        SuggestedNextOrder: Number(item.suggestedOrder || 0),
-        Alert: item.alertLabel || "",
-        AlertType: item.alertType || "",
-        Reason: item.orderReason || "",
-        PreviousYearMatched: stats?.hasData ? "Yes" : "No",
-        PreviousYearMatchBy: stats?.matchedBy || "",
-        PreviousYearProductCode: stats?.matchedProductCode || "",
-        PreviousYearProductName: stats?.matchedProductName || "",
-        PreviousYearTotalQty: Number(stats?.yearTotal?.totalQty || 0),
-        PreviousYearTotalDays: Number(stats?.yearTotal?.totalDays || 0),
-        PreviousYearAverageDailyQty: Number(stats?.yearTotal?.avgDailyQty || 0),
-        Market: stats?.marketLabel || "",
-        MarketTotalQty: Number(stats?.market?.totalQty || 0),
-        MarketTotalDays: Number(stats?.market?.totalDays || 0),
-        MarketAverageDailyQty: Number(stats?.market?.avgDailyQty || 0),
-        MarketShips: (stats?.market?.ships || []).join(", "),
-        MarketRegions: (stats?.market?.regions || []).join(", "),
-      };
-    });
-
-    const ws = XLSX.utils.json_to_sheet(exportRows);
-    const wb = XLSX.utils.book_new();
-
-    XLSX.utils.book_append_sheet(wb, ws, "Next Order");
-
-    XLSX.writeFile(
-      wb,
-      `next-order-${sanitizeFileName(
-        nextOrderMeta.shipDisplayName ||
-          nextOrderMeta.shipName ||
-          nextOrderMeta.shipCode ||
-          userShip ||
-          "ship"
-      )}.xlsx`
-    );
-
-    logUsageEvent("export_excel_clicked", {
-      module: "generate_next_order",
-      reportMode: "next_order",
-      ship: nextOrderMeta.shipCode || userShip,
-      rows: rows.length,
-      search: nextOrderSearch,
-      filter: nextOrderFilter,
-    });
-  };
-
-  const exportFmlMissingReportToExcel = () => {
-    const rows = visibleFmlMissingRows;
-
-    if (!rows.length) {
-      window.alert("No FML not ordered/not used rows found.");
-      return;
-    }
-
-    const exportRows = rows.map((item, index) => ({
+    const exportRows = rowsWithRegional.map((item, index) => ({
       Line: index + 1,
-      FMLRow: item.excelRow,
-      StandardOrderRow: item.standardOrderRow || "Not found",
-      ShipCode: item.currentShipCode || nextOrderMeta.shipCode || "",
+      ExcelRow: item.excelRow,
+      Ship: item.orderShipCode || "",
       Code: item.code || "",
       Product: item.product || "",
-      UM: item.uom || "",
-      Department: item.department || "",
-      Category: item.category || "",
-      SubCategory: item.subCategory || "",
-      MatchedTemplateVenues: (item.matchedVenues || []).join(", "),
-      TemplateLocations: (item.templateLocationNames || []).join(", "),
-      TemplateSheets: (item.templateSheetNames || []).join(", "),
-      TemplateShipScope: item.templateShipScopeNote || "Used by all ships",
-      VenuesFromFMLColumnF: item.venueText || "",
-      StockOnHand: Number(item.stockOnHand || 0),
+      UOM: item.uom || "",
+
+      StockOnHand_D: Number(item.stockOnHand || 0),
       FutureOrders_F_to_N: Number(item.futureOrders || 0),
       PastConsumption_AI_to_AN: Number(item.pastConsumption || 0),
-      FoundInStandardOrderTemplate: item.foundInOrderTemplate ? "Yes" : "No",
-      FoundInTemplateForShip: item.foundInTemplate ? "Yes" : "No",
-      Reason: item.reason || "",
-    }));
+      CurrentPar_Q: Number(item.currentFileParLevel || 0),
 
-    const ws = XLSX.utils.json_to_sheet(exportRows);
-    const wb = XLSX.utils.book_new();
+      AvgPerDayFromOrder: Number(item.averageConsumptionPerDay || 0),
+      DaysUntilArrival: Number(item.arrivalLeadDays || 0),
+      VoyageDays: Number(item.voyageDays || 0),
 
-    XLSX.utils.book_append_sheet(wb, ws, "FML Not Ordered Not Used");
-
-    XLSX.writeFile(
-      wb,
-      `fml-not-ordered-not-used-${sanitizeFileName(
-        nextOrderMeta.shipDisplayName ||
-          nextOrderMeta.shipCode ||
-          userShip ||
-          "ship"
-      )}.xlsx`
-    );
-  };
-
-  const exportFmlLowReportToExcel = () => {
-    const rows = visibleFmlLowRows;
-
-    if (!rows.length) {
-      window.alert("No FML running-low rows found.");
-      return;
-    }
-
-    const exportRows = rows.map((item, index) => ({
-      Line: index + 1,
-      FMLRow: item.excelRow,
-      StandardOrderRow: item.standardOrderRow || "Not found",
-      ShipCode: item.currentShipCode || nextOrderMeta.shipCode || "",
-      Code: item.code || "",
-      Product: item.product || "",
-      UM: item.uom || "",
-      Department: item.department || "",
-      Category: item.category || "",
-      SubCategory: item.subCategory || "",
-      MatchedTemplateVenues: (item.matchedVenues || []).join(", "),
-      TemplateLocations: (item.templateLocationNames || []).join(", "),
-      TemplateSheets: (item.templateSheetNames || []).join(", "),
-      TemplateShipScope: item.templateShipScopeNote || "Used by all ships",
-      VenuesFromFMLColumnF: item.venueText || "",
-      StockOnHand: Number(item.stockOnHand || 0),
-      FutureOrders_F_to_N: Number(item.futureOrders || 0),
-      PastConsumption_AI_to_AN: Number(item.pastConsumption || 0),
-      AverageConsumptionPerDay: Number(item.averageConsumptionPerDay || 0),
       ConsumptionUntilArrival: Number(item.consumptionUntilArrival || 0),
-      AvailableAtArrival: Number(item.availableAtArrival || 0),
-      DaysCoverAtArrival: Number(item.daysOfCoverAtArrival || 0),
-      SuggestedOrder: Number(item.suggestedOrder || 0),
-      Reason: item.reason || "",
+      EstimatedQtyAtArrival: Number(item.estimatedQtyAtArrival || 0),
+      UsableQtyAtArrivalForOrder: Number(item.usableQtyAtArrival || 0),
+
+      VoyageNeedBeforeBuffer: Number(item.voyageNeedBeforeBuffer || 0),
+      BufferPercent: Number(item.orderBufferPercent || 0),
+      BufferQty: Number(item.orderBufferQty || 0),
+      TargetQtyForVoyage: Number(item.targetQtyForVoyage || 0),
+
+      SuggestedNextOrder: Number(item.suggestedOrder || 0),
+
+      SuggestedParFromCurrentUsage: Number(
+        item.suggestedParFromCurrentUsage || 0
+      ),
+      SuggestedParFromLastYearTotal: Number(
+        item.suggestedParFromYearTotal || 0
+      ),
+      SuggestedParFromSelectedMarket: Number(
+        item.suggestedParFromMarket || 0
+      ),
+      SuggestedParFromThisShipLastYear: Number(
+        item.suggestedParFromShip || 0
+      ),
+
+      YearAvgDaily: Number(item.yearAvgDailyQty || 0),
+      MarketAvgDaily: Number(item.marketAvgDailyQty || 0),
+      ThisShipLastYearAvgDaily: Number(item.shipYearAvgDailyQty || 0),
+
+      RegionalMatchedProductCode: item.regionalMatchedProductCode || "",
+      RegionalMatchedProductName: item.regionalMatchedProductName || "",
+      RegionalMatchRows: Number(item.regionalMatchCount || 0),
+
+      Alert: item.alertLabel || "",
+      Reason: item.alertDescription || "",
     }));
 
-    const ws = XLSX.utils.json_to_sheet(exportRows);
-    const wb = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(exportRows);
+    const workbook = XLSX.utils.book_new();
 
-    XLSX.utils.book_append_sheet(wb, ws, "FML Running Low");
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Next Order");
 
     XLSX.writeFile(
-      wb,
-      `fml-running-low-${sanitizeFileName(
-        nextOrderMeta.shipDisplayName ||
-          nextOrderMeta.shipCode ||
-          userShip ||
-          "ship"
-      )}.xlsx`
+      workbook,
+      `next-order-${orderMeta?.orderShipCode || userShip || "ship"}.xlsx`
     );
+
+    logUsageEvent("next_order_exported", {
+      module: "generate_next_order",
+      ship: orderMeta?.orderShipCode || userShip,
+      rows: exportRows.length,
+    });
   };
 
-  const printRowsHtml = ({ title, rows, type }) => {
-    const shipLabel =
-      nextOrderMeta.shipDisplayName ||
-      nextOrderMeta.shipName ||
-      nextOrderMeta.shipCode ||
-      userShip ||
-      "N/A";
-
-    const tableRows =
-      type === "order"
-        ? rows
-            .map(
-              (item, index) => `
-                <tr>
-                  <td>${index + 1}</td>
-                  <td>${escapeHtml(item.excelRow || "")}</td>
-                  <td>${escapeHtml(item.code || "")}</td>
-                  <td>${escapeHtml(item.product || "")}</td>
-                  <td>${escapeHtml(item.uom || "")}</td>
-                  <td>${formatQty(item.stockOnHand)}</td>
-                  <td>${formatQty(item.futureOrders)}</td>
-                  <td>${formatQty(item.pastConsumption)}</td>
-                  <td>${formatQty(item.totalDaysToCover)}</td>
-                  <td>${formatQty(item.requiredQtyBeforeBuffer)}</td>
-                  <td>${formatQty(item.bufferQty)}</td>
-                  <td class="qty">${formatQty(item.suggestedOrder)}</td>
-                  <td class="${
-                    item.alertType === "red"
-                      ? "red"
-                      : item.alertType === "blue" || item.alertType === "order"
-                      ? "blue"
-                      : ""
-                  }">${escapeHtml(item.alertLabel || "")}</td>
-                </tr>
-              `
-            )
-            .join("")
-        : rows
-            .map(
-              (item, index) => `
-                <tr>
-                  <td>${index + 1}</td>
-                  <td>${escapeHtml(item.excelRow || "")}</td>
-                  <td>${escapeHtml(item.code || "")}</td>
-                  <td>${escapeHtml(item.product || "")}</td>
-                  <td>${escapeHtml(item.uom || "")}</td>
-                  <td class="blue">${escapeHtml(
-                    (item.matchedVenues || []).join(", ") ||
-                      item.venueText ||
-                      ""
-                  )}</td>
-                  <td>${escapeHtml(
-                    item.templateShipScopeNote || "Used by all ships"
-                  )}</td>
-                  <td>${formatQty(item.stockOnHand)}</td>
-                  <td>${formatQty(item.futureOrders)}</td>
-                  <td>${formatQty(item.pastConsumption)}</td>
-                  <td class="warn">${escapeHtml(item.reason || "")}</td>
-                </tr>
-              `
-            )
-            .join("");
-
-    const headers =
-      type === "order"
-        ? `
-          <tr>
-            <th>#</th>
-            <th>Excel Row</th>
-            <th>Code</th>
-            <th>Product</th>
-            <th>UM</th>
-            <th>Stock</th>
-            <th>Future</th>
-            <th>Past Consumption</th>
-            <th>Days Cover</th>
-            <th>Need Before Buffer</th>
-            <th>25% Buffer</th>
-            <th>Suggested</th>
-            <th>Alert</th>
-          </tr>
-        `
-        : `
-          <tr>
-            <th>#</th>
-            <th>FML Row</th>
-            <th>Code</th>
-            <th>Product</th>
-            <th>UM</th>
-            <th>Matched Venue(s)</th>
-            <th>Template Scope</th>
-            <th>Stock</th>
-            <th>Future Orders</th>
-            <th>Past Consumption</th>
-            <th>Reason</th>
-          </tr>
-        `;
+  const printReport = () => {
+    if (!visibleRows.length) {
+      window.alert("No rows to print.");
+      return;
+    }
 
     const html = `
       <html>
         <head>
-          <title>${escapeHtml(title)}</title>
+          <title>Generated Next Order</title>
           <style>
-            body { font-family: Arial, sans-serif; padding: 24px; }
+            body { font-family: Arial, sans-serif; padding: 24px; color: #111; }
             h1 { margin-bottom: 4px; }
-            .meta { margin: 2px 0; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+            .meta { margin: 3px 0; color: #555; font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; margin-top: 18px; font-size: 11px; }
             th, td { border: 1px solid #ccc; padding: 6px; text-align: left; vertical-align: top; }
             th { background: #f2f2f2; }
             .qty { color: #0057b8; font-weight: bold; }
-            .blue { color: #0057b8; font-weight: bold; }
-            .red { color: #b00020; font-weight: bold; }
-            .warn { color: #8a5a00; font-weight: bold; }
+            .bad { color: #b00020; font-weight: bold; }
+            .warning { margin-top: 14px; padding: 10px; background: #fff4d6; border-radius: 8px; color: #8a5a00; font-weight: bold; }
           </style>
         </head>
 
         <body>
-          <h1>${escapeHtml(title)}</h1>
-          <div class="meta"><strong>Source file:</strong> ${escapeHtml(
-            nextOrderFileName || "N/A"
+          <h1>Generated Next Order</h1>
+
+          <div class="meta">File: ${escapeHtml(orderFileName || "N/A")}</div>
+          <div class="meta">Ship: ${escapeHtml(
+            getShipDisplayName(orderMeta?.orderShipCode) ||
+              orderMeta?.orderShipCode ||
+              userShip ||
+              "N/A"
           )}</div>
-          <div class="meta"><strong>Ship:</strong> ${escapeHtml(shipLabel)}</div>
-          <div class="meta"><strong>Ship code:</strong> ${escapeHtml(
-            nextOrderMeta.shipCode || "N/A"
+          <div class="meta">Order date: ${escapeHtml(
+            orderMeta?.orderDate || "N/A"
           )}</div>
-          <div class="meta"><strong>Rows:</strong> ${rows.length}</div>
-          <div class="meta"><strong>Formula:</strong> Past avg/day × (days until arrival + voyage days) + 25% buffer - stock - future orders.</div>
-          <div class="meta"><strong>Generated:</strong> ${escapeHtml(
-            new Date().toLocaleString()
+          <div class="meta">Arrival date: ${escapeHtml(
+            orderMeta?.arrivalDate || "N/A"
           )}</div>
+          <div class="meta">Days until arrival: ${formatQty(
+            orderMeta?.daysUntilArrival
+          )}</div>
+          <div class="meta">Voyage days: ${formatQty(
+            orderMeta?.voyageDays
+          )}</div>
+          <div class="meta">Buffer: ${ORDER_BUFFER_PERCENT}% of voyage need only</div>
+
+          <div class="warning">
+            Calculation: stock on hand + future orders - consumption until arrival = estimated stock on arrival.
+            Suggested order = voyage need + 25% buffer - estimated usable stock on arrival.
+          </div>
 
           <table>
-            <thead>${headers}</thead>
-            <tbody>${tableRows}</tbody>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Code</th>
+                <th>Product</th>
+                <th>UOM</th>
+                <th>Avg/day</th>
+                <th>Arrival stock</th>
+                <th>Voyage need</th>
+                <th>25% buffer</th>
+                <th>Target</th>
+                <th>Suggested order</th>
+                <th>Year avg/day</th>
+                <th>Market avg/day</th>
+                <th>Alert</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              ${visibleRows
+                .map(
+                  (item, index) => `
+                    <tr>
+                      <td>${index + 1}</td>
+                      <td>${escapeHtml(item.code || "")}</td>
+                      <td>${escapeHtml(item.product || "")}</td>
+                      <td>${escapeHtml(item.uom || "")}</td>
+                      <td>${formatQty(item.averageConsumptionPerDay)}</td>
+                      <td class="${
+                        Number(item.estimatedQtyAtArrival || 0) < 0
+                          ? "bad"
+                          : ""
+                      }">${formatQty(item.estimatedQtyAtArrival)}</td>
+                      <td>${formatQty(item.voyageNeedBeforeBuffer)}</td>
+                      <td>${formatQty(item.orderBufferQty)}</td>
+                      <td>${formatQty(item.targetQtyForVoyage)}</td>
+                      <td class="qty">${formatQty(item.suggestedOrder)}</td>
+                      <td>${formatQty(item.yearAvgDailyQty)}</td>
+                      <td>${formatQty(item.marketAvgDailyQty)}</td>
+                      <td>${escapeHtml(item.alertLabel || "")}</td>
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
           </table>
         </body>
       </html>
@@ -2007,7 +1042,7 @@ export default function GenerateNextOrder({
     const printWindow = window.open("", "_blank");
 
     if (!printWindow) {
-      window.alert("The print window was blocked. Allow popups and try again.");
+      window.alert("Print window was blocked. Allow popups and try again.");
       return;
     }
 
@@ -2016,59 +1051,13 @@ export default function GenerateNextOrder({
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
-  };
 
-  const printNextOrder = () => {
-    if (!visibleOrderRows.length) {
-      window.alert("No next-order lines found.");
-      return;
-    }
-
-    printRowsHtml({
-      title: "Generated Next Order",
-      rows: visibleOrderRows,
-      type: "order",
+    logUsageEvent("next_order_printed", {
+      module: "generate_next_order",
+      ship: orderMeta?.orderShipCode || userShip,
+      rows: visibleRows.length,
     });
   };
-
-  const printFmlMissingReport = () => {
-    if (!visibleFmlMissingRows.length) {
-      window.alert("No FML not ordered/not used rows found.");
-      return;
-    }
-
-    printRowsHtml({
-      title: "FML Products Not Ordered / Not Used",
-      rows: visibleFmlMissingRows,
-      type: "fml",
-    });
-  };
-
-  const printFmlLowReport = () => {
-    if (!visibleFmlLowRows.length) {
-      window.alert("No FML running-low rows found.");
-      return;
-    }
-
-    printRowsHtml({
-      title: "FML Products Running Low By Arrival",
-      rows: visibleFmlLowRows,
-      type: "fml",
-    });
-  };
-
-  const orderShipLabel =
-    nextOrderMeta.shipDisplayName ||
-    nextOrderMeta.shipName ||
-    nextOrderMeta.shipCode ||
-    userShip ||
-    "N/A";
-
-  const activeRegionalRegionLabel = !selectedRegionalConsumptionRegion
-    ? "All markets"
-    : selectedRegionalConsumptionRegion === YEARLY_REGION_ALL
-    ? "All markets"
-    : selectedRegionalConsumptionRegion;
 
   return (
     <main style={styles.page}>
@@ -2085,153 +1074,115 @@ export default function GenerateNextOrder({
           </button>
 
           <div style={styles.shipBadge}>
-            🛒 Generate Next Order {userShip ? `• ${getShipDisplayName(userShip)}` : ""}
+            🛒 Generate Next Order{" "}
+            {orderMeta?.orderShipCode
+              ? `• ${getShipDisplayName(orderMeta.orderShipCode)}`
+              : userShip
+              ? `• ${getShipDisplayName(userShip)}`
+              : ""}
           </div>
         </div>
       </header>
 
       <section style={styles.grid}>
         <div style={styles.card}>
-          <h2 style={styles.cardTitle}>📤 Upload Order File</h2>
+          <h2 style={styles.cardTitle}>📤 Upload Latest Order Workbook</h2>
 
-          <label style={styles.label}>Latest order workbook</label>
+          <label style={styles.label}>Latest order file</label>
           <input
             type="file"
             accept=".xlsx,.xls,.xlsm"
-            onChange={uploadNextOrderFile}
+            onChange={uploadOrderFile}
             style={styles.fileInput}
-            disabled={nextOrderLoading}
+            disabled={loading}
           />
-
-          <button
-            type="button"
-            style={styles.primaryButton}
-            onClick={generateNextOrderReport}
-            disabled={nextOrderLoading || !nextOrderSourceRows.length}
-          >
-            {nextOrderLoading ? "Generating..." : "🛒 Generate Next Order"}
-          </button>
-
-          {nextOrderMessage && <p style={styles.message}>{nextOrderMessage}</p>}
 
           <div style={styles.infoBox}>
             <div>
-              📄 Order file: <strong>{nextOrderFileName || "Not uploaded"}</strong>
+              📄 Order file: <strong>{orderFileName || "Not uploaded"}</strong>
             </div>
 
             <div>
-              🚢 Detected ship: <strong>{orderShipLabel}</strong>
+              📋 Sheet: <strong>{orderMeta?.sheetName || "N/A"}</strong>
             </div>
 
             <div>
-              🔑 Ship code used by app:{" "}
-              <strong>{nextOrderMeta.shipCode || "N/A"}</strong>
-            </div>
-
-            {nextOrderMeta.scarletAliasNote && (
-              <div style={{ color: "#0057b8", fontWeight: "bold" }}>
-                ✅ {nextOrderMeta.scarletAliasNote}
-              </div>
-            )}
-
-            <div>
-              📅 Order date B2:{" "}
-              <strong>{nextOrderMeta.orderDate || "N/A"}</strong>
+              🚢 Ship detected:{" "}
+              <strong>
+                {orderMeta?.orderShipCode
+                  ? `${getShipDisplayName(orderMeta.orderShipCode)} (${orderMeta.orderShipCode})`
+                  : "N/A"}
+              </strong>
             </div>
 
             <div>
-              📅 Arrival date B3:{" "}
-              <strong>{nextOrderMeta.arrivalDate || "N/A"}</strong>
+              📅 Order date: <strong>{orderMeta?.orderDate || "N/A"}</strong>
             </div>
 
             <div>
-              👥 Sailors B5:{" "}
-              <strong>{formatQty(nextOrderMeta.targetSailors)}</strong>
-            </div>
-
-            <div>
-              📆 Voyage days B6:{" "}
-              <strong>{formatQty(nextOrderMeta.targetDays)}</strong>
+              📅 Arrival date:{" "}
+              <strong>{orderMeta?.arrivalDate || "N/A"}</strong>
             </div>
 
             <div>
               ⏳ Days until arrival:{" "}
-              <strong>{formatQty(nextOrderMeta.daysUntilArrival)}</strong>
+              <strong>{formatQty(orderMeta?.daysUntilArrival)}</strong>
             </div>
 
             <div>
-              📆 Total days to cover:{" "}
-              <strong>{formatQty(nextOrderMeta.totalDaysToCover)}</strong>
+              🚢 Voyage days:{" "}
+              <strong>{formatQty(orderMeta?.voyageDays)}</strong>
             </div>
 
             <div>
-              ➕ Order buffer: <strong>{ORDER_BUFFER_PERCENT}%</strong>
-            </div>
-
-            <div>
-              📋 Product rows:{" "}
-              <strong>{nextOrderMeta.totalItems || activeRows.length}</strong>
+              🛡️ Buffer: <strong>{ORDER_BUFFER_PERCENT}% of voyage need only</strong>
             </div>
           </div>
+
+          {message && <p style={styles.message}>{message}</p>}
         </div>
 
         <div style={styles.card}>
-          <h2 style={styles.cardTitle}>📋 ERP Template</h2>
+          <h2 style={styles.cardTitle}>🌎 Last Year / Market Comparison</h2>
 
           <div style={styles.infoBox}>
             <div>
-              📄 Template: <strong>{templateFileName || "N/A"}</strong>
+              📄 Yearly regional file:{" "}
+              <strong>{yearlyRegionalFileName || "Not loaded"}</strong>
             </div>
 
-            <div>{templateStatus}</div>
+            <div>
+              📊 Regional rows:{" "}
+              <strong>{yearlyRegionalConsumption?.rows?.length || 0}</strong>
+            </div>
 
             <div>
-              ✅ Scarlet aliases supported:{" "}
-              <strong>SC, SCL, V1, V 1, V-1, Scarlet</strong>
+              ✅ Matched with order:{" "}
+              <strong>
+                {filterCounts.regionalMatched} / {filterCounts.all}
+              </strong>
             </div>
           </div>
 
-          <label style={styles.label}>Optional: replace template file</label>
+          <label style={styles.label}>Upload / replace yearly regional file</label>
           <input
             type="file"
             accept=".xlsx,.xls,.xlsm"
-            onChange={uploadTemplateFile}
+            onChange={uploadYearlyRegionalFile}
             style={styles.fileInput}
+            disabled={loading}
           />
 
-          <button
-            type="button"
-            style={styles.backButton}
-            onClick={loadDefaultTemplate}
-          >
-            🔄 Reload Default Template
-          </button>
-        </div>
-
-        <div style={styles.card}>
-          <h2 style={styles.cardTitle}>🌎 Previous Year / Market Comparison</h2>
-
-          <label style={styles.label}>
-            Yearly regional consumption file May 2025 - April 2026
-          </label>
-
-          <input
-            type="file"
-            accept=".xlsx,.xls,.xlsm"
-            onChange={uploadYearlyRegionalConsumptionFile}
-            style={styles.fileInput}
-          />
-
-          <label style={styles.label}>Market / region</label>
+          <label style={styles.label}>Region / market</label>
           <select
             value={selectedRegionalConsumptionRegion}
             onChange={(event) =>
               setSelectedRegionalConsumptionRegion(event.target.value)
             }
-            style={styles.searchInput}
+            style={styles.select}
           >
-            <option value="">All markets</option>
-            <option value={YEARLY_REGION_ALL}>All markets</option>
+            <option value="">Choose region / market</option>
+            <option value={YEARLY_REGION_ALL}>All regions</option>
 
             {(yearlyRegionalConsumption?.regionOptions || []).map((region) => (
               <option key={region} value={region}>
@@ -2240,696 +1191,491 @@ export default function GenerateNextOrder({
             ))}
           </select>
 
-          <div style={styles.infoBox}>
-            <div>
-              📄 Yearly file:{" "}
-              <strong>{yearlyRegionalFileName || "Not loaded"}</strong>
-            </div>
+          <p style={styles.emptyText}>
+            The order calculation uses current order average consumption. Last
+            year and market data are shown for par comparison only.
+          </p>
+        </div>
 
-            <div>
-              🧭 Market shown: <strong>{activeRegionalRegionLabel}</strong>
-            </div>
+        <div style={styles.card}>
+          <h2 style={styles.cardTitle}>🔎 Search / Filter</h2>
 
-            <div>
-              📊 This comparison does not change the order. It only shows previous
-              year average consumption beside the new suggested order.
-            </div>
+          <input
+            placeholder="Search code, product, UOM, alert..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            style={styles.searchInput}
+          />
 
-            {yearlyRegionalMessage && <div>{yearlyRegionalMessage}</div>}
+          <label style={styles.label}>Filter</label>
+          <select
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+            style={styles.select}
+          >
+            <option value="all">All ({filterCounts.all})</option>
+            <option value="needsOrder">
+              Needs order ({filterCounts.needsOrder})
+            </option>
+            <option value="noOrder">No order ({filterCounts.noOrder})</option>
+            <option value="runOut">
+              May run out before arrival ({filterCounts.runOut})
+            </option>
+            <option value="regionalMatched">
+              Has last-year match ({filterCounts.regionalMatched})
+            </option>
+          </select>
+
+          <label style={styles.label}>Sort</label>
+          <select
+            value={sortMode}
+            onChange={(event) => setSortMode(event.target.value)}
+            style={styles.select}
+          >
+            <option value="excel">Excel row order</option>
+            <option value="suggested">Highest suggested order</option>
+            <option value="arrivalStock">Lowest arrival stock</option>
+            <option value="product">Product A-Z</option>
+          </select>
+
+          <div style={styles.headerActions}>
+            <button
+              type="button"
+              style={styles.backButton}
+              onClick={printReport}
+              disabled={!visibleRows.length || loading}
+            >
+              🖨️ Print
+            </button>
+
+            <button
+              type="button"
+              style={styles.primaryButton}
+              onClick={exportToExcel}
+              disabled={!rowsWithRegional.length || loading}
+            >
+              📥 Export Excel
+            </button>
           </div>
         </div>
       </section>
 
       <section style={styles.card}>
         <div
-          style={sx(styles.header, {
+          style={{
+            ...styles.header,
             boxShadow: "none",
             padding: 0,
             marginBottom: 16,
-          })}
+          }}
         >
           <div>
-            <h2 style={styles.productTitle}>🧭 Report View</h2>
-            <p style={sx(styles.emptyText, { margin: 0 })}>
-              Formula: past consumption average × days until arrival + voyage
-              days, plus 25% buffer, minus stock and future orders.
+            <h2 style={styles.productTitle}>🛒 Suggested Next Order</h2>
+
+            <p style={{ ...styles.emptyText, margin: 0 }}>
+              Formula: estimated arrival stock first, then voyage need + 25%
+              buffer.
             </p>
           </div>
 
-          <div style={styles.headerActions}>
-            <button
-              type="button"
-              style={sx(
-                styles.viewModeButton,
-                nextOrderView === "order" ? styles.viewModeButtonActive : {}
-              )}
-              onClick={() => setNextOrderView("order")}
-            >
-              🛒 Next Order ({activeRows.length})
-            </button>
-
-            <button
-              type="button"
-              style={sx(
-                styles.viewModeButton,
-                nextOrderView === "fmlMissing" ? styles.viewModeButtonActive : {}
-              )}
-              onClick={() => setNextOrderView("fmlMissing")}
-            >
-              🔵 FML Not Ordered ({fmlMissingRows.length})
-            </button>
-
-            <button
-              type="button"
-              style={sx(
-                styles.viewModeButton,
-                nextOrderView === "fmlLow" ? styles.viewModeButtonActive : {}
-              )}
-              onClick={() => setNextOrderView("fmlLow")}
-            >
-              ⚠️ FML Running Low ({fmlLowRows.length})
-            </button>
-          </div>
+          <div style={styles.shipBadge}>{visibleRows.length} item(s)</div>
         </div>
 
-        {nextOrderView === "order" && (
-          <>
-            <div style={styles.infoBox}>
-              <div>
-                🚢 Ship:{" "}
-                <strong>
-                  {orderShipLabel} / {nextOrderMeta.shipCode || "N/A"}
-                </strong>
-              </div>
+        {!rowsWithRegional.length && (
+          <p style={styles.emptyText}>
+            Upload the latest order workbook to generate suggested order lines.
+          </p>
+        )}
 
-              <div>
-                📦 Showing: <strong>{visibleOrderRows.length}</strong> /{" "}
-                {activeRows.length}
-              </div>
+        {rowsWithRegional.length > 0 && visibleRows.length === 0 && (
+          <p style={styles.emptyText}>No items match the current filter.</p>
+        )}
 
-              <div>
-                🛒 Need order: <strong>{filterCounts.needsOrder}</strong>
-              </div>
+        <div style={styles.nextOrderGrid || localStyles.nextOrderGrid}>
+          {visibleRows.map((item, index) => {
+            const cardStyle = {
+              ...(styles.nextOrderCard || localStyles.nextOrderCard),
+              ...(item.alertType === "red"
+                ? styles.nextOrderCardRed || localStyles.nextOrderCardRed
+                : {}),
+              ...(item.alertType === "blue" || item.alertType === "order"
+                ? styles.nextOrderCardBlue || localStyles.nextOrderCardBlue
+                : {}),
+            };
 
-              <div>
-                🔵 Blue review: <strong>{filterCounts.blue}</strong>
-              </div>
-
-              <div>
-                🔴 Red review: <strong>{filterCounts.red}</strong>
-              </div>
-            </div>
-
-            <div style={styles.viewModeBox}>
-              {[
-                ["all", "📋 All", filterCounts.all],
-                ["needsOrder", "🛒 Needs Order", filterCounts.needsOrder],
-                ["blue", "🔵 Blue Review", filterCounts.blue],
-                ["red", "🔴 Red Review", filterCounts.red],
-                ["noConsumption", "0️⃣ No Consumption", filterCounts.noConsumption],
-                ["noStock", "📦 No Stock", filterCounts.noStock],
-              ].map(([filterKey, label, count]) => (
-                <button
-                  key={filterKey}
-                  type="button"
-                  style={sx(
-                    styles.viewModeButton,
-                    nextOrderFilter === filterKey ? styles.viewModeButtonActive : {}
-                  )}
-                  onClick={() => setNextOrderFilter(filterKey)}
-                >
-                  {label} ({count})
-                </button>
-              ))}
-            </div>
-
-            <input
-              placeholder="Search code, product, U/M, alert or row..."
-              value={nextOrderSearch}
-              onChange={(event) => setNextOrderSearch(event.target.value)}
-              style={styles.searchInput}
-            />
-
-            <div style={styles.headerActions}>
-              <button
-                type="button"
-                style={styles.backButton}
-                onClick={printNextOrder}
-                disabled={!visibleOrderRows.length}
+            return (
+              <article
+                key={`${item.excelRow}-${item.code}-${index}`}
+                style={cardStyle}
               >
-                🖨️ Print
-              </button>
+                <div style={styles.nextOrderTopLine || localStyles.topLine}>
+                  <span>Row {item.excelRow}</span>
+                  <span>{item.uom || "UOM"}</span>
+                </div>
 
-              <button
-                type="button"
-                style={styles.primaryButton}
-                onClick={exportNextOrderToExcel}
-                disabled={!visibleOrderRows.length}
-              >
-                📥 Export Excel
-              </button>
-            </div>
+                <div style={styles.nextOrderName || localStyles.orderName}>
+                  {item.product}
+                </div>
 
-            {!activeRows.length && (
-              <p style={styles.emptyText}>
-                Upload the latest order workbook, then generate the next order.
-              </p>
-            )}
+                <div style={styles.nextOrderMeta || localStyles.meta}>
+                  Code: {item.code || "N/A"}
+                </div>
 
-            {activeRows.length > 0 && !visibleOrderRows.length && (
-              <p style={styles.emptyText}>
-                No products match the current filter/search.
-              </p>
-            )}
+                <div style={localStyles.compactCalcBox}>
+                  <div>
+                    Stock on hand D: <strong>{formatQty(item.stockOnHand)}</strong>
+                  </div>
 
-            <div style={styles.equipmentGrid}>
-              {visibleOrderRows.map((item, index) => {
-                const stats = yearlyStatsByItemKey[getOrderItemStableKey(item)];
+                  <div>
+                    Future orders F:N:{" "}
+                    <strong>{formatQty(item.futureOrders)}</strong>
+                  </div>
 
-                return (
-                  <div
-                    key={`${item.excelRow}-${item.code}-${index}`}
-                    style={sx(
-                      styles.equipmentCard,
-                      item.alertType === "red" ? styles.orderWarningCard : {},
-                      item.alertType === "blue" ||
-                        Number(item.suggestedOrder || 0) > 0
-                        ? styles.orderNeededCard
-                        : {}
-                    )}
-                  >
-                    <div style={styles.recipeMeta}>Excel row: {item.excelRow}</div>
+                  <div>
+                    Past consumption AI:AN:{" "}
+                    <strong>{formatQty(item.pastConsumption)}</strong>
+                  </div>
 
-                    <div style={styles.recipeName}>{item.product}</div>
+                  <div>
+                    Avg / day from order:{" "}
+                    <strong>{formatQty(item.averageConsumptionPerDay)}</strong>
+                  </div>
 
-                    <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                    <div style={styles.recipeMeta}>UM: {item.uom || "N/A"}</div>
-
-                    <div style={styles.recipeMeta}>
-                      Stock on hand: {formatQty(item.stockOnHand)}
-                    </div>
-
-                    <div style={styles.recipeMeta}>
-                      Future orders F:N: {formatQty(item.futureOrders)}
-                    </div>
-
-                    <div style={styles.recipeMeta}>
-                      Past consumption AI:AN: {formatQty(item.pastConsumption)}
-                    </div>
-
-                    <div style={styles.recipeMeta}>
-                      Avg / day from order: {formatQty(item.averageConsumptionPerDay)}
-                    </div>
-
-                    <div style={styles.recipeMeta}>
-                      Days cover: {formatQty(item.totalDaysToCover)} ={" "}
-                      {formatQty(item.daysUntilArrival)} until arrival +{" "}
+                  <div>
+                    Days cover:{" "}
+                    <strong>
+                      {formatQty(item.totalProjectionDays)} ={" "}
+                      {formatQty(item.arrivalLeadDays)} until arrival +{" "}
                       {formatQty(item.voyageDays)} voyage
-                    </div>
+                    </strong>
+                  </div>
 
-                    <div style={styles.recipeMeta}>
-                      Need before buffer: {formatQty(item.requiredQtyBeforeBuffer)}
-                    </div>
+                  <div>
+                    Use before arrival:{" "}
+                    <strong>{formatQty(item.consumptionUntilArrival)}</strong>
+                  </div>
 
-                    <div style={styles.recipeMeta}>
-                      25% buffer: {formatQty(item.bufferQty)}
-                    </div>
-
-                    {stats?.hasData ? (
-                      <div style={styles.statusNeutral}>
-                        Year avg/day:{" "}
-                        {formatRegionalQty(stats.yearTotal.avgDailyQty)} •{" "}
-                        Market avg/day:{" "}
-                        {formatRegionalQty(stats.market.avgDailyQty)}
-                      </div>
-                    ) : (
-                      <div style={styles.statusNeutral}>
-                        No previous-year market match
-                      </div>
-                    )}
-
-                    <div
-                      style={
-                        Number(item.suggestedOrder || 0) > 0
-                          ? styles.suggestedOrderBad
-                          : styles.suggestedOrderGood
-                      }
+                  <div>
+                    Est. stock on arrival:{" "}
+                    <strong
+                      style={{
+                        color:
+                          Number(item.estimatedQtyAtArrival || 0) < 0
+                            ? "#b00020"
+                            : "#2e7d32",
+                      }}
                     >
-                      Suggested next order: {formatQty(item.suggestedOrder)}
-                    </div>
-
-                    {item.alertLabel && (
-                      <div
-                        style={
-                          item.alertType === "red"
-                            ? styles.statusBad
-                            : item.alertType === "blue" ||
-                              item.alertType === "order"
-                            ? styles.statusWarning
-                            : styles.statusNeutral
-                        }
-                      >
-                        {item.alertLabel}
-                      </div>
-                    )}
-
-                    <button
-                      type="button"
-                      style={styles.backButton}
-                      onClick={() => setSelectedOrderItem(item)}
-                    >
-                      🔎 Details / Yearly Comparison
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-
-        {nextOrderView === "fmlMissing" && (
-          <>
-            <div style={styles.infoBox}>
-              <div>
-                🔵 FML not ordered/not used rows:{" "}
-                <strong>{visibleFmlMissingRows.length}</strong> /{" "}
-                {fmlMissingRows.length}
-              </div>
-
-              <div>
-                🚢 Ship matched as:{" "}
-                <strong>{nextOrderMeta.shipCode || userShip || "N/A"}</strong>
-              </div>
-            </div>
-
-            <input
-              placeholder="Search FML product, code, venue, template..."
-              value={fmlMissingSearch}
-              onChange={(event) => setFmlMissingSearch(event.target.value)}
-              style={styles.searchInput}
-            />
-
-            <div style={styles.headerActions}>
-              <button
-                type="button"
-                style={styles.backButton}
-                onClick={printFmlMissingReport}
-                disabled={!visibleFmlMissingRows.length}
-              >
-                🖨️ Print
-              </button>
-
-              <button
-                type="button"
-                style={styles.primaryButton}
-                onClick={exportFmlMissingReportToExcel}
-                disabled={!visibleFmlMissingRows.length}
-              >
-                📥 Export Excel
-              </button>
-            </div>
-
-            {!fmlMissingRows.length && (
-              <p style={styles.emptyText}>
-                No FML not ordered/not used rows found. Upload the latest order
-                file after the template is loaded.
-              </p>
-            )}
-
-            <div style={styles.equipmentGrid}>
-              {visibleFmlMissingRows.map((item, index) => (
-                <div
-                  key={`${item.excelRow}-${item.code}-${index}`}
-                  style={sx(styles.equipmentCard, styles.orderNeededCard)}
-                >
-                  <div style={styles.recipeMeta}>FML row: {item.excelRow}</div>
-                  <div style={styles.recipeName}>{item.product}</div>
-                  <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                  <div style={styles.recipeMeta}>UM: {item.uom || "N/A"}</div>
-                  <div style={styles.recipeMeta}>
-                    Venues: {item.venueText || "N/A"}
+                      {formatQty(item.estimatedQtyAtArrival)}
+                    </strong>
                   </div>
 
-                  <div style={styles.templateFound}>
-                    Matched: {(item.matchedVenues || []).join(", ") || "N/A"}
+                  <div>
+                    Voyage need:{" "}
+                    <strong>{formatQty(item.voyageNeedBeforeBuffer)}</strong>
                   </div>
 
-                  <div style={styles.recipeMeta}>
-                    Template locations:{" "}
-                    {(item.templateLocationNames || []).join(", ") || "N/A"}
+                  <div>
+                    25% buffer:{" "}
+                    <strong>{formatQty(item.orderBufferQty)}</strong>
                   </div>
-
-                  <div style={styles.recipeMeta}>
-                    Template scope: {item.templateShipScopeNote || "Used by all ships"}
-                  </div>
-
-                  <div style={styles.recipeMeta}>
-                    Stock: {formatQty(item.stockOnHand)} / Future:{" "}
-                    {formatQty(item.futureOrders)} / Past:{" "}
-                    {formatQty(item.pastConsumption)}
-                  </div>
-
-                  <div style={styles.statusWarning}>{item.reason}</div>
                 </div>
-              ))}
-            </div>
-          </>
-        )}
 
-        {nextOrderView === "fmlLow" && (
-          <>
-            <div style={styles.infoBox}>
-              <div>
-                ⚠️ FML running-low rows:{" "}
-                <strong>{visibleFmlLowRows.length}</strong> / {fmlLowRows.length}
-              </div>
+                <div style={localStyles.parCompareBox}>
+                  <strong>Par comparison</strong>
 
-              <div>
-                🚢 Ship matched as:{" "}
-                <strong>{nextOrderMeta.shipCode || userShip || "N/A"}</strong>
-              </div>
-            </div>
-
-            <input
-              placeholder="Search FML running-low product, code, venue, template..."
-              value={fmlLowSearch}
-              onChange={(event) => setFmlLowSearch(event.target.value)}
-              style={styles.searchInput}
-            />
-
-            <div style={styles.headerActions}>
-              <button
-                type="button"
-                style={styles.backButton}
-                onClick={printFmlLowReport}
-                disabled={!visibleFmlLowRows.length}
-              >
-                🖨️ Print
-              </button>
-
-              <button
-                type="button"
-                style={styles.primaryButton}
-                onClick={exportFmlLowReportToExcel}
-                disabled={!visibleFmlLowRows.length}
-              >
-                📥 Export Excel
-              </button>
-            </div>
-
-            {!fmlLowRows.length && (
-              <p style={styles.emptyText}>
-                No FML running-low rows found. Upload the latest order file after
-                the template is loaded.
-              </p>
-            )}
-
-            <div style={styles.equipmentGrid}>
-              {visibleFmlLowRows.map((item, index) => (
-                <div
-                  key={`${item.excelRow}-${item.code}-${index}`}
-                  style={sx(styles.equipmentCard, styles.zeroCountCard)}
-                >
-                  <div style={styles.recipeMeta}>FML row: {item.excelRow}</div>
-                  <div style={styles.recipeName}>{item.product}</div>
-                  <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                  <div style={styles.recipeMeta}>UM: {item.uom || "N/A"}</div>
-
-                  <div style={styles.recipeMeta}>
-                    Venues: {item.venueText || "N/A"}
+                  <div>
+                    Current par Q:{" "}
+                    <strong>{formatQty(item.currentFileParLevel)}</strong>
                   </div>
 
-                  <div style={styles.templateFound}>
-                    Matched: {(item.matchedVenues || []).join(", ") || "N/A"}
+                  <div>
+                    Current usage par:{" "}
+                    <strong>
+                      {formatQty(item.suggestedParFromCurrentUsage)}
+                    </strong>
                   </div>
 
-                  <div style={styles.recipeMeta}>
-                    Template scope: {item.templateShipScopeNote || "Used by all ships"}
+                  <div>
+                    Year avg/day:{" "}
+                    <strong>{formatQty(item.yearAvgDailyQty)}</strong>
                   </div>
 
-                  <div style={styles.recipeMeta}>
-                    Stock: {formatQty(item.stockOnHand)}
+                  <div>
+                    Market avg/day:{" "}
+                    <strong>{formatQty(item.marketAvgDailyQty)}</strong>
                   </div>
 
-                  <div style={styles.recipeMeta}>
-                    Past consumption: {formatQty(item.pastConsumption)}
+                  <div>
+                    Market suggested par:{" "}
+                    <strong>{formatQty(item.suggestedParFromMarket)}</strong>
                   </div>
-
-                  <div style={styles.recipeMeta}>
-                    Avg / day: {formatQty(item.averageConsumptionPerDay)}
-                  </div>
-
-                  <div style={styles.recipeMeta}>
-                    Available at arrival: {formatQty(item.availableAtArrival)}
-                  </div>
-
-                  <div style={styles.recipeMeta}>
-                    Days cover: {formatQty(item.daysOfCoverAtArrival)}
-                  </div>
-
-                  <div style={styles.suggestedOrderBad}>
-                    Suggested order: {formatQty(item.suggestedOrder)}
-                  </div>
-
-                  <div style={styles.statusWarning}>{item.reason}</div>
                 </div>
-              ))}
-            </div>
-          </>
-        )}
+
+                <div
+                  style={
+                    item.suggestedOrder > 0
+                      ? styles.nextOrderSuggestedBlue ||
+                        localStyles.suggestedBlue
+                      : styles.nextOrderSuggestedNeutral ||
+                        localStyles.suggestedNeutral
+                  }
+                >
+                  Suggested next order: {formatQty(item.suggestedOrder)}
+                </div>
+
+                <div
+                  style={
+                    item.alertType === "red"
+                      ? styles.nextOrderStatusRed || localStyles.statusRed
+                      : item.alertType === "blue" || item.alertType === "order"
+                      ? styles.nextOrderStatusBlue || localStyles.statusBlue
+                      : styles.nextOrderStatusNeutral || localStyles.statusNeutral
+                  }
+                >
+                  {item.alertLabel}
+                </div>
+
+                <button
+                  type="button"
+                  style={styles.backButton}
+                  onClick={() => setSelectedItem(item)}
+                >
+                  🔎 Details / Yearly
+                </button>
+              </article>
+            );
+          })}
+        </div>
       </section>
 
-      {selectedOrderItem && (
+      {selectedItem && (
         <div
           style={styles.modalBackdrop}
-          onClick={() => setSelectedOrderItem(null)}
+          onClick={() => setSelectedItem(null)}
         >
           <div
-            style={styles.modalCard}
+            style={localStyles.detailsModalCard}
             onClick={(event) => event.stopPropagation()}
           >
             <button
               type="button"
               style={styles.closeButton}
-              onClick={() => setSelectedOrderItem(null)}
+              onClick={() => setSelectedItem(null)}
             >
               ✕
             </button>
 
-            <h2 style={styles.productTitle}>{selectedOrderItem.product}</h2>
+            <h2 style={styles.productTitle}>{selectedItem.product}</h2>
 
-            <p>
-              <strong>Code:</strong> {selectedOrderItem.code || "N/A"}
+            <p style={styles.recipeMeta}>
+              Code: {selectedItem.code || "N/A"} • UOM:{" "}
+              {selectedItem.uom || "N/A"} • Excel row:{" "}
+              {selectedItem.excelRow}
             </p>
 
-            <p>
-              <strong>U/M:</strong> {selectedOrderItem.uom || "N/A"}
-            </p>
+            <section style={localStyles.detailsGrid}>
+              <div style={styles.infoBox}>
+                <strong>1. Arrival stock calculation</strong>
 
-            <p>
-              <strong>Ship:</strong> {orderShipLabel} /{" "}
-              {nextOrderMeta.shipCode || "N/A"}
-            </p>
+                <div>
+                  Stock on hand D:{" "}
+                  <strong>{formatQty(selectedItem.stockOnHand)}</strong>
+                </div>
 
-            <section style={styles.grid}>
-              <div style={styles.card}>
-                <h3 style={styles.cardTitle}>🧮 Order Calculation</h3>
+                <div>
+                  Future orders F:N:{" "}
+                  <strong>{formatQty(selectedItem.futureOrders)}</strong>
+                </div>
 
-                <div style={styles.infoBox}>
-                  <div>
-                    Past consumption AI:AN:{" "}
-                    <strong>{formatQty(selectedOrderItem.pastConsumption)}</strong>
-                  </div>
+                <div>
+                  Avg/day from order:{" "}
+                  <strong>
+                    {formatQty(selectedItem.averageConsumptionPerDay)}
+                  </strong>
+                </div>
 
-                  <div>
-                    Historical sailor-days:{" "}
-                    <strong>{formatQty(selectedOrderItem.historicalSailorDays)}</strong>
-                  </div>
+                <div>
+                  Days until arrival:{" "}
+                  <strong>{formatQty(selectedItem.arrivalLeadDays)}</strong>
+                </div>
 
-                  <div>
-                    Average / day:{" "}
-                    <strong>
-                      {formatQty(selectedOrderItem.averageConsumptionPerDay)}
-                    </strong>
-                  </div>
+                <div>
+                  Use before arrival:{" "}
+                  <strong>
+                    {formatQty(selectedItem.consumptionUntilArrival)}
+                  </strong>
+                </div>
 
-                  <div>
-                    Days until arrival:{" "}
-                    <strong>{formatQty(selectedOrderItem.daysUntilArrival)}</strong>
-                  </div>
+                <div>
+                  Estimated stock on arrival:{" "}
+                  <strong
+                    style={{
+                      color:
+                        Number(selectedItem.estimatedQtyAtArrival || 0) < 0
+                          ? "#b00020"
+                          : "#2e7d32",
+                    }}
+                  >
+                    {formatQty(selectedItem.estimatedQtyAtArrival)}
+                  </strong>
+                </div>
 
-                  <div>
-                    Voyage days:{" "}
-                    <strong>{formatQty(selectedOrderItem.voyageDays)}</strong>
-                  </div>
-
-                  <div>
-                    Total days to cover:{" "}
-                    <strong>{formatQty(selectedOrderItem.totalDaysToCover)}</strong>
-                  </div>
-
-                  <div>
-                    Need before buffer:{" "}
-                    <strong>
-                      {formatQty(selectedOrderItem.requiredQtyBeforeBuffer)}
-                    </strong>
-                  </div>
-
-                  <div>
-                    25% buffer:{" "}
-                    <strong>{formatQty(selectedOrderItem.bufferQty)}</strong>
-                  </div>
-
-                  <div>
-                    Need with buffer:{" "}
-                    <strong>
-                      {formatQty(selectedOrderItem.requiredQtyWithBuffer)}
-                    </strong>
-                  </div>
-
-                  <div>
-                    Stock on hand:{" "}
-                    <strong>{formatQty(selectedOrderItem.stockOnHand)}</strong>
-                  </div>
-
-                  <div>
-                    Future orders:{" "}
-                    <strong>{formatQty(selectedOrderItem.futureOrders)}</strong>
-                  </div>
-
-                  <div>
-                    Stock + future orders:{" "}
-                    <strong>
-                      {formatQty(selectedOrderItem.availableForFullPeriod)}
-                    </strong>
-                  </div>
-
-                  <div style={{ color: "#0057b8", fontWeight: "bold" }}>
-                    Suggested order:{" "}
-                    <strong>{formatQty(selectedOrderItem.suggestedOrder)}</strong>
-                  </div>
+                <div>
+                  Usable arrival stock for order:{" "}
+                  <strong>{formatQty(selectedItem.usableQtyAtArrival)}</strong>
                 </div>
               </div>
 
-              <div style={styles.card}>
-                <h3 style={styles.cardTitle}>🌎 Previous Year Comparison</h3>
+              <div style={styles.infoBox}>
+                <strong>2. Voyage order need</strong>
 
-                {!selectedOrderItemStats?.hasData ? (
-                  <div style={styles.warningText}>
-                    No previous-year consumption match found for this product.
-                    Check product code/name in the yearly regional file.
-                  </div>
-                ) : (
-                  <div style={styles.infoBox}>
-                    <div>
-                      Matched by:{" "}
-                      <strong>{selectedOrderItemStats.matchedBy || "N/A"}</strong>
-                    </div>
+                <div>
+                  Voyage days:{" "}
+                  <strong>{formatQty(selectedItem.voyageDays)}</strong>
+                </div>
 
-                    <div>
-                      Matched product code:{" "}
-                      <strong>
-                        {selectedOrderItemStats.matchedProductCode || "N/A"}
-                      </strong>
-                    </div>
+                <div>
+                  Voyage need before buffer:{" "}
+                  <strong>
+                    {formatQty(selectedItem.voyageNeedBeforeBuffer)}
+                  </strong>
+                </div>
 
-                    <div>
-                      Matched product name:{" "}
-                      <strong>
-                        {selectedOrderItemStats.matchedProductName || "N/A"}
-                      </strong>
-                    </div>
+                <div>
+                  25% buffer of voyage need:{" "}
+                  <strong>{formatQty(selectedItem.orderBufferQty)}</strong>
+                </div>
 
-                    <hr />
+                <div>
+                  Target stock for voyage:{" "}
+                  <strong>{formatQty(selectedItem.targetQtyForVoyage)}</strong>
+                </div>
 
-                    <div>
-                      Previous year total quantity:{" "}
-                      <strong>
-                        {formatRegionalQty(
-                          selectedOrderItemStats.yearTotal.totalQty
-                        )}
-                      </strong>
-                    </div>
+                <div>
+                  Suggested next order:{" "}
+                  <strong>{formatQty(selectedItem.suggestedOrder)}</strong>
+                </div>
+              </div>
 
-                    <div>
-                      Previous year total days:{" "}
-                      <strong>
-                        {formatQty(selectedOrderItemStats.yearTotal.totalDays)}
-                      </strong>
-                    </div>
+              <div style={styles.infoBox}>
+                <strong>3. Current par comparison</strong>
 
-                    <div>
-                      Previous year average / day:{" "}
-                      <strong>
-                        {formatRegionalQty(
-                          selectedOrderItemStats.yearTotal.avgDailyQty
-                        )}
-                      </strong>
-                    </div>
+                <div>
+                  Current par in file Q:{" "}
+                  <strong>{formatQty(selectedItem.currentFileParLevel)}</strong>
+                </div>
 
-                    <div>
-                      Previous year rows matched:{" "}
-                      <strong>{selectedOrderItemStats.yearTotal.rows}</strong>
-                    </div>
+                <div>
+                  Suggested par from current usage:{" "}
+                  <strong>
+                    {formatQty(selectedItem.suggestedParFromCurrentUsage)}
+                  </strong>
+                </div>
 
-                    <hr />
+                <div>
+                  Difference vs current par:{" "}
+                  <strong
+                    style={{
+                      color:
+                        Number(selectedItem.parDifferenceVsCurrent || 0) > 0
+                          ? "#b00020"
+                          : "#2e7d32",
+                    }}
+                  >
+                    {formatQty(selectedItem.parDifferenceVsCurrent)}
+                  </strong>
+                </div>
+              </div>
 
-                    <div>
-                      Market:{" "}
-                      <strong>{selectedOrderItemStats.marketLabel}</strong>
-                    </div>
+              <div style={styles.infoBox}>
+                <strong>4. Last year / market comparison</strong>
 
-                    <div>
-                      Market total quantity:{" "}
-                      <strong>
-                        {formatRegionalQty(selectedOrderItemStats.market.totalQty)}
-                      </strong>
-                    </div>
+                <div>
+                  Matched yearly product:{" "}
+                  <strong>
+                    {selectedItem.regionalMatchedProductName ||
+                      selectedItem.regionalMatchedProductCode ||
+                      "No match"}
+                  </strong>
+                </div>
 
-                    <div>
-                      Market total days:{" "}
-                      <strong>
-                        {formatQty(selectedOrderItemStats.market.totalDays)}
-                      </strong>
-                    </div>
+                <div>
+                  Match rows:{" "}
+                  <strong>{selectedItem.regionalMatchCount || 0}</strong>
+                </div>
 
-                    <div>
-                      Market average / day:{" "}
-                      <strong>
-                        {formatRegionalQty(
-                          selectedOrderItemStats.market.avgDailyQty
-                        )}
-                      </strong>
-                    </div>
+                <div>
+                  Previous year total qty:{" "}
+                  <strong>{formatQty(selectedItem.yearTotalQty)}</strong>
+                </div>
 
-                    <div>
-                      Market rows matched:{" "}
-                      <strong>{selectedOrderItemStats.market.rows}</strong>
-                    </div>
+                <div>
+                  Previous year total days:{" "}
+                  <strong>{formatQty(selectedItem.yearTotalDays)}</strong>
+                </div>
 
-                    <div>
-                      Market ships:{" "}
-                      <strong>
-                        {selectedOrderItemStats.market.ships.join(", ") || "N/A"}
-                      </strong>
-                    </div>
+                <div>
+                  Previous year avg/day:{" "}
+                  <strong>{formatQty(selectedItem.yearAvgDailyQty)}</strong>
+                </div>
 
-                    <div>
-                      Market regions:{" "}
-                      <strong>
-                        {selectedOrderItemStats.market.regions.join(", ") ||
-                          "N/A"}
-                      </strong>
-                    </div>
-                  </div>
-                )}
+                <div>
+                  Suggested par from previous year total:{" "}
+                  <strong>
+                    {formatQty(selectedItem.suggestedParFromYearTotal)}
+                  </strong>
+                </div>
+
+                <hr style={localStyles.hr} />
+
+                <div>
+                  Selected market:{" "}
+                  <strong>
+                    {!selectedRegionalConsumptionRegion
+                      ? "Not selected"
+                      : selectedRegionalConsumptionRegion === YEARLY_REGION_ALL
+                      ? "All regions"
+                      : selectedRegionalConsumptionRegion}
+                  </strong>
+                </div>
+
+                <div>
+                  Market total qty:{" "}
+                  <strong>{formatQty(selectedItem.marketTotalQty)}</strong>
+                </div>
+
+                <div>
+                  Market total days:{" "}
+                  <strong>{formatQty(selectedItem.marketTotalDays)}</strong>
+                </div>
+
+                <div>
+                  Market avg/day:{" "}
+                  <strong>{formatQty(selectedItem.marketAvgDailyQty)}</strong>
+                </div>
+
+                <div>
+                  Suggested par from selected market:{" "}
+                  <strong>{formatQty(selectedItem.suggestedParFromMarket)}</strong>
+                </div>
+
+                <hr style={localStyles.hr} />
+
+                <div>
+                  This ship last-year avg/day:{" "}
+                  <strong>{formatQty(selectedItem.shipYearAvgDailyQty)}</strong>
+                </div>
+
+                <div>
+                  Suggested par from this ship last year:{" "}
+                  <strong>{formatQty(selectedItem.suggestedParFromShip)}</strong>
+                </div>
               </div>
             </section>
 
             <div style={styles.warningText}>
-              Previous-year and market data is for comparison only. The suggested
-              order uses the current order file calculation with a fixed 25%
-              buffer.
+              Suggested order uses current order average/day only. Last year and
+              market numbers are for par review and decision support.
             </div>
           </div>
         </div>
@@ -2937,3 +1683,141 @@ export default function GenerateNextOrder({
     </main>
   );
 }
+
+const localStyles = {
+  nextOrderGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 12,
+  },
+
+  nextOrderCard: {
+    border: "1px solid #ddd",
+    borderRadius: 14,
+    padding: 12,
+    background: "#fafafa",
+    display: "grid",
+    gap: 8,
+    textAlign: "left",
+  },
+
+  nextOrderCardBlue: {
+    border: "2px solid #0057b8",
+    background: "#eef5ff",
+  },
+
+  nextOrderCardRed: {
+    border: "2px solid #b00020",
+    background: "#fff0f0",
+  },
+
+  topLine: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 8,
+    color: "#666",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+
+  orderName: {
+    fontWeight: "bold",
+    fontSize: 15,
+    lineHeight: 1.15,
+  },
+
+  meta: {
+    color: "#555",
+    fontSize: 13,
+  },
+
+  compactCalcBox: {
+    display: "grid",
+    gap: 5,
+    padding: 9,
+    borderRadius: 12,
+    background: "#fff",
+    border: "1px solid #d8e7ff",
+    fontSize: 13,
+  },
+
+  parCompareBox: {
+    display: "grid",
+    gap: 5,
+    padding: 9,
+    borderRadius: 12,
+    background: "#f2f2f2",
+    border: "1px solid #e1e1e1",
+    fontSize: 13,
+  },
+
+  suggestedBlue: {
+    padding: 9,
+    borderRadius: 10,
+    background: "#0057b8",
+    color: "#fff",
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+
+  suggestedNeutral: {
+    padding: 9,
+    borderRadius: 10,
+    background: "#f2f2f2",
+    color: "#555",
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+
+  statusBlue: {
+    padding: 8,
+    borderRadius: 10,
+    background: "#0057b8",
+    color: "#fff",
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+
+  statusRed: {
+    padding: 8,
+    borderRadius: 10,
+    background: "#b00020",
+    color: "#fff",
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+
+  statusNeutral: {
+    padding: 8,
+    borderRadius: 10,
+    background: "#f2f2f2",
+    color: "#555",
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+
+  detailsModalCard: {
+    background: "#fff",
+    borderRadius: 18,
+    padding: 22,
+    maxWidth: 1120,
+    width: "96%",
+    maxHeight: "90vh",
+    overflowY: "auto",
+    position: "relative",
+    boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+  },
+
+  detailsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+    gap: 14,
+    marginBottom: 16,
+  },
+
+  hr: {
+    border: 0,
+    borderTop: "1px solid #ddd",
+    margin: "8px 0",
+  },
+};
