@@ -2726,7 +2726,6 @@ export default function GenerateNextOrder({
       </div>
     );
   })}
-</div>
             </div>
           </>
         )}
