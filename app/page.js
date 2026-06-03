@@ -127,16 +127,47 @@ const SHIP_DISPLAY_NAMES = {
   BRL: "Brilliant",
   RL: "Resilient",
 };
-const normalizeShipCode = (value) => {
-  const text = cleanText(value).replace(/RESILIANT/g, "RESILIENT");
+const getTemplateSheetShipScope = (sheetName) => {
+  const text = cleanText(sheetName)
+    .replace(/RESILIANT/g, "RESILIENT")
+    .replace(/\bV\s*[-]?\s*1\b/g, "V1")
+    .replace(/\bS\s*C\s*L\b/g, "SCL");
 
-  if (!text) return "";
-  if (text === "BRL" || text.includes("BRILLIANT")) return "BRL";
-  if (text === "RL" || text.includes("RESILIENT")) return "RL";
-  if (text === "SC" || text.includes("SCARLET")) return "SC";
-  if (text === "VL" || text.includes("VALIANT")) return "VL";
+  const scope = [];
 
-  return "";
+  if (
+    /\bSCL\b/.test(text) ||
+    /\bSC\b/.test(text) ||
+    /\bV1\b/.test(text) ||
+    text.includes("SCARLET")
+  ) {
+    scope.push("SC");
+  }
+
+  if (
+    /\bVAL\b/.test(text) ||
+    /\bVL\b/.test(text) ||
+    text.includes("VALIANT")
+  ) {
+    scope.push("VL");
+  }
+
+  if (
+    /\bRES\b/.test(text) ||
+    /\bRL\b/.test(text) ||
+    text.includes("RESILIENT")
+  ) {
+    scope.push("RL");
+  }
+
+  if (
+    /\bBRL\b/.test(text) ||
+    text.includes("BRILLIANT")
+  ) {
+    scope.push("BRL");
+  }
+
+  return [...new Set(scope)];
 };
 
 const SCHEDULE_ALL_SHIPS = "ALL";
