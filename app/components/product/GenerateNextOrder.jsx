@@ -11,6 +11,7 @@ import {
 
 const ORDER_BUFFER_PERCENT = 25;
 const ORDER_BUFFER_MULTIPLIER = 1 + ORDER_BUFFER_PERCENT / 100;
+const PAR_REPORT_DAYS = 7;
 
 const cleanText = (value) =>
   String(value || "")
@@ -38,7 +39,9 @@ const normalizeCode = (value) => {
 };
 
 const normalizeShipCode = (value) => {
-  const text = cleanText(value).replace(/RESILIANT/g, "RESILIENT");
+  const text = cleanText(value)
+    .replace(/RESILIANT/g, "RESILIENT")
+    .replace(/[_\-]+/g, " ");
 
   if (!text) return "";
 
@@ -195,7 +198,10 @@ const PRODUCT_MATCH_STOP_WORDS = new Set([
 
 const singularizeProductToken = (token) => {
   if (!token) return "";
-  if (token.length > 4 && token.endsWith("IES")) return `${token.slice(0, -3)}Y`;
+
+  if (token.length > 4 && token.endsWith("IES")) {
+    return `${token.slice(0, -3)}Y`;
+  }
 
   if (token.length > 4 && token.endsWith("ES") && !token.endsWith("SES")) {
     return token.slice(0, -2);
@@ -233,9 +239,13 @@ const productNamesMatch = (left, right) => {
   if (!aTokens.length || !bTokens.length) return false;
 
   const shortTokens = aTokens.length <= bTokens.length ? aTokens : bTokens;
-  const longTokenSet = new Set(aTokens.length <= bTokens.length ? bTokens : aTokens);
+  const longTokenSet = new Set(
+    aTokens.length <= bTokens.length ? bTokens : aTokens
+  );
 
-  const matchedCount = shortTokens.filter((token) => longTokenSet.has(token)).length;
+  const matchedCount = shortTokens.filter((token) =>
+    longTokenSet.has(token)
+  ).length;
 
   if (shortTokens.length === 1) {
     const token = shortTokens[0];
@@ -277,107 +287,6 @@ const textHasWordOrPhrase = (text, word) => {
   ).test(source);
 };
 
-const FAST_SPOILAGE_PRODUCE_WORDS = [
-  "HERB",
-  "HERBS",
-  "BASIL",
-  "CILANTRO",
-  "CORIANDER",
-  "PARSLEY",
-  "MINT",
-  "DILL",
-  "CHIVES",
-  "TARRAGON",
-
-  "LETTUCE",
-  "ROMAINE",
-  "SPRING MIX",
-  "MIXED GREENS",
-  "BABY GREENS",
-  "ARUGULA",
-  "ROCKET",
-  "SPINACH",
-  "WATERCRESS",
-
-  "BERRY",
-  "BERRIES",
-  "STRAWBERRY",
-  "STRAWBERRIES",
-  "BLUEBERRY",
-  "BLUEBERRIES",
-  "RASPBERRY",
-  "RASPBERRIES",
-  "BLACKBERRY",
-  "BLACKBERRIES",
-
-  "BANANA",
-  "BANANAS",
-  "AVOCADO",
-  "AVOCADOS",
-
-  "PEACH",
-  "PEACHES",
-  "NECTARINE",
-  "NECTARINES",
-  "PLUM",
-  "PLUMS",
-
-  "FRESH CUT",
-  "CUT FRUIT",
-  "CUT MELON",
-  "FRUIT SALAD",
-];
-
-const LONG_HOLD_PRODUCE_WORDS = [
-  "POTATO",
-  "POTATOES",
-  "SWEET POTATO",
-  "SWEET POTATOES",
-  "YAM",
-  "YAMS",
-
-  "ONION",
-  "ONIONS",
-  "YELLOW ONION",
-  "WHITE ONION",
-  "RED ONION",
-
-  "CARROT",
-  "CARROTS",
-  "BEET",
-  "BEETS",
-  "BEETROOT",
-  "TURNIP",
-  "TURNIPS",
-  "PARSNIP",
-  "PARSNIPS",
-  "RUTABAGA",
-
-  "BUTTERNUT",
-  "BUTTERNUT SQUASH",
-  "SQUASH",
-  "PUMPKIN",
-  "CABBAGE",
-  "RED CABBAGE",
-  "GREEN CABBAGE",
-
-  "APPLE",
-  "APPLES",
-  "ORANGE",
-  "ORANGES",
-  "LEMON",
-  "LEMONS",
-  "LIME",
-  "LIMES",
-  "GRAPEFRUIT",
-];
-
-const getStandardProduceRule = () => ({
-  type: "standard",
-  label: "Standard item",
-  orderFullTarget: false,
-});
-
 const isFreshProduceOrderFile = (...values) => {
   const text = values
     .map((value) => cleanText(value))
@@ -391,7 +300,92 @@ const isFreshProduceOrderFile = (...values) => {
   return text.includes("FRESH PRODUCE");
 };
 
-const getFreshProduceOrderRule = (productName, freshProduceOrderEnabled = false) => {
+const FAST_SPOILAGE_PRODUCE_WORDS = [
+  "STRAWBERRY",
+  "STRAWBERRIES",
+  "BLUEBERRY",
+  "BLUEBERRIES",
+  "RASPBERRY",
+  "RASPBERRIES",
+  "BLACKBERRY",
+  "BLACKBERRIES",
+  "BERRY",
+  "BERRIES",
+  "BANANA",
+  "BANANAS",
+  "LETTUCE",
+  "ROMAINE",
+  "ARUGULA",
+  "ROCKET",
+  "SPINACH",
+  "MIXED GREENS",
+  "SPRING MIX",
+  "HERB",
+  "HERBS",
+  "BASIL",
+  "MINT",
+  "PARSLEY",
+  "CILANTRO",
+  "CORIANDER",
+  "DILL",
+  "CHIVE",
+  "CHIVES",
+  "TARRAGON",
+  "CHERVIL",
+  "WATERCRESS",
+  "MICROGREEN",
+  "MICRO GREENS",
+  "MICROGREENS",
+  "AVOCADO",
+  "AVOCADOS",
+];
+
+const LONG_HOLD_PRODUCE_WORDS = [
+  "POTATO",
+  "POTATOES",
+  "SWEET POTATO",
+  "SWEET POTATOES",
+  "YAM",
+  "YAMS",
+  "ONION",
+  "ONIONS",
+  "RED ONION",
+  "WHITE ONION",
+  "YELLOW ONION",
+  "CARROT",
+  "CARROTS",
+  "BEET",
+  "BEETS",
+  "BEETROOT",
+  "BEETROOTS",
+  "TURNIP",
+  "TURNIPS",
+  "RUTABAGA",
+  "PARSNIP",
+  "PARSNIPS",
+  "CELERIAC",
+  "GARLIC",
+  "SHALLOT",
+  "SHALLOTS",
+  "GINGER",
+  "SQUASH",
+  "BUTTERNUT",
+  "BUTTERNUT SQUASH",
+  "ACORN SQUASH",
+  "KABOCHA",
+  "PUMPKIN",
+];
+
+const getStandardProduceRule = () => ({
+  type: "standard",
+  label: "Standard item",
+  orderFullTarget: false,
+});
+
+const getFreshProduceOrderRule = (
+  productName,
+  freshProduceOrderEnabled = false
+) => {
   if (!freshProduceOrderEnabled) {
     return getStandardProduceRule();
   }
@@ -432,6 +426,7 @@ const getFreshProduceOrderRule = (productName, freshProduceOrderEnabled = false)
     orderFullTarget: false,
   };
 };
+
 const exportRowsToExcel = (rows, sheetName, fileName) => {
   if (!rows.length) {
     window.alert("No rows to export.");
@@ -519,29 +514,21 @@ const getStatusForOrderItem = (item) => {
     };
   }
 
-  if (item.produceRule?.type === "fast") {
-    return {
-      type: "need",
-      label: "Order Full Par",
-      description:
-        "Quick-spoil produce. Order the full calculated target for the voyage even if some stock may remain.",
-    };
-  }
-
   if (Number(item.suggestedOrder || 0) > 0) {
     return {
       type: "need",
       label: "Order Suggested",
       description:
-        "Estimated usable quantity at arrival is below voyage need plus 25% buffer.",
+        Number(item.preArrivalShortage || 0) > 0
+          ? "Item is short before arrival. The pre-arrival shortage is highlighted but not added to the next order."
+          : "Estimated quantity at arrival is below voyage need plus 25% buffer.",
     };
   }
 
   return {
     type: "covered",
     label: "Covered",
-    description:
-      "Future order / usable stock covers voyage need plus 25% buffer.",
+    description: "Future order / stock covers voyage need plus 25% buffer.",
   };
 };
 
@@ -658,7 +645,9 @@ const buildFmlReports = ({ fmlRows, orderRows }) => {
 
     const futureOrders = Number(orderItem?.futureOrders || 0);
     const pastConsumption = Number(orderItem?.pastConsumption || 0);
-    const averageConsumptionPerDay = Number(orderItem?.averageConsumptionPerDay || 0);
+    const averageConsumptionPerDay = Number(
+      orderItem?.averageConsumptionPerDay || 0
+    );
     const estimatedQtyAtArrival = Number(orderItem?.estimatedQtyAtArrival || 0);
     const targetQtyForVoyage = Number(orderItem?.targetQtyForVoyage || 0);
     const suggestedOrder = Number(orderItem?.suggestedOrder || 0);
@@ -700,7 +689,7 @@ const buildFmlReports = ({ fmlRows, orderRows }) => {
         targetQtyForVoyage,
         suggestedOrder,
         reason:
-          "FML item has consumption and no future order. Estimated usable arrival quantity is below voyage need plus 25% buffer.",
+          "FML item has consumption and no future order. Estimated quantity at arrival is below voyage need plus 25% buffer.",
       });
     }
   });
@@ -734,15 +723,15 @@ const parseNextOrderWorkbook = (workbook, sourceFileName = "") => {
   });
 
   const orderShipName = safeText(rows[0]?.[1]);
-const orderShipCode = normalizeShipCode(orderShipName);
+  const orderShipCode = normalizeShipCode(orderShipName);
 
-const isFreshProduceOrder = isFreshProduceOrderFile(
-  sourceFileName,
-  sheetName,
-  orderShipName
-);
+  const isFreshProduceOrder = isFreshProduceOrderFile(
+    sourceFileName,
+    sheetName,
+    orderShipName
+  );
 
-const rawOrderDate = rows[1]?.[1];
+  const rawOrderDate = rows[1]?.[1];
   const rawArrivalDate = rows[2]?.[1];
   const targetSailors = toNumber(rows[4]?.[1]);
   const voyageDays = toNumber(rows[5]?.[1]);
@@ -783,33 +772,26 @@ const rawOrderDate = rows[1]?.[1];
       0
     );
 
-    const averageConsumptionFromSailorDays =
-      historicalSailorDays > 0 && targetSailors > 0
-        ? (pastConsumption / historicalSailorDays) * targetSailors
-        : 0;
-
-    const fallbackAverageConsumption =
-      voyageDays > 0 ? pastConsumption / voyageDays : 0;
-
-    const averageConsumptionPerDay =
-      averageConsumptionFromSailorDays || fallbackAverageConsumption;
-
     const averageConsumptionPerSailorDay =
       historicalSailorDays > 0 ? pastConsumption / historicalSailorDays : 0;
+
+    const averageConsumptionPerDay =
+      averageConsumptionPerSailorDay > 0 && targetSailors > 0
+        ? averageConsumptionPerSailorDay * targetSailors
+        : voyageDays > 0
+          ? pastConsumption / voyageDays
+          : 0;
 
     const consumptionUntilArrival = averageConsumptionPerDay * daysUntilArrival;
 
     const estimatedQtyAtArrival =
       stockOnHand + futureOrders - consumptionUntilArrival;
 
-    const arrivalDeficitBeforeNextOrder = Math.max(
-      0,
-      -estimatedQtyAtArrival
-    );
+    const preArrivalShortage = Math.max(-estimatedQtyAtArrival, 0);
 
     // Important:
-    // If arrival quantity is negative, we show the warning,
-    // but we do NOT add that negative number into the next order.
+    // If estimated qty at arrival is negative, we highlight the shortage,
+    // but we do NOT add that negative amount to the next order.
     const usableQtyAtArrivalForOrder = Math.max(estimatedQtyAtArrival, 0);
 
     const voyageNeed = averageConsumptionPerDay * voyageDays;
@@ -818,14 +800,25 @@ const rawOrderDate = rows[1]?.[1];
 
     const produceRule = getFreshProduceOrderRule(product, isFreshProduceOrder);
 
-    const suggestedOrder = produceRule.orderFullTarget
-      ? targetQtyForVoyage
-      : Math.max(targetQtyForVoyage - usableQtyAtArrivalForOrder, 0);
+    const normalSuggestedOrder = Math.max(
+      targetQtyForVoyage - usableQtyAtArrivalForOrder,
+      0
+    );
+
+    const suggestedOrder =
+      produceRule.orderFullTarget && targetQtyForVoyage > 0
+        ? targetQtyForVoyage
+        : normalSuggestedOrder;
 
     const currentUsageSuggestedPar = targetQtyForVoyage;
 
-    // Keep this based on real estimated arrival quantity so we still show shortage.
-    const futureCoverageDifference = estimatedQtyAtArrival - targetQtyForVoyage;
+    // This is for the Order vs Par report only.
+    // It does not change the main order calculation.
+    const currentUsageSuggestedPar7Days =
+      averageConsumptionPerDay * PAR_REPORT_DAYS * ORDER_BUFFER_MULTIPLIER;
+
+    const futureCoverageDifference =
+      usableQtyAtArrivalForOrder - targetQtyForVoyage;
 
     const itemKey =
       normalizeCode(code) ||
@@ -837,7 +830,7 @@ const rawOrderDate = rows[1]?.[1];
     const status = getStatusForOrderItem({
       averageConsumptionPerDay,
       suggestedOrder,
-      produceRule,
+      preArrivalShortage,
     });
 
     parsedRows.push({
@@ -858,17 +851,19 @@ const rawOrderDate = rows[1]?.[1];
       averageConsumptionPerDay,
       consumptionUntilArrival,
       estimatedQtyAtArrival,
-      arrivalDeficitBeforeNextOrder,
+      preArrivalShortage,
       usableQtyAtArrivalForOrder,
       voyageNeed,
       orderBufferQty,
       targetQtyForVoyage,
       suggestedOrder,
       currentUsageSuggestedPar,
+      currentUsageSuggestedPar7Days,
       futureCoverageDifference,
-      produceRule,
+      isFreshProduceOrder,
       produceRuleType: produceRule.type,
       produceRuleLabel: produceRule.label,
+      produceOrderFullTarget: produceRule.orderFullTarget,
       statusType: status.type,
       statusLabel: status.label,
       statusDescription: status.description,
@@ -902,17 +897,23 @@ const rawOrderDate = rows[1]?.[1];
       daysUntilArrival,
       historicalSailorDays,
       totalItems: parsedRows.length,
-      itemsNeedingOrder: parsedRows.filter((item) => item.suggestedOrder > 0).length,
+      itemsNeedingOrder: parsedRows.filter((item) => item.suggestedOrder > 0)
+        .length,
       coveredItems: parsedRows.filter(
         (item) => item.suggestedOrder <= 0 && item.averageConsumptionPerDay > 0
       ).length,
       reviewItems: parsedRows.filter(
         (item) => item.averageConsumptionPerDay <= 0
       ).length,
-      fastSpoilageItems: parsedRows.filter((item) => item.produceRuleType === "fast")
-        .length,
-      longHoldProduceItems: parsedRows.filter((item) => item.produceRuleType === "long")
-        .length,
+      preArrivalShortageItems: parsedRows.filter(
+        (item) => item.preArrivalShortage > 0
+      ).length,
+      fastSpoilageItems: parsedRows.filter(
+        (item) => item.produceRuleType === "fast"
+      ).length,
+      longHoldProduceItems: parsedRows.filter(
+        (item) => item.produceRuleType === "long"
+      ).length,
       fmlRows: fmlRows.length,
       fmlMissingItems: fmlMissingRows.length,
       fmlRunningLowItems: fmlRunningLowRows.length,
@@ -920,32 +921,23 @@ const rawOrderDate = rows[1]?.[1];
   };
 };
 
-const getRecipeHeaderIndexes = (recipeRows = []) => {
-  const headerRowIndex = recipeRows.findIndex((row) => {
-    const compactText = row
-      .map((cell) => cleanText(cell).replace(/[^A-Z0-9]/g, ""))
-      .join("|");
+const getIngredientHeaderIndexes = (rows = []) => {
+  const compactName = (value) => cleanText(value).replace(/[^A-Z0-9]/g, "");
+
+  const headerRowIndex = rows.findIndex((row) => {
+    const compactText = (row || []).map(compactName).join("|");
 
     return (
       compactText.includes("RESTAURANTNAME") &&
-      compactText.includes("RECIPENAME") &&
-      (compactText.includes("INGREDIENTNAME") ||
-        compactText.includes("PRODUCTNAME") ||
-        compactText.includes("|NAME|"))
+      compactText.includes("RECIPENAME")
     );
   });
 
-  const safeHeaderRowIndex = headerRowIndex >= 0 ? headerRowIndex : 0;
-  const headers = recipeRows[safeHeaderRowIndex] || [];
+  const finalHeaderRowIndex = headerRowIndex >= 0 ? headerRowIndex : 0;
+  const headers = rows[finalHeaderRowIndex] || [];
+  const compactHeaders = headers.map(compactName);
 
-  const cleanHeaders = headers.map((header) => cleanText(header));
-  const compactHeaders = cleanHeaders.map((header) =>
-    header.replace(/[^A-Z0-9]/g, "")
-  );
-
-  const compactName = (value) => cleanText(value).replace(/[^A-Z0-9]/g, "");
-
-  const findExact = (names, fallback = -1) => {
+  const findExact = (names, fallback) => {
     const wanted = names.map(compactName).filter(Boolean);
     const index = compactHeaders.findIndex((header) => wanted.includes(header));
 
@@ -953,8 +945,8 @@ const getRecipeHeaderIndexes = (recipeRows = []) => {
   };
 
   return {
-    headerRowIndex: safeHeaderRowIndex,
-    restaurantName: findExact(["RestaurantName", "Restaurant Name"], 1),
+    headerRowIndex: finalHeaderRowIndex,
+    venue: findExact(["RestaurantName", "Restaurant Name"], 1),
     menuName: findExact(["MenuName", "Menu Name"], 3),
     ingredientCode: findExact(
       ["Code", "IngredientCode", "Ingredient Code", "ProductCode", "Product Code"],
@@ -970,35 +962,22 @@ const getRecipeHeaderIndexes = (recipeRows = []) => {
   };
 };
 
-const getUsableRecipeRowCount = (recipeRows = []) => {
-  if (!Array.isArray(recipeRows) || recipeRows.length <= 1) return 0;
-
-  const indexes = getRecipeHeaderIndexes(recipeRows);
-
-  return recipeRows
-    .slice(indexes.headerRowIndex + 1)
-    .filter((row) => {
-      const venue = safeText(row[indexes.restaurantName]);
-      const recipeName = safeText(row[indexes.recipeName]);
-      const ingredientName = safeText(row[indexes.ingredientName]);
-
-      return venue && recipeName && ingredientName;
-    }).length;
-};
-
 const getRecipeUsageForItem = (item, recipeRows = []) => {
   const productName = safeText(item?.product || item?.name);
   const productCode = normalizeCode(item?.code);
 
   if (!productName && !productCode) return [];
-  if (!Array.isArray(recipeRows) || recipeRows.length <= 1) return [];
 
-  const indexes = getRecipeHeaderIndexes(recipeRows);
-  const rows = recipeRows.slice(indexes.headerRowIndex + 1);
+  const sourceRows = Array.isArray(recipeRows) ? recipeRows : [];
+
+  if (!sourceRows.length) return [];
+
+  const indexes = getIngredientHeaderIndexes(sourceRows);
+  const rows = sourceRows.slice(indexes.headerRowIndex + 1);
   const usageRows = [];
 
   rows.forEach((row) => {
-    const venue = safeText(row[indexes.restaurantName]);
+    const venue = safeText(row[indexes.venue]);
     const ingredientCode = normalizeCode(row[indexes.ingredientCode]);
     const ingredientName = safeText(row[indexes.ingredientName]);
     const assignedProduct = safeText(row[indexes.assigned]);
@@ -1059,7 +1038,7 @@ const getRegionalStatsForItem = ({
   yearlyRegionalConsumption,
   regionFilter,
   shipFilter,
-  voyageDays,
+  parDays,
   bufferPercent = ORDER_BUFFER_PERCENT,
 }) => {
   const sourceRows = Array.isArray(yearlyRegionalConsumption?.rows)
@@ -1075,8 +1054,8 @@ const getRegionalStatsForItem = ({
       avgDailyQty: 0,
       suggestedPar: 0,
       blocks: 0,
-      bufferPercent,
       matchedProducts: [],
+      parDays,
     };
   }
 
@@ -1111,14 +1090,26 @@ const getRegionalStatsForItem = ({
     return productNamesMatch(itemProduct, rowProductName);
   });
 
-  const totalQty = matchedRows.reduce((sum, row) => sum + Number(row.qty || 0), 0);
-  const totalValue = matchedRows.reduce((sum, row) => sum + Number(row.value || 0), 0);
-  const totalDays = matchedRows.reduce((sum, row) => sum + Number(row.days || 0), 0);
-  const blocks = matchedRows.length;
+  const totalQty = matchedRows.reduce(
+    (sum, row) => sum + Number(row.qty || 0),
+    0
+  );
 
+  const totalValue = matchedRows.reduce(
+    (sum, row) => sum + Number(row.value || 0),
+    0
+  );
+
+  const totalDays = matchedRows.reduce(
+    (sum, row) => sum + Number(row.days || 0),
+    0
+  );
+
+  const blocks = matchedRows.length;
   const avgDailyQty = totalDays > 0 ? totalQty / totalDays : 0;
+
   const suggestedPar =
-    avgDailyQty * Number(voyageDays || 0) * (1 + Number(bufferPercent || 0) / 100);
+    avgDailyQty * Number(parDays || 0) * (1 + Number(bufferPercent || 0) / 100);
 
   const matchedProducts = [
     ...new Set(
@@ -1138,8 +1129,8 @@ const getRegionalStatsForItem = ({
     avgDailyQty,
     suggestedPar,
     blocks,
-    bufferPercent,
     matchedProducts,
+    parDays,
   };
 };
 
@@ -1180,16 +1171,6 @@ export default function GenerateNextOrder({
 
   const activeShipName =
     orderMeta.shipDisplayName || getShipDisplayName(activeShipCode);
-
-  const recipeRowsLoadedCount = useMemo(
-    () => getUsableRecipeRowCount(recipeRows),
-    [recipeRows]
-  );
-
-  const referenceRegionalBufferPercent =
-    Number(regionalParBufferPercent || 0) > 0
-      ? Number(regionalParBufferPercent || 0)
-      : ORDER_BUFFER_PERCENT;
 
   const regionalRegionOptions = useMemo(
     () => yearlyRegionalConsumption?.regionOptions || [],
@@ -1239,8 +1220,8 @@ export default function GenerateNextOrder({
           " suggested order item(s), " +
           parsed.meta.coveredItems +
           " covered item(s), " +
-          parsed.meta.fastSpoilageItems +
-          " quick-spoil item(s), " +
+          parsed.meta.preArrivalShortageItems +
+          " item(s) short before arrival, " +
           parsed.meta.fmlMissingItems +
           " FML not ordered/not used item(s), " +
           parsed.meta.fmlRunningLowItems +
@@ -1253,10 +1234,9 @@ export default function GenerateNextOrder({
         sheetName: parsed.meta.sheetName,
         shipName: parsed.meta.shipName,
         shipCode: parsed.meta.shipCode,
+        isFreshProduceOrder: parsed.meta.isFreshProduceOrder,
         totalItems: parsed.meta.totalItems,
         itemsNeedingOrder: parsed.meta.itemsNeedingOrder,
-        fastSpoilageItems: parsed.meta.fastSpoilageItems,
-        longHoldProduceItems: parsed.meta.longHoldProduceItems,
         fmlMissingItems: parsed.meta.fmlMissingItems,
         fmlRunningLowItems: parsed.meta.fmlRunningLowItems,
       });
@@ -1315,7 +1295,8 @@ export default function GenerateNextOrder({
         aggregates: parsed.aggregates.length,
       });
     } catch (error) {
-      const text = error?.message || "Could not load yearly regional consumption file.";
+      const text =
+        error?.message || "Could not load yearly regional consumption file.";
 
       setMessage(text);
       window.alert(text);
@@ -1334,7 +1315,10 @@ export default function GenerateNextOrder({
         (filter === "covered" &&
           Number(item.suggestedOrder || 0) <= 0 &&
           Number(item.averageConsumptionPerDay || 0) > 0) ||
-        (filter === "review" && Number(item.averageConsumptionPerDay || 0) <= 0) ||
+        (filter === "review" &&
+          Number(item.averageConsumptionPerDay || 0) <= 0) ||
+        (filter === "shortBeforeArrival" &&
+          Number(item.preArrivalShortage || 0) > 0) ||
         (filter === "fastSpoilage" && item.produceRuleType === "fast") ||
         (filter === "longHoldProduce" && item.produceRuleType === "long");
 
@@ -1417,6 +1401,9 @@ export default function GenerateNextOrder({
       review: orderRows.filter(
         (item) => Number(item.averageConsumptionPerDay || 0) <= 0
       ).length,
+      shortBeforeArrival: orderRows.filter(
+        (item) => Number(item.preArrivalShortage || 0) > 0
+      ).length,
       fastSpoilage: orderRows.filter((item) => item.produceRuleType === "fast")
         .length,
       longHoldProduce: orderRows.filter((item) => item.produceRuleType === "long")
@@ -1433,19 +1420,14 @@ export default function GenerateNextOrder({
       Product: item.product,
       UOM: item.uom,
       StockOnHand: Number(item.stockOnHand || 0),
-      FutureOrders: Number(item.futureOrders || 0),
+      FutureOrdersShipOrdered: Number(item.futureOrders || 0),
       PastConsumption: Number(item.pastConsumption || 0),
       AverageConsumptionPerDay: Number(item.averageConsumptionPerDay || 0),
       DaysUntilArrival: Number(item.daysUntilArrival || 0),
       ConsumptionUntilArrival: Number(item.consumptionUntilArrival || 0),
       EstimatedQtyAtArrival: Number(item.estimatedQtyAtArrival || 0),
-      ArrivalDeficitShownNotAddedToOrder: Number(
-        item.arrivalDeficitBeforeNextOrder || 0
-      ),
-      UsableQtyAtArrivalForOrderCalculation: Number(
-        item.usableQtyAtArrivalForOrder || 0
-      ),
-      ProduceRule: item.produceRuleLabel || "Standard item",
+      PreArrivalShortageHighlightedOnly: Number(item.preArrivalShortage || 0),
+      UsableQtyAtArrivalForOrder: Number(item.usableQtyAtArrivalForOrder || 0),
       VoyageDays: Number(item.voyageDays || 0),
       VoyageNeed: Number(item.voyageNeed || 0),
       OrderBufferPercent: ORDER_BUFFER_PERCENT,
@@ -1453,10 +1435,87 @@ export default function GenerateNextOrder({
       TargetQtyForVoyage: Number(item.targetQtyForVoyage || 0),
       SuggestedAdditionalOrder: Number(item.suggestedOrder || 0),
       CurrentFileParQ: Number(item.parLevel || 0),
-      SuggestedParCurrentUsage: Number(item.currentUsageSuggestedPar || 0),
-      CoverageDifferenceAfterFutureOrder: Number(item.futureCoverageDifference || 0),
+      SuggestedParCurrentUsageVoyage: Number(item.currentUsageSuggestedPar || 0),
+      SuggestedParCurrentUsage7Days: Number(
+        item.currentUsageSuggestedPar7Days || 0
+      ),
+      CoverageDifferenceAfterFutureOrder: Number(
+        item.futureCoverageDifference || 0
+      ),
+      FreshProduceRule: item.produceRuleLabel || "",
       Status: item.statusLabel,
     }));
+
+  const getParComparisonExportRows = (rows = visibleOrderRows) =>
+    rows.map((item, index) => {
+      const allRegionsStats = getRegionalStatsForItem({
+        item,
+        yearlyRegionalConsumption,
+        regionFilter: YEARLY_REGION_ALL,
+        shipFilter: "",
+        parDays: PAR_REPORT_DAYS,
+      });
+
+      const selectedMarketStats =
+        selectedRegionalConsumptionRegion &&
+        selectedRegionalConsumptionRegion !== YEARLY_REGION_ALL
+          ? getRegionalStatsForItem({
+              item,
+              yearlyRegionalConsumption,
+              regionFilter: selectedRegionalConsumptionRegion,
+              shipFilter: "",
+              parDays: PAR_REPORT_DAYS,
+            })
+          : allRegionsStats;
+
+      return {
+        Line: index + 1,
+        ExcelRow: item.excelRow,
+        Code: item.code || "",
+        Product: item.product,
+        UOM: item.uom,
+        ShipOrderedQtyFutureOrders: Number(item.futureOrders || 0),
+        SuggestedOrderQty: Number(item.suggestedOrder || 0),
+        DifferenceSuggestedVsShipOrdered:
+          Number(item.suggestedOrder || 0) - Number(item.futureOrders || 0),
+        CurrentParLevelQ: Number(item.parLevel || 0),
+        CurrentUsageAvgPerDay: Number(item.averageConsumptionPerDay || 0),
+        SuggestedParCurrentUsage7Days: Number(
+          item.currentUsageSuggestedPar7Days || 0
+        ),
+        YearlyAllRegionsAvgPerDay: Number(allRegionsStats.avgDailyQty || 0),
+        YearlyAllRegionsSuggestedPar7Days: Number(
+          allRegionsStats.suggestedPar || 0
+        ),
+        SelectedMarket:
+          selectedRegionalConsumptionRegion &&
+          selectedRegionalConsumptionRegion !== YEARLY_REGION_ALL
+            ? selectedRegionalConsumptionRegion
+            : "All regions",
+        YearlySelectedMarketAvgPerDay: Number(
+          selectedMarketStats.avgDailyQty || 0
+        ),
+        YearlySelectedMarketSuggestedPar7Days: Number(
+          selectedMarketStats.suggestedPar || 0
+        ),
+        PreArrivalShortageHighlightedOnly: Number(item.preArrivalShortage || 0),
+        EstimatedQtyAtArrival: Number(item.estimatedQtyAtArrival || 0),
+        FreshProduceRule: item.produceRuleLabel || "",
+        Status: item.statusLabel,
+      };
+    });
+
+  const parComparisonRows = useMemo(() => {
+    if (view !== "parReport") return [];
+
+    return getParComparisonExportRows(visibleOrderRows);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    view,
+    visibleOrderRows,
+    yearlyRegionalConsumption,
+    selectedRegionalConsumptionRegion,
+  ]);
 
   const exportOrderView = () => {
     exportRowsToExcel(
@@ -1471,6 +1530,22 @@ export default function GenerateNextOrder({
       title: "Suggested Next Order",
       subtitle: `${activeShipName} • ${orderFileName || "No file name"}`,
       rows: getOrderExportRows(),
+    });
+  };
+
+  const exportParComparisonReport = () => {
+    exportRowsToExcel(
+      getParComparisonExportRows(visibleOrderRows),
+      "Order vs Par",
+      `order-vs-par-comparison-${activeShipCode || userShip || "ship"}.xlsx`
+    );
+  };
+
+  const printParComparisonReport = () => {
+    printSimpleTable({
+      title: "Order vs Par Comparison",
+      subtitle: `${activeShipName} • 7-day par comparison • ${orderFileName}`,
+      rows: getParComparisonExportRows(visibleOrderRows),
     });
   };
 
@@ -1539,15 +1614,16 @@ export default function GenerateNextOrder({
   const selectedInfoRegionalStats = useMemo(() => {
     if (!selectedInfoItem) return null;
 
-    const voyageDays = Number(selectedInfoItem.voyageDays || orderMeta.voyageDays || 0);
+    const voyageDays = Number(
+      selectedInfoItem.voyageDays || orderMeta.voyageDays || 0
+    );
 
     const allRegions = getRegionalStatsForItem({
       item: selectedInfoItem,
       yearlyRegionalConsumption,
       regionFilter: YEARLY_REGION_ALL,
       shipFilter: "",
-      voyageDays,
-      bufferPercent: referenceRegionalBufferPercent,
+      parDays: voyageDays,
     });
 
     const selectedMarket =
@@ -1558,8 +1634,7 @@ export default function GenerateNextOrder({
             yearlyRegionalConsumption,
             regionFilter: selectedRegionalConsumptionRegion,
             shipFilter: "",
-            voyageDays,
-            bufferPercent: referenceRegionalBufferPercent,
+            parDays: voyageDays,
           })
         : null;
 
@@ -1567,11 +1642,9 @@ export default function GenerateNextOrder({
       ? getRegionalStatsForItem({
           item: selectedInfoItem,
           yearlyRegionalConsumption,
-          regionFilter:
-            selectedRegionalConsumptionRegion || YEARLY_REGION_ALL,
+          regionFilter: selectedRegionalConsumptionRegion || YEARLY_REGION_ALL,
           shipFilter: activeShipCode,
-          voyageDays,
-          bufferPercent: referenceRegionalBufferPercent,
+          parDays: voyageDays,
         })
       : null;
 
@@ -1586,7 +1659,6 @@ export default function GenerateNextOrder({
     selectedRegionalConsumptionRegion,
     activeShipCode,
     orderMeta.voyageDays,
-    referenceRegionalBufferPercent,
   ]);
 
   const renderRegionalStatsBox = (title, stats) => (
@@ -1607,11 +1679,8 @@ export default function GenerateNextOrder({
             Average/day: <strong>{formatRegionalQty(stats.avgDailyQty)}</strong>
           </div>
           <div>
-            Suggested par for this voyage + {stats.bufferPercent}%:{" "}
+            Suggested par for {formatQty(stats.parDays)} day(s) + 25%:{" "}
             <strong>{formatRegionalQty(stats.suggestedPar)}</strong>
-          </div>
-          <div>
-            Total value: <strong>{formatMoney(stats.totalValue)}</strong>
           </div>
           <div>
             Evidence blocks: <strong>{stats.blocks}</strong>
@@ -1675,7 +1744,8 @@ export default function GenerateNextOrder({
               📅 Order date B2: <strong>{orderMeta.orderDate || "N/A"}</strong>
             </div>
             <div>
-              📅 Arrival date B3: <strong>{orderMeta.arrivalDate || "N/A"}</strong>
+              📅 Arrival date B3:{" "}
+              <strong>{orderMeta.arrivalDate || "N/A"}</strong>
             </div>
             <div>
               ⏱️ Days until arrival:{" "}
@@ -1689,14 +1759,14 @@ export default function GenerateNextOrder({
               🧮 Main order buffer: <strong>{ORDER_BUFFER_PERCENT}%</strong>
             </div>
             <div>
-  🥬 Fresh produce spoilage rules:{" "}
-  <strong>
-    {orderMeta.isFreshProduceOrder ? "Applied" : "Not applied"}
-  </strong>
-</div>
+              🥬 Fresh produce spoilage rules:{" "}
+              <strong>
+                {orderMeta.isFreshProduceOrder ? "Applied" : "Not applied"}
+              </strong>
+            </div>
             <div>
-              🍽️ Ingredient by Location rows:{" "}
-              <strong>{recipeRowsLoadedCount}</strong>
+              📊 Order vs Par report basis:{" "}
+              <strong>{PAR_REPORT_DAYS} days + {ORDER_BUFFER_PERCENT}%</strong>
             </div>
             {loading && <div>Loading...</div>}
           </div>
@@ -1763,8 +1833,8 @@ export default function GenerateNextOrder({
           />
 
           <p style={styles.emptyText}>
-            Main order calculation always uses voyage need + 25% order buffer.
-            Regional data is shown inside the More Info popup for comparison.
+            Main order calculation uses voyage need + 25%. The Order vs Par
+            report uses 7 days + 25% only for par comparison.
           </p>
         </div>
       </section>
@@ -1781,7 +1851,8 @@ export default function GenerateNextOrder({
           <div>
             <h2 style={styles.productTitle}>🧭 Reports</h2>
             <p style={{ ...styles.emptyText, margin: 0 }}>
-              Main view stays simple. Use More Info and Recipe Usage for details.
+              Suggested order stays simple. Use More Info, Recipe Usage, and
+              Order vs Par for deeper checks.
             </p>
           </div>
 
@@ -1806,6 +1877,17 @@ export default function GenerateNextOrder({
               onClick={() => setView("consumption")}
             >
               Consumption Report
+            </button>
+
+            <button
+              type="button"
+              style={{
+                ...styles.viewModeButton,
+                ...(view === "parReport" ? styles.viewModeButtonActive : {}),
+              }}
+              onClick={() => setView("parReport")}
+            >
+              Order vs Par
             </button>
 
             <button
@@ -1838,137 +1920,189 @@ export default function GenerateNextOrder({
           </p>
         )}
 
-        {(view === "order" || view === "consumption") && orderRows.length > 0 && (
-          <>
-            <div style={styles.infoBox}>
-              <div>
-                📦 Items loaded: <strong>{orderMeta.totalItems || 0}</strong>
+        {(view === "order" ||
+          view === "consumption" ||
+          view === "parReport") &&
+          orderRows.length > 0 && (
+            <>
+              <div style={styles.infoBox}>
+                <div>
+                  📦 Items loaded: <strong>{orderMeta.totalItems || 0}</strong>
+                </div>
+                <div>
+                  🔵 Suggested order items:{" "}
+                  <strong>{orderMeta.itemsNeedingOrder || 0}</strong>
+                </div>
+                <div>
+                  ✅ Covered items: <strong>{orderMeta.coveredItems || 0}</strong>
+                </div>
+                <div>
+                  ⚠️ Review items: <strong>{orderMeta.reviewItems || 0}</strong>
+                </div>
+                <div>
+                  🚨 Short before arrival:{" "}
+                  <strong>{orderMeta.preArrivalShortageItems || 0}</strong>
+                </div>
+                {orderMeta.isFreshProduceOrder && (
+                  <>
+                    <div>
+                      🥬 Quick-spoil produce:{" "}
+                      <strong>{orderMeta.fastSpoilageItems || 0}</strong>
+                    </div>
+                    <div>
+                      🥔 Long-hold produce:{" "}
+                      <strong>{orderMeta.longHoldProduceItems || 0}</strong>
+                    </div>
+                  </>
+                )}
+                <div>
+                  📋 FML rows found: <strong>{fmlRows.length}</strong>
+                </div>
               </div>
-              <div>
-                🔵 Suggested order items:{" "}
-                <strong>{orderMeta.itemsNeedingOrder || 0}</strong>
+
+              <input
+                placeholder="Search product, code, UOM or status..."
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                style={{ ...styles.searchInput, marginTop: 14 }}
+              />
+
+              <div style={styles.viewModeBox}>
+                <button
+                  type="button"
+                  style={{
+                    ...styles.viewModeButton,
+                    ...(filter === "all" ? styles.viewModeButtonActive : {}),
+                  }}
+                  onClick={() => setFilter("all")}
+                >
+                  All ({filterCounts.all})
+                </button>
+
+                <button
+                  type="button"
+                  style={{
+                    ...styles.viewModeButton,
+                    ...(filter === "needsOrder"
+                      ? styles.viewModeButtonActive
+                      : {}),
+                  }}
+                  onClick={() => setFilter("needsOrder")}
+                >
+                  Needs Order ({filterCounts.needsOrder})
+                </button>
+
+                <button
+                  type="button"
+                  style={{
+                    ...styles.viewModeButton,
+                    ...(filter === "covered" ? styles.viewModeButtonActive : {}),
+                  }}
+                  onClick={() => setFilter("covered")}
+                >
+                  Covered ({filterCounts.covered})
+                </button>
+
+                <button
+                  type="button"
+                  style={{
+                    ...styles.viewModeButton,
+                    ...(filter === "review" ? styles.viewModeButtonActive : {}),
+                  }}
+                  onClick={() => setFilter("review")}
+                >
+                  Review ({filterCounts.review})
+                </button>
+
+                <button
+                  type="button"
+                  style={{
+                    ...styles.viewModeButton,
+                    ...(filter === "shortBeforeArrival"
+                      ? styles.viewModeButtonActive
+                      : {}),
+                  }}
+                  onClick={() => setFilter("shortBeforeArrival")}
+                >
+                  Short Before Arrival ({filterCounts.shortBeforeArrival})
+                </button>
+
+                {orderMeta.isFreshProduceOrder && (
+                  <>
+                    <button
+                      type="button"
+                      style={{
+                        ...styles.viewModeButton,
+                        ...(filter === "fastSpoilage"
+                          ? styles.viewModeButtonActive
+                          : {}),
+                      }}
+                      onClick={() => setFilter("fastSpoilage")}
+                    >
+                      Quick Spoil ({filterCounts.fastSpoilage})
+                    </button>
+
+                    <button
+                      type="button"
+                      style={{
+                        ...styles.viewModeButton,
+                        ...(filter === "longHoldProduce"
+                          ? styles.viewModeButtonActive
+                          : {}),
+                      }}
+                      onClick={() => setFilter("longHoldProduce")}
+                    >
+                      Long Hold ({filterCounts.longHoldProduce})
+                    </button>
+                  </>
+                )}
+
+                {view === "parReport" ? (
+                  <>
+                    <button
+                      type="button"
+                      style={styles.backButton}
+                      onClick={printParComparisonReport}
+                    >
+                      🖨️ Print Order vs Par
+                    </button>
+
+                    <button
+                      type="button"
+                      style={styles.primaryButton}
+                      onClick={exportParComparisonReport}
+                    >
+                      📥 Export Order vs Par
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      style={styles.backButton}
+                      onClick={printOrderView}
+                    >
+                      🖨️ Print
+                    </button>
+
+                    <button
+                      type="button"
+                      style={styles.primaryButton}
+                      onClick={exportOrderView}
+                    >
+                      📥 Export Excel
+                    </button>
+                  </>
+                )}
               </div>
-              <div>
-                ✅ Covered items: <strong>{orderMeta.coveredItems || 0}</strong>
-              </div>
-              <div>
-                ⚠️ Review items: <strong>{orderMeta.reviewItems || 0}</strong>
-              </div>
-              <div>
-                ⚡ Quick-spoil items:{" "}
-                <strong>{orderMeta.fastSpoilageItems || 0}</strong>
-              </div>
-              <div>
-                🥔 Long-hold produce items:{" "}
-                <strong>{orderMeta.longHoldProduceItems || 0}</strong>
-              </div>
-              <div>
-                📋 FML rows found: <strong>{fmlRows.length}</strong>
-              </div>
-            </div>
 
-            <input
-              placeholder="Search product, code, UOM or status..."
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              style={{ ...styles.searchInput, marginTop: 14 }}
-            />
-
-            <div style={styles.viewModeBox}>
-              <button
-                type="button"
-                style={{
-                  ...styles.viewModeButton,
-                  ...(filter === "all" ? styles.viewModeButtonActive : {}),
-                }}
-                onClick={() => setFilter("all")}
-              >
-                All ({filterCounts.all})
-              </button>
-
-              <button
-                type="button"
-                style={{
-                  ...styles.viewModeButton,
-                  ...(filter === "needsOrder" ? styles.viewModeButtonActive : {}),
-                }}
-                onClick={() => setFilter("needsOrder")}
-              >
-                Needs Order ({filterCounts.needsOrder})
-              </button>
-
-              <button
-                type="button"
-                style={{
-                  ...styles.viewModeButton,
-                  ...(filter === "covered" ? styles.viewModeButtonActive : {}),
-                }}
-                onClick={() => setFilter("covered")}
-              >
-                Covered ({filterCounts.covered})
-              </button>
-
-              <button
-                type="button"
-                style={{
-                  ...styles.viewModeButton,
-                  ...(filter === "review" ? styles.viewModeButtonActive : {}),
-                }}
-                onClick={() => setFilter("review")}
-              >
-                Review ({filterCounts.review})
-              </button>
-
-              {orderMeta.isFreshProduceOrder && (
-  <>
-    <button
-      type="button"
-      style={{
-        ...styles.viewModeButton,
-        ...(filter === "fastSpoilage" ? styles.viewModeButtonActive : {}),
-      }}
-      onClick={() => setFilter("fastSpoilage")}
-    >
-      Quick Spoil ({filterCounts.fastSpoilage})
-    </button>
-
-    <button
-      type="button"
-      style={{
-        ...styles.viewModeButton,
-        ...(filter === "longHoldProduce"
-          ? styles.viewModeButtonActive
-          : {}),
-      }}
-      onClick={() => setFilter("longHoldProduce")}
-    >
-      Long Hold ({filterCounts.longHoldProduce})
-    </button>
-  </>
-)}
-
-              <button
-                type="button"
-                style={styles.backButton}
-                onClick={printOrderView}
-              >
-                🖨️ Print
-              </button>
-
-              <button
-                type="button"
-                style={styles.primaryButton}
-                onClick={exportOrderView}
-              >
-                📥 Export Excel
-              </button>
-            </div>
-
-            {visibleOrderRows.length === 0 && (
-              <p style={styles.emptyText}>No products match this search/filter.</p>
-            )}
-          </>
-        )}
+              {visibleOrderRows.length === 0 && (
+                <p style={styles.emptyText}>
+                  No products match this search/filter.
+                </p>
+              )}
+            </>
+          )}
 
         {view === "order" && orderRows.length > 0 && (
           <div style={localStyles.orderGrid}>
@@ -1990,8 +2124,8 @@ export default function GenerateNextOrder({
                   <div>
                     <div style={localStyles.productName}>{item.product}</div>
                     <div style={styles.recipeMeta}>
-                      Code: {item.code || "N/A"} • UOM: {item.uom || "N/A"} • Row{" "}
-                      {item.excelRow}
+                      Code: {item.code || "N/A"} • UOM: {item.uom || "N/A"} •
+                      Row {item.excelRow}
                     </div>
                   </div>
 
@@ -2020,7 +2154,7 @@ export default function GenerateNextOrder({
                   </div>
 
                   <div style={localStyles.metricBox}>
-                    <span>Future orders</span>
+                    <span>Ship ordered</span>
                     <strong>{formatQty(item.futureOrders)}</strong>
                   </div>
 
@@ -2044,12 +2178,34 @@ export default function GenerateNextOrder({
                   </div>
                 </div>
 
+                {Number(item.preArrivalShortage || 0) > 0 && (
+                  <div style={styles.statusBad}>
+                    Short before arrival: {formatQty(item.preArrivalShortage)}.
+                    This shortage is highlighted only and not added to the next
+                    order.
+                  </div>
+                )}
+
+                {orderMeta.isFreshProduceOrder && item.produceRuleType !== "standard" && (
+                  <div
+                    style={
+                      item.produceRuleType === "fast"
+                        ? styles.statusWarning
+                        : styles.statusNeutral
+                    }
+                  >
+                    {item.produceRuleLabel}
+                    {item.produceOrderFullTarget
+                      ? " — order full target quantity."
+                      : ""}
+                  </div>
+                )}
+
                 <div style={styles.infoBox}>
                   <div>
                     Voyage need + 25% buffer:{" "}
                     <strong>{formatQty(item.targetQtyForVoyage)}</strong>
                   </div>
-
                   <div>
                     Coverage after future order:{" "}
                     <strong
@@ -2064,26 +2220,6 @@ export default function GenerateNextOrder({
                       {formatQty(item.futureCoverageDifference)}
                     </strong>
                   </div>
-
-                  {Number(item.arrivalDeficitBeforeNextOrder || 0) > 0 && (
-                    <div style={styles.statusWarning}>
-                      Arrival shortage warning:{" "}
-                      {formatQty(item.arrivalDeficitBeforeNextOrder)} not added to
-                      next order
-                    </div>
-                  )}
-
-                  {item.produceRuleType === "fast" && (
-                    <div style={styles.statusWarning}>
-                      Quick-spoil produce: ordering full calculated target
-                    </div>
-                  )}
-
-                  {item.produceRuleType === "long" && (
-                    <div style={styles.statusNeutral}>
-                      Long-hold produce: normal stock deduction used
-                    </div>
-                  )}
                 </div>
 
                 <div style={styles.headerActions}>
@@ -2122,18 +2258,21 @@ export default function GenerateNextOrder({
 
                 <div style={localStyles.reportMetrics}>
                   <span>Stock: {formatQty(item.stockOnHand)}</span>
-                  <span>Future: {formatQty(item.futureOrders)}</span>
+                  <span>Ship ordered: {formatQty(item.futureOrders)}</span>
                   <span>Past: {formatQty(item.pastConsumption)}</span>
                   <span>Avg/day: {formatQty(item.averageConsumptionPerDay)}</span>
                   <span>Arrival: {formatQty(item.estimatedQtyAtArrival)}</span>
-                  <span>
-                    Arrival shortage not added:{" "}
-                    {formatQty(item.arrivalDeficitBeforeNextOrder)}
-                  </span>
+                  <span>Pre-arrival short: {formatQty(item.preArrivalShortage)}</span>
                   <span>Suggested: {formatQty(item.suggestedOrder)}</span>
                   <span>Current par Q: {formatQty(item.parLevel)}</span>
-                  <span>Suggested par: {formatQty(item.currentUsageSuggestedPar)}</span>
-                  <span>Rule: {item.produceRuleLabel}</span>
+                  <span>
+                    Suggested par voyage:{" "}
+                    {formatQty(item.currentUsageSuggestedPar)}
+                  </span>
+                  <span>
+                    Suggested par 7 days:{" "}
+                    {formatQty(item.currentUsageSuggestedPar7Days)}
+                  </span>
                 </div>
 
                 <div style={styles.headerActions}>
@@ -2152,6 +2291,101 @@ export default function GenerateNextOrder({
                   >
                     🍽️ Recipe Usage
                   </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {view === "parReport" && orderRows.length > 0 && (
+          <div style={localStyles.reportList}>
+            <div style={styles.infoBox}>
+              <div>
+                This report compares: ship ordered quantity, suggested order
+                quantity, current par Q, current usage suggested 7-day par, and
+                last-year 7-day suggested par.
+              </div>
+              <div>
+                Report par basis: <strong>7 days + {ORDER_BUFFER_PERCENT}%</strong>
+              </div>
+              <div>
+                Main order calculation is not changed by this report.
+              </div>
+            </div>
+
+            {parComparisonRows.map((row, index) => (
+              <div key={`par-${row.ExcelRow}-${row.Code}-${index}`} style={localStyles.parRow}>
+                <div>
+                  <strong>{row.Product}</strong>
+                  <div style={styles.recipeMeta}>
+                    Code: {row.Code || "N/A"} • UOM: {row.UOM || "N/A"} • Row{" "}
+                    {row.ExcelRow}
+                  </div>
+                  {row.FreshProduceRule && (
+                    <div style={styles.recipeMeta}>
+                      Rule: {row.FreshProduceRule}
+                    </div>
+                  )}
+                </div>
+
+                <div style={localStyles.parMetricGrid}>
+                  <div style={localStyles.metricBox}>
+                    <span>Ship ordered</span>
+                    <strong>{formatQty(row.ShipOrderedQtyFutureOrders)}</strong>
+                  </div>
+
+                  <div style={localStyles.metricBoxStrong}>
+                    <span>Suggested order</span>
+                    <strong>{formatQty(row.SuggestedOrderQty)}</strong>
+                  </div>
+
+                  <div style={localStyles.metricBox}>
+                    <span>Suggested - ordered</span>
+                    <strong
+                      style={{
+                        color:
+                          Number(row.DifferenceSuggestedVsShipOrdered || 0) > 0
+                            ? "#b00020"
+                            : "#2e7d32",
+                      }}
+                    >
+                      {Number(row.DifferenceSuggestedVsShipOrdered || 0) >= 0
+                        ? "+"
+                        : ""}
+                      {formatQty(row.DifferenceSuggestedVsShipOrdered)}
+                    </strong>
+                  </div>
+
+                  <div style={localStyles.metricBox}>
+                    <span>Current par Q</span>
+                    <strong>{formatQty(row.CurrentParLevelQ)}</strong>
+                  </div>
+
+                  <div style={localStyles.metricBox}>
+                    <span>Current usage par 7d</span>
+                    <strong>
+                      {formatQty(row.SuggestedParCurrentUsage7Days)}
+                    </strong>
+                  </div>
+
+                  <div style={localStyles.metricBox}>
+                    <span>Year all regions par 7d</span>
+                    <strong>
+                      {formatQty(row.YearlyAllRegionsSuggestedPar7Days)}
+                    </strong>
+                  </div>
+
+                  <div style={localStyles.metricBox}>
+                    <span>Year market par 7d</span>
+                    <strong>
+                      {formatQty(row.YearlySelectedMarketSuggestedPar7Days)}
+                    </strong>
+                  </div>
+
+                  <div style={localStyles.metricBox}>
+                    <span>Year market avg/day</span>
+                    <strong>{formatQty(row.YearlySelectedMarketAvgPerDay)}</strong>
+                  </div>
                 </div>
               </div>
             ))}
@@ -2331,7 +2565,7 @@ export default function GenerateNextOrder({
                   <strong>{formatQty(selectedInfoItem.stockOnHand)}</strong>
                 </div>
                 <div>
-                  Future orders:{" "}
+                  Ship ordered / future orders:{" "}
                   <strong>{formatQty(selectedInfoItem.futureOrders)}</strong>
                 </div>
                 <div>
@@ -2358,16 +2592,8 @@ export default function GenerateNextOrder({
                   </strong>
                 </div>
                 <div>
-                  Arrival shortage not added to order:{" "}
-                  <strong>
-                    {formatQty(selectedInfoItem.arrivalDeficitBeforeNextOrder)}
-                  </strong>
-                </div>
-                <div>
-                  Usable arrival qty for order calc:{" "}
-                  <strong>
-                    {formatQty(selectedInfoItem.usableQtyAtArrivalForOrder)}
-                  </strong>
+                  Pre-arrival shortage highlighted only:{" "}
+                  <strong>{formatQty(selectedInfoItem.preArrivalShortage)}</strong>
                 </div>
               </div>
 
@@ -2410,7 +2636,8 @@ export default function GenerateNextOrder({
                   <strong
                     style={{
                       color:
-                        Number(selectedInfoItem.futureCoverageDifference || 0) >= 0
+                        Number(selectedInfoItem.futureCoverageDifference || 0) >=
+                        0
                           ? "#2e7d32"
                           : "#b00020",
                     }}
@@ -2422,15 +2649,15 @@ export default function GenerateNextOrder({
                   </strong>
                 </div>
                 <div>
-                  Rule:{" "}
-                  <strong>
-                    {selectedInfoItem.produceRuleLabel || "Standard item"}
-                  </strong>
-                </div>
-                <div>
                   Status: <strong>{selectedInfoItem.statusLabel}</strong>
                 </div>
                 <div>{selectedInfoItem.statusDescription}</div>
+                {selectedInfoItem.produceRuleLabel && (
+                  <div>
+                    Fresh produce rule:{" "}
+                    <strong>{selectedInfoItem.produceRuleLabel}</strong>
+                  </div>
+                )}
               </div>
 
               <div style={styles.infoBox}>
@@ -2440,18 +2667,15 @@ export default function GenerateNextOrder({
                   <strong>{formatQty(selectedInfoItem.parLevel)}</strong>
                 </div>
                 <div>
-                  Suggested par from current usage:{" "}
+                  Suggested par from current usage for voyage:{" "}
                   <strong>
                     {formatQty(selectedInfoItem.currentUsageSuggestedPar)}
                   </strong>
                 </div>
                 <div>
-                  Difference from current par:{" "}
+                  Suggested par from current usage for 7 days:{" "}
                   <strong>
-                    {formatQty(
-                      Number(selectedInfoItem.currentUsageSuggestedPar || 0) -
-                        Number(selectedInfoItem.parLevel || 0)
-                    )}
+                    {formatQty(selectedInfoItem.currentUsageSuggestedPar7Days)}
                   </strong>
                 </div>
               </div>
@@ -2504,26 +2728,18 @@ export default function GenerateNextOrder({
             </h2>
 
             <p style={styles.emptyText}>
-              Uses the permanent Ingredient by Location file loaded in page.js.
+              Uses the permanent Ingredient by Location file from page.js.
             </p>
 
             <div style={styles.infoBox}>
               <div>
-                Ingredient by Location usable rows:{" "}
-                <strong>{recipeRowsLoadedCount}</strong>
+                Recipe rows loaded:{" "}
+                <strong>{Math.max((recipeRows || []).length - 1, 0)}</strong>
               </div>
               <div>
                 Matches found: <strong>{selectedRecipeUsageRows.length}</strong>
               </div>
             </div>
-
-            {recipeRowsLoadedCount === 0 && (
-              <p style={styles.warningText}>
-                Ingredient by Location rows are not loaded into Generate Next Order.
-                Check page.js and make sure recipeRows is passed to this component
-                and the permanent file loads when productMode is nextorder.
-              </p>
-            )}
 
             {selectedRecipeUsageRows.length === 0 ? (
               <p style={styles.emptyText}>
@@ -2691,6 +2907,21 @@ const localStyles = {
     gap: 7,
     fontSize: 12,
     color: "#555",
+  },
+
+  parRow: {
+    border: "1px solid #ddd",
+    borderRadius: 14,
+    padding: 12,
+    background: "#fafafa",
+    display: "grid",
+    gap: 10,
+  },
+
+  parMetricGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(135px, 1fr))",
+    gap: 8,
   },
 
   infoModal: {
