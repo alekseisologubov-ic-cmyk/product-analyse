@@ -1,7 +1,13 @@
 export const APP_FILE_BUCKET = "app-files";
-export const INGREDIENT_BY_LOCATION_PATH = "ingredient-by-location/latest.xlsx";
 
-export const uploadIngredientByLocationFileToStorage = async ({ supabase, file }) => {
+export const INGREDIENT_BY_LOCATION_FOLDER = "ingredient-by-location";
+export const INGREDIENT_BY_LOCATION_PATH = `${INGREDIENT_BY_LOCATION_FOLDER}/latest.xlsx`;
+export const INGREDIENT_BY_LOCATION_MANIFEST_PATH = `${INGREDIENT_BY_LOCATION_FOLDER}/manifest.json`;
+
+export const uploadIngredientByLocationFileToStorage = async ({
+  supabase,
+  file,
+}) => {
   if (!supabase) {
     throw new Error("Supabase is not connected.");
   }
@@ -27,7 +33,9 @@ export const uploadIngredientByLocationFileToStorage = async ({ supabase, file }
   return true;
 };
 
-export const downloadIngredientByLocationFileFromStorage = async ({ supabase }) => {
+export const downloadIngredientByLocationFileFromStorage = async ({
+  supabase,
+}) => {
   if (!supabase) {
     throw new Error("Supabase is not connected.");
   }
@@ -47,21 +55,34 @@ export const downloadIngredientByLocationFileFromStorage = async ({ supabase }) 
   return data.arrayBuffer();
 };
 
-const PERMANENT_FILES_BUCKET = "permanent-files";
-
-const INGREDIENT_BY_LOCATION_FOLDER = "ingredient-by-location";
-const INGREDIENT_BY_LOCATION_MANIFEST_PATH = `${INGREDIENT_BY_LOCATION_FOLDER}/manifest.json`;
-
 const downloadStorageJson = async ({ supabase, path }) => {
+  if (!supabase) {
+    throw new Error("Supabase is not connected.");
+  }
+
+  if (!path) {
+    throw new Error("Storage JSON path is missing.");
+  }
+
   const { data, error } = await supabase.storage
-    .from(PERMANENT_FILES_BUCKET)
+    .from(APP_FILE_BUCKET)
     .download(path);
 
-  if (error) throw error;
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    throw new Error(`JSON file was not found: ${path}`);
+  }
 
   const text = await data.text();
 
-  return JSON.parse(text);
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`Could not read JSON file: ${path}`);
+  }
 };
 
 const uploadStorageJson = async ({
@@ -71,19 +92,31 @@ const uploadStorageJson = async ({
   cacheControl = "60",
   upsert = true,
 }) => {
+  if (!supabase) {
+    throw new Error("Supabase is not connected.");
+  }
+
+  if (!path) {
+    throw new Error("Storage JSON path is missing.");
+  }
+
   const blob = new Blob([JSON.stringify(value)], {
     type: "application/json",
   });
 
   const { error } = await supabase.storage
-    .from(PERMANENT_FILES_BUCKET)
+    .from(APP_FILE_BUCKET)
     .upload(path, blob, {
       cacheControl,
       contentType: "application/json",
       upsert,
     });
 
-  if (error) throw error;
+  if (error) {
+    throw error;
+  }
+
+  return true;
 };
 
 export const uploadIngredientByLocationParsedDataToStorage = async ({
@@ -97,6 +130,10 @@ export const uploadIngredientByLocationParsedDataToStorage = async ({
 
   if (!parsed?.rows?.length) {
     throw new Error("No parsed allergen rows to save.");
+  }
+
+  if (!parsed?.venues?.length) {
+    throw new Error("No parsed allergen venues to save.");
   }
 
   const version = new Date().toISOString().replace(/[:.]/g, "-");
