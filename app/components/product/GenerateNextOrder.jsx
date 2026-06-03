@@ -2353,7 +2353,7 @@ export default function GenerateNextOrder({
                   </div>
                 )}
 
-                <div style={styles.infoBox}>
+                <div style={localStyles.compactInfoBox}>
                   <div>
                     Voyage need + 25% buffer:{" "}
                     <strong>{formatQty(item.targetQtyForVoyage)}</strong>
