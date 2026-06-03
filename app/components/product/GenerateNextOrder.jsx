@@ -372,6 +372,25 @@ const LONG_HOLD_PRODUCE_WORDS = [
   "GRAPEFRUIT",
 ];
 
+const getStandardProduceRule = () => ({
+  type: "standard",
+  label: "Standard item",
+  orderFullTarget: false,
+});
+
+const isFreshProduceOrderFile = (...values) => {
+  const text = values
+    .map((value) => cleanText(value))
+    .join(" ")
+    .replace(/[_\-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!text) return false;
+
+  return text.includes("FRESH PRODUCE");
+};
+
 const getFreshProduceOrderRule = (productName) => {
   const text = cleanText(productName);
 
