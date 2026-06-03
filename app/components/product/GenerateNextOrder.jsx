@@ -391,15 +391,15 @@ const isFreshProduceOrderFile = (...values) => {
   return text.includes("FRESH PRODUCE");
 };
 
-const getFreshProduceOrderRule = (productName) => {
+const getFreshProduceOrderRule = (productName, freshProduceOrderEnabled = false) => {
+  if (!freshProduceOrderEnabled) {
+    return getStandardProduceRule();
+  }
+
   const text = cleanText(productName);
 
   if (!text) {
-    return {
-      type: "standard",
-      label: "Standard item",
-      orderFullTarget: false,
-    };
+    return getStandardProduceRule();
   }
 
   const isFastSpoilage = FAST_SPOILAGE_PRODUCE_WORDS.some((word) =>
@@ -409,7 +409,7 @@ const getFreshProduceOrderRule = (productName) => {
   if (isFastSpoilage) {
     return {
       type: "fast",
-      label: "Quick-spoil produce",
+      label: "Quick-spoil fresh produce",
       orderFullTarget: true,
     };
   }
@@ -421,18 +421,17 @@ const getFreshProduceOrderRule = (productName) => {
   if (isLongHoldProduce) {
     return {
       type: "long",
-      label: "Long-hold produce",
+      label: "Long-hold fresh produce",
       orderFullTarget: false,
     };
   }
 
   return {
-    type: "standard",
-    label: "Standard item",
+    type: "fresh-standard",
+    label: "Fresh produce - standard",
     orderFullTarget: false,
   };
 };
-
 const exportRowsToExcel = (rows, sheetName, fileName) => {
   if (!rows.length) {
     window.alert("No rows to export.");
