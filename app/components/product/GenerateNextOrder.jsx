@@ -2331,11 +2331,10 @@ export default function GenerateNextOrder({
                 </div>
 
                 {Number(item.preArrivalShortage || 0) > 0 && (
-                  <div style={styles.statusBad}>
-                    Short before arrival: {formatQty(item.preArrivalShortage)}.
-                    This shortage is highlighted only and not added to the next
-                    order.
-                  </div>
+                  <div style={localStyles.compactBad}>
+  Short before arrival: {formatQty(item.preArrivalShortage)}.
+  Highlight only, not added to next order.
+</div>
                 )}
 
                 {orderMeta.isFreshProduceOrder && item.produceRuleType !== "standard" && (
