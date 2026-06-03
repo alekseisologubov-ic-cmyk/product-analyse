@@ -2977,6 +2977,7 @@ export default function GenerateNextOrder({
   );
 }
 
+  const localStyles = {
   orderGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 165px), 1fr))",
@@ -3110,3 +3111,77 @@ export default function GenerateNextOrder({
     lineHeight: 1.2,
     textAlign: "center",
   },
+
+  reportList: {
+    display: "grid",
+    gap: 8,
+    marginTop: 14,
+  },
+
+  reportRow: {
+    border: "1px solid #ddd",
+    borderRadius: 14,
+    padding: 12,
+    background: "#fafafa",
+    display: "grid",
+    gap: 9,
+  },
+
+  reportMetrics: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 7,
+    fontSize: 12,
+    color: "#555",
+  },
+
+  parRow: {
+    border: "1px solid #ddd",
+    borderRadius: 14,
+    padding: 12,
+    background: "#fafafa",
+    display: "grid",
+    gap: 10,
+  },
+
+  parMetricGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(135px, 1fr))",
+    gap: 8,
+  },
+
+  infoModal: {
+    background: "#fff",
+    borderRadius: 18,
+    padding: 22,
+    maxWidth: 1100,
+    width: "96%",
+    maxHeight: "90vh",
+    overflowY: "auto",
+    position: "relative",
+    boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+  },
+
+  detailGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+    gap: 12,
+    marginBottom: 12,
+  },
+
+  recipeUsageList: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))",
+    gap: 10,
+    marginTop: 14,
+  },
+
+  recipeUsageCard: {
+    border: "1px solid #ddd",
+    borderRadius: 14,
+    padding: 12,
+    background: "#fafafa",
+    display: "grid",
+    gap: 4,
+  },
+};
