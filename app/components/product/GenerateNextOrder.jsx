@@ -14,8 +14,8 @@ const ORDER_BUFFER_MULTIPLIER = 1 + ORDER_BUFFER_PERCENT / 100;
 const PAR_REPORT_DAYS = 7;
 const PAR_REPORT_DISPLAY_LIMIT = 500;
 
-// Excel column Y = onboard / current ordered quantity.
-// A = 0, B = 1, ..., Y = 24.
+// Excel column Y = current onboard ordered quantity.
+// A = 0, B = 1, C = 2, ... Y = 24.
 const ONBOARD_ORDERED_QTY_COLUMN_INDEX = 24;
 
 const cleanText = (value) =>
@@ -773,8 +773,9 @@ const parseNextOrderWorkbook = (workbook, sourceFileName = "") => {
     const stockOnHand = toNumber(row[3]);
     const parLevel = toNumber(row[16]);
 
-    // Column Y = onboard / current ordered quantity.
-    // Used only for Order vs Par comparison.
+    // Column Y only.
+    // This is used for Order vs Par report comparison.
+    // Do not replace this with F:N future orders.
     const onboardOrderedQty = toNumber(row[ONBOARD_ORDERED_QTY_COLUMN_INDEX]);
 
     // F:N future orders remain used for estimated arrival coverage in main logic.
@@ -965,11 +966,23 @@ const getIngredientHeaderIndexes = (rows = []) => {
     venue: findExact(["RestaurantName", "Restaurant Name"], 1),
     menuName: findExact(["MenuName", "Menu Name"], 3),
     ingredientCode: findExact(
-      ["Code", "IngredientCode", "Ingredient Code", "ProductCode", "Product Code"],
+      [
+        "Code",
+        "IngredientCode",
+        "Ingredient Code",
+        "ProductCode",
+        "Product Code",
+      ],
       6
     ),
     ingredientName: findExact(
-      ["Name", "IngredientName", "Ingredient Name", "ProductName", "Product Name"],
+      [
+        "Name",
+        "IngredientName",
+        "Ingredient Name",
+        "ProductName",
+        "Product Name",
+      ],
       7
     ),
     assigned: findExact(["Assigned"], 12),
@@ -1155,7 +1168,8 @@ const getRegionalStatsForItem = ({
 
   const matchedRows = sourceRows.filter((row) => {
     const rowRegion = row.__region ?? safeText(row.region);
-    const rowShip = row.__ship ?? normalizeShipCode(row.ship) ?? safeText(row.ship);
+    const rowShip =
+      row.__ship || normalizeShipCode(row.ship) || safeText(row.ship);
 
     if (
       wantedRegion &&
@@ -1210,7 +1224,9 @@ const getRegionalStatsForItem = ({
     ...new Set(
       matchedRows
         .map((row) =>
-          `${safeText(row.productCode) || "No code"} - ${safeText(row.productName)}`
+          `${safeText(row.productCode) || "No code"} - ${safeText(
+            row.productName
+          )}`
         )
         .filter(Boolean)
     ),
@@ -1520,7 +1536,7 @@ export default function GenerateNextOrder({
       Product: item.product,
       UOM: item.uom,
       StockOnHand: Number(item.stockOnHand || 0),
-      OnboardOrderedQtyColumnY: Number(item.onboardOrderedQty || 0),
+      OnboardOrderedQtyColumnY: Number(item.onboardOrderedQty ?? 0),
       FutureOrdersFtoNUsedForArrivalCoverage: Number(item.futureOrders || 0),
       PastConsumption: Number(item.pastConsumption || 0),
       AverageConsumptionPerDay: Number(item.averageConsumptionPerDay || 0),
@@ -1571,8 +1587,12 @@ export default function GenerateNextOrder({
             })
           : allRegionsStats;
 
-      const onboardOrderedQty = Number(item.onboardOrderedQty || 0);
-      const suggestedOrderQty = Number(item.suggestedOrder || 0);
+      // IMPORTANT:
+      // This is column Y only.
+      // Do not use futureOrders here.
+      // Do not use || futureOrders as fallback, because blank/zero column Y must stay 0.
+      const onboardOrderedQty = Number(item.onboardOrderedQty ?? 0);
+      const suggestedOrderQty = Number(item.suggestedOrder ?? 0);
 
       return {
         Line: index + 1,
@@ -1580,32 +1600,39 @@ export default function GenerateNextOrder({
         Code: item.code || "",
         Product: item.product,
         UOM: item.uom,
+
         OnboardOrderedQtyColumnY: onboardOrderedQty,
         SuggestedOrderQty: suggestedOrderQty,
         DifferenceSuggestedVsOnboardOrdered:
           suggestedOrderQty - onboardOrderedQty,
-        CurrentParLevelQ: Number(item.parLevel || 0),
-        CurrentUsageAvgPerDay: Number(item.averageConsumptionPerDay || 0),
+
+        CurrentParLevelQ: Number(item.parLevel ?? 0),
+        CurrentUsageAvgPerDay: Number(item.averageConsumptionPerDay ?? 0),
         SuggestedParCurrentUsage7Days: Number(
-          item.currentUsageSuggestedPar7Days || 0
+          item.currentUsageSuggestedPar7Days ?? 0
         ),
-        YearlyAllRegionsAvgPerDay: Number(allRegionsStats.avgDailyQty || 0),
+
+        YearlyAllRegionsAvgPerDay: Number(allRegionsStats.avgDailyQty ?? 0),
         YearlyAllRegionsSuggestedPar7Days: Number(
-          allRegionsStats.suggestedPar || 0
+          allRegionsStats.suggestedPar ?? 0
         ),
+
         SelectedMarket:
           selectedRegionalConsumptionRegion &&
           selectedRegionalConsumptionRegion !== YEARLY_REGION_ALL
             ? selectedRegionalConsumptionRegion
             : "All regions",
+
         YearlySelectedMarketAvgPerDay: Number(
-          selectedMarketStats.avgDailyQty || 0
+          selectedMarketStats.avgDailyQty ?? 0
         ),
+
         YearlySelectedMarketSuggestedPar7Days: Number(
-          selectedMarketStats.suggestedPar || 0
+          selectedMarketStats.suggestedPar ?? 0
         ),
-        PreArrivalShortageHighlightedOnly: Number(item.preArrivalShortage || 0),
-        EstimatedQtyAtArrival: Number(item.estimatedQtyAtArrival || 0),
+
+        PreArrivalShortageHighlightedOnly: Number(item.preArrivalShortage ?? 0),
+        EstimatedQtyAtArrival: Number(item.estimatedQtyAtArrival ?? 0),
         FreshProduceRule: item.produceRuleLabel || "",
         Status: item.statusLabel,
       };
@@ -2431,15 +2458,18 @@ export default function GenerateNextOrder({
                 column Y, suggested order quantity, current par Q, current usage
                 suggested 7-day par, and last-year 7-day suggested par.
               </div>
+
               <div>
                 Report par basis: <strong>7 days + {ORDER_BUFFER_PERCENT}%</strong>
               </div>
+
               <div>
                 Last-year match rule:{" "}
                 <strong>
                   code only; if no code, exact normalized product description only.
                 </strong>
               </div>
+
               <div>
                 Main order calculation still uses F:N future orders for arrival
                 coverage. This report compares suggested order only against
@@ -2455,82 +2485,90 @@ export default function GenerateNextOrder({
               </div>
             )}
 
-            {displayedParComparisonRows.map((row, index) => (
-              <div key={`par-${row.ExcelRow}-${row.Code}-${index}`} style={localStyles.parRow}>
-                <div>
-                  <strong>{row.Product}</strong>
-                  <div style={styles.recipeMeta}>
-                    Code: {row.Code || "N/A"} • UOM: {row.UOM || "N/A"} • Row{" "}
-                    {row.ExcelRow}
-                  </div>
-                  {row.FreshProduceRule && (
+            {displayedParComparisonRows.map((row, index) => {
+              const orderedColumnY = Number(row.OnboardOrderedQtyColumnY ?? 0);
+              const suggestedOrder = Number(row.SuggestedOrderQty ?? 0);
+              const difference = Number(
+                row.DifferenceSuggestedVsOnboardOrdered ?? 0
+              );
+
+              return (
+                <div
+                  key={`par-${row.ExcelRow}-${row.Code}-${index}`}
+                  style={localStyles.parRow}
+                >
+                  <div>
+                    <strong>{row.Product}</strong>
+
                     <div style={styles.recipeMeta}>
-                      Rule: {row.FreshProduceRule}
+                      Code: {row.Code || "N/A"} • UOM: {row.UOM || "N/A"} • Row{" "}
+                      {row.ExcelRow}
                     </div>
-                  )}
+
+                    {row.FreshProduceRule && (
+                      <div style={styles.recipeMeta}>
+                        Rule: {row.FreshProduceRule}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={localStyles.parMetricGrid}>
+                    <div style={localStyles.metricBox}>
+                      <span>Ordered col Y</span>
+                      <strong>{formatQty(orderedColumnY)}</strong>
+                    </div>
+
+                    <div style={localStyles.metricBoxStrong}>
+                      <span>Suggested order</span>
+                      <strong>{formatQty(suggestedOrder)}</strong>
+                    </div>
+
+                    <div style={localStyles.metricBox}>
+                      <span>Suggested - ordered Y</span>
+                      <strong
+                        style={{
+                          color: difference > 0 ? "#b00020" : "#2e7d32",
+                        }}
+                      >
+                        {difference >= 0 ? "+" : ""}
+                        {formatQty(difference)}
+                      </strong>
+                    </div>
+
+                    <div style={localStyles.metricBox}>
+                      <span>Current par Q</span>
+                      <strong>{formatQty(row.CurrentParLevelQ)}</strong>
+                    </div>
+
+                    <div style={localStyles.metricBox}>
+                      <span>Current usage par 7d</span>
+                      <strong>
+                        {formatQty(row.SuggestedParCurrentUsage7Days)}
+                      </strong>
+                    </div>
+
+                    <div style={localStyles.metricBox}>
+                      <span>Year all regions par 7d</span>
+                      <strong>
+                        {formatQty(row.YearlyAllRegionsSuggestedPar7Days)}
+                      </strong>
+                    </div>
+
+                    <div style={localStyles.metricBox}>
+                      <span>Year market par 7d</span>
+                      <strong>
+                        {formatQty(row.YearlySelectedMarketSuggestedPar7Days)}
+                      </strong>
+                    </div>
+
+                    <div style={localStyles.metricBox}>
+                      <span>Year market avg/day</span>
+                      <strong>{formatQty(row.YearlySelectedMarketAvgPerDay)}</strong>
+                    </div>
+                  </div>
                 </div>
-
-                <div style={localStyles.parMetricGrid}>
-                  <div style={localStyles.metricBox}>
-                    <span>Ordered col Y</span>
-                    <strong>{formatQty(row.OnboardOrderedQtyColumnY)}</strong>
-                  </div>
-
-                  <div style={localStyles.metricBoxStrong}>
-                    <span>Suggested order</span>
-                    <strong>{formatQty(row.SuggestedOrderQty)}</strong>
-                  </div>
-
-                  <div style={localStyles.metricBox}>
-                    <span>Suggested - ordered Y</span>
-                    <strong
-                      style={{
-                        color:
-                          Number(row.DifferenceSuggestedVsOnboardOrdered || 0) > 0
-                            ? "#b00020"
-                            : "#2e7d32",
-                      }}
-                    >
-                      {Number(row.DifferenceSuggestedVsOnboardOrdered || 0) >= 0
-                        ? "+"
-                        : ""}
-                      {formatQty(row.DifferenceSuggestedVsOnboardOrdered)}
-                    </strong>
-                  </div>
-
-                  <div style={localStyles.metricBox}>
-                    <span>Current par Q</span>
-                    <strong>{formatQty(row.CurrentParLevelQ)}</strong>
-                  </div>
-
-                  <div style={localStyles.metricBox}>
-                    <span>Current usage par 7d</span>
-                    <strong>
-                      {formatQty(row.SuggestedParCurrentUsage7Days)}
-                    </strong>
-                  </div>
-
-                  <div style={localStyles.metricBox}>
-                    <span>Year all regions par 7d</span>
-                    <strong>
-                      {formatQty(row.YearlyAllRegionsSuggestedPar7Days)}
-                    </strong>
-                  </div>
-
-                  <div style={localStyles.metricBox}>
-                    <span>Year market par 7d</span>
-                    <strong>
-                      {formatQty(row.YearlySelectedMarketSuggestedPar7Days)}
-                    </strong>
-                  </div>
-
-                  <div style={localStyles.metricBox}>
-                    <span>Year market avg/day</span>
-                    <strong>{formatQty(row.YearlySelectedMarketAvgPerDay)}</strong>
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
