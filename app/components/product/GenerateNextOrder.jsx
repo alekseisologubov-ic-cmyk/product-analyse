@@ -1919,29 +1919,33 @@ export default function GenerateNextOrder({
                 Review ({filterCounts.review})
               </button>
 
-              <button
-                type="button"
-                style={{
-                  ...styles.viewModeButton,
-                  ...(filter === "fastSpoilage" ? styles.viewModeButtonActive : {}),
-                }}
-                onClick={() => setFilter("fastSpoilage")}
-              >
-                Quick Spoil ({filterCounts.fastSpoilage})
-              </button>
+              {orderMeta.isFreshProduceOrder && (
+  <>
+    <button
+      type="button"
+      style={{
+        ...styles.viewModeButton,
+        ...(filter === "fastSpoilage" ? styles.viewModeButtonActive : {}),
+      }}
+      onClick={() => setFilter("fastSpoilage")}
+    >
+      Quick Spoil ({filterCounts.fastSpoilage})
+    </button>
 
-              <button
-                type="button"
-                style={{
-                  ...styles.viewModeButton,
-                  ...(filter === "longHoldProduce"
-                    ? styles.viewModeButtonActive
-                    : {}),
-                }}
-                onClick={() => setFilter("longHoldProduce")}
-              >
-                Long Hold ({filterCounts.longHoldProduce})
-              </button>
+    <button
+      type="button"
+      style={{
+        ...styles.viewModeButton,
+        ...(filter === "longHoldProduce"
+          ? styles.viewModeButtonActive
+          : {}),
+      }}
+      onClick={() => setFilter("longHoldProduce")}
+    >
+      Long Hold ({filterCounts.longHoldProduce})
+    </button>
+  </>
+)}
 
               <button
                 type="button"
