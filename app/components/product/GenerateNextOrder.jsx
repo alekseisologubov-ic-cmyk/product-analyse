@@ -816,7 +816,7 @@ const rawOrderDate = rows[1]?.[1];
     const orderBufferQty = voyageNeed * (ORDER_BUFFER_PERCENT / 100);
     const targetQtyForVoyage = voyageNeed + orderBufferQty;
 
-    const produceRule = getFreshProduceOrderRule(product);
+    const produceRule = getFreshProduceOrderRule(product, isFreshProduceOrder);
 
     const suggestedOrder = produceRule.orderFullTarget
       ? targetQtyForVoyage
