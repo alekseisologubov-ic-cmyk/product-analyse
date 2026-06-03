@@ -1,11 +1,33 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import * as XLSX from "xlsx";
+import React, {
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
+
 import {
   downloadIngredientByLocationFileFromStorage,
+  downloadIngredientByLocationParsedDataFromStorage,
   uploadIngredientByLocationFileToStorage,
+  uploadIngredientByLocationParsedDataToStorage,
 } from "../../lib/permanentFiles";
+
+import {
+  ALLERGEN_DISPLAY,
+  ALLERGEN_ORDER,
+  VALID_ALLERGENS,
+  buildSubRecipeIndexes,
+  cleanText,
+  getSubRecipeRowsForLineFromIndexes,
+  getVenueNameColor,
+  isSubRecipeRow,
+  normalizeCode,
+  sortAllergens,
+} from "../../lib/allergenParser";
 
 const cleanText = (value) =>
   String(value || "")
