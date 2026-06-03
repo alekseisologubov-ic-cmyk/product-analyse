@@ -43,10 +43,8 @@ const normalizeShipCode = (value) => {
   if (!text) return "";
 
   if (
-    text === "V1" ||
-    text === "V 1" ||
-    text.includes(" V1 ") ||
-    text.includes(" V 1 ") ||
+    /^V\s*1$/.test(text) ||
+    /(^|\s)V\s*1($|\s)/.test(text) ||
     text === "SCL" ||
     text === "SC" ||
     text.includes("SCARLET")
@@ -54,27 +52,15 @@ const normalizeShipCode = (value) => {
     return "SC";
   }
 
-  if (
-    text === "VL" ||
-    text === "VAL" ||
-    text.includes("VALIANT")
-  ) {
+  if (text === "VL" || text === "VAL" || text.includes("VALIANT")) {
     return "VL";
   }
 
-  if (
-    text === "BRL" ||
-    text === "BR" ||
-    text.includes("BRILLIANT")
-  ) {
+  if (text === "BRL" || text === "BR" || text.includes("BRILLIANT")) {
     return "BRL";
   }
 
-  if (
-    text === "RL" ||
-    text === "RES" ||
-    text.includes("RESILIENT")
-  ) {
+  if (text === "RL" || text === "RES" || text.includes("RESILIENT")) {
     return "RL";
   }
 
@@ -243,9 +229,13 @@ const productNamesMatch = (left, right) => {
   if (!aTokens.length || !bTokens.length) return false;
 
   const shortTokens = aTokens.length <= bTokens.length ? aTokens : bTokens;
-  const longTokenSet = new Set(aTokens.length <= bTokens.length ? bTokens : aTokens);
+  const longTokenSet = new Set(
+    aTokens.length <= bTokens.length ? bTokens : aTokens
+  );
 
-  const matchedCount = shortTokens.filter((token) => longTokenSet.has(token)).length;
+  const matchedCount = shortTokens.filter((token) =>
+    longTokenSet.has(token)
+  ).length;
 
   if (shortTokens.length === 1) {
     const token = shortTokens[0];
@@ -264,6 +254,12 @@ const getProductReportKey = (value) => {
 
   return tokens.length ? tokens.join("|") : cleanText(displayValue);
 };
+
+const extractCodesFromText = (value) =>
+  String(value || "")
+    .match(/\b\d{3,}\b/g)
+    ?.map((item) => normalizeCode(item))
+    .filter(Boolean) || [];
 
 const escapeHtml = (value) =>
   String(value ?? "")
@@ -356,7 +352,7 @@ const getStatusForOrderItem = (item) => {
     return {
       type: "review",
       label: "Review",
-      description: "No current consumption/day could be calculated.",
+      description: "No current average consumption/day could be calculated.",
     };
   }
 
@@ -364,14 +360,16 @@ const getStatusForOrderItem = (item) => {
     return {
       type: "need",
       label: "Order Suggested",
-      description: "Estimated quantity at arrival is below voyage need plus 25% buffer.",
+      description:
+        "Estimated quantity at arrival is below voyage need plus 25% buffer.",
     };
   }
 
   return {
     type: "covered",
     label: "Covered",
-    description: "Future order / stock covers voyage need plus 25% buffer.",
+    description:
+      "Stock plus future order covers voyage need plus 25% buffer.",
   };
 };
 
@@ -715,33 +713,139 @@ const parseNextOrderWorkbook = (workbook) => {
   };
 };
 
+const getIngredientByLocationHeaderInfo = (recipeRows = []) => {
+  const rows = Array.isArray(recipeRows) ? recipeRows : [];
+
+  let headerRowIndex = 0;
+
+  rows.slice(0, 40).some((row, index) => {
+    const compactRow = (row || [])
+      .map((cell) => cleanText(cell).replace(/[^A-Z0-9]/g, ""))
+      .join("|");
+
+    const hasRestaurant =
+      compactRow.includes("RESTAURANTNAME") ||
+      compactRow.includes("LOCATION") ||
+      compactRow.includes("VENUE");
+
+    const hasRecipe =
+      compactRow.includes("RECIPENAME") ||
+      compactRow.includes("RECIPECODE");
+
+    const hasIngredient =
+      compactRow.includes("INGREDIENTNAME") ||
+      compactRow.includes("PRODUCTNAME") ||
+      compactRow.includes("|NAME|");
+
+    if (hasRestaurant && hasRecipe && hasIngredient) {
+      headerRowIndex = index;
+      return true;
+    }
+
+    return false;
+  });
+
+  const headers = rows[headerRowIndex] || rows[0] || [];
+  const compactHeaders = headers.map((header) =>
+    cleanText(header).replace(/[^A-Z0-9]/g, "")
+  );
+
+  const compactName = (value) =>
+    cleanText(value).replace(/[^A-Z0-9]/g, "");
+
+  const findExact = (names, fallback) => {
+    const wanted = names.map(compactName).filter(Boolean);
+    const index = compactHeaders.findIndex((header) =>
+      wanted.includes(header)
+    );
+
+    return index >= 0 ? index : fallback;
+  };
+
+  return {
+    headerRowIndex,
+
+    restaurantCode: findExact(["RestaurantCode", "Restaurant Code"], 0),
+    restaurantName: findExact(
+      ["RestaurantName", "Restaurant Name", "Venue", "Location"],
+      1
+    ),
+
+    menuCode: findExact(["MenuCode", "Menu Code"], 2),
+    menuName: findExact(["MenuName", "Menu Name", "Menu"], 3),
+
+    category: findExact(["Category"], 4),
+    subCategory: findExact(["SubCategory", "Sub Category"], 5),
+
+    ingredientCode: findExact(
+      [
+        "Code",
+        "IngredientCode",
+        "Ingredient Code",
+        "ProductCode",
+        "Product Code",
+      ],
+      6
+    ),
+
+    ingredientName: findExact(
+      [
+        "Name",
+        "IngredientName",
+        "Ingredient Name",
+        "ProductName",
+        "Product Name",
+      ],
+      7
+    ),
+
+    assigned: findExact(["Assigned", "AssignedProduct", "Assigned Product"], 12),
+    assignedType: findExact(["AssignedType", "Assigned Type"], 13),
+
+    recipeCode: findExact(["RecipeCode", "Recipe Code"], 15),
+    recipeName: findExact(["RecipeName", "Recipe Name"], 16),
+  };
+};
+
 const getRecipeUsageForItem = (item, recipeRows = []) => {
   const productName = safeText(item?.product || item?.name);
   const productCode = normalizeCode(item?.code);
 
   if (!productName && !productCode) return [];
 
-  const rows = Array.isArray(recipeRows) ? recipeRows.slice(1) : [];
+  const rows = Array.isArray(recipeRows) ? recipeRows : [];
+
+  if (!rows.length) return [];
+
+  const indexes = getIngredientByLocationHeaderInfo(rows);
+  const bodyRows = rows.slice(indexes.headerRowIndex + 1);
   const usageRows = [];
 
-  rows.forEach((row) => {
-    const venue = safeText(row[1]);
-    const ingredientCode = normalizeCode(row[6]);
-    const ingredientName = safeText(row[7]);
-    const assignedProduct = safeText(row[12]);
-    const recipeCode = normalizeCode(row[15]);
-    const recipeName = safeText(row[16]);
-    const menuName = safeText(row[3]);
+  bodyRows.forEach((row) => {
+    const get = (index) => (index >= 0 ? row[index] : "");
+
+    const venue = safeText(get(indexes.restaurantName));
+    const menuName = safeText(get(indexes.menuName));
+
+    const ingredientCode = normalizeCode(get(indexes.ingredientCode));
+    const ingredientName = safeText(get(indexes.ingredientName));
+    const assignedProduct = safeText(get(indexes.assigned));
+
+    const recipeCode = normalizeCode(get(indexes.recipeCode));
+    const recipeName = safeText(get(indexes.recipeName));
 
     if (!venue || !recipeName) return;
 
+    const possibleCodes = [
+      ingredientCode,
+      normalizeCode(ingredientName),
+      normalizeCode(assignedProduct),
+      ...extractCodesFromText(ingredientName),
+      ...extractCodesFromText(assignedProduct),
+    ].filter(Boolean);
+
     const matchedByCode =
-      productCode &&
-      [
-        ingredientCode,
-        normalizeCode(ingredientName),
-        normalizeCode(assignedProduct),
-      ].includes(productCode);
+      productCode && possibleCodes.some((code) => code === productCode);
 
     const matchedByName =
       productName &&
@@ -787,6 +891,7 @@ const getRegionalStatsForItem = ({
   regionFilter,
   shipFilter,
   voyageDays,
+  bufferPercent,
 }) => {
   const sourceRows = Array.isArray(yearlyRegionalConsumption?.rows)
     ? yearlyRegionalConsumption.rows
@@ -802,6 +907,7 @@ const getRegionalStatsForItem = ({
       suggestedPar: 0,
       blocks: 0,
       matchedProducts: [],
+      bufferPercent,
     };
   }
 
@@ -840,7 +946,8 @@ const getRegionalStatsForItem = ({
   const blocks = matchedRows.length;
 
   const avgDailyQty = totalDays > 0 ? totalQty / totalDays : 0;
-  const suggestedPar = avgDailyQty * Number(voyageDays || 0) * ORDER_BUFFER_MULTIPLIER;
+  const bufferMultiplier = 1 + Number(bufferPercent || 0) / 100;
+  const suggestedPar = avgDailyQty * Number(voyageDays || 0) * bufferMultiplier;
 
   const matchedProducts = [
     ...new Set(
@@ -861,6 +968,7 @@ const getRegionalStatsForItem = ({
     suggestedPar,
     blocks,
     matchedProducts,
+    bufferPercent,
   };
 };
 
@@ -907,6 +1015,11 @@ export default function GenerateNextOrder({
     [yearlyRegionalConsumption]
   );
 
+  const regionalComparisonBufferPercent =
+    Number(regionalParBufferPercent || 0) > 0
+      ? Number(regionalParBufferPercent || 0)
+      : ORDER_BUFFER_PERCENT;
+
   const uploadOrderFile = async (event) => {
     const file = event.target.files?.[0];
 
@@ -941,6 +1054,8 @@ export default function GenerateNextOrder({
       setSearch("");
       setFmlSearch("");
       setFilter("all");
+      setSelectedInfoItem(null);
+      setSelectedRecipeUsageItem(null);
 
       setMessage(
         "Order file loaded. " +
@@ -1240,6 +1355,7 @@ export default function GenerateNextOrder({
       regionFilter: YEARLY_REGION_ALL,
       shipFilter: "",
       voyageDays,
+      bufferPercent: regionalComparisonBufferPercent,
     });
 
     const selectedMarket =
@@ -1251,6 +1367,7 @@ export default function GenerateNextOrder({
             regionFilter: selectedRegionalConsumptionRegion,
             shipFilter: "",
             voyageDays,
+            bufferPercent: regionalComparisonBufferPercent,
           })
         : null;
 
@@ -1262,6 +1379,7 @@ export default function GenerateNextOrder({
             selectedRegionalConsumptionRegion || YEARLY_REGION_ALL,
           shipFilter: activeShipCode,
           voyageDays,
+          bufferPercent: regionalComparisonBufferPercent,
         })
       : null;
 
@@ -1276,6 +1394,7 @@ export default function GenerateNextOrder({
     selectedRegionalConsumptionRegion,
     activeShipCode,
     orderMeta.voyageDays,
+    regionalComparisonBufferPercent,
   ]);
 
   const renderRegionalStatsBox = (title, stats) => (
@@ -1290,13 +1409,16 @@ export default function GenerateNextOrder({
             Total qty: <strong>{formatRegionalQty(stats.totalQty)}</strong>
           </div>
           <div>
+            Total value: <strong>{formatMoney(stats.totalValue)}</strong>
+          </div>
+          <div>
             Total days: <strong>{formatQty(stats.totalDays)}</strong>
           </div>
           <div>
             Average/day: <strong>{formatRegionalQty(stats.avgDailyQty)}</strong>
           </div>
           <div>
-            Suggested par for this voyage + 25%:{" "}
+            Suggested par for this voyage + {stats.bufferPercent}%:{" "}
             <strong>{formatRegionalQty(stats.suggestedPar)}</strong>
           </div>
           <div>
@@ -1372,7 +1494,7 @@ export default function GenerateNextOrder({
               <strong>{formatQty(orderMeta.voyageDays || 0)}</strong>
             </div>
             <div>
-              🧮 Order buffer: <strong>{ORDER_BUFFER_PERCENT}%</strong>
+              🧮 Main order buffer: <strong>{ORDER_BUFFER_PERCENT}%</strong>
             </div>
             {loading && <div>Loading...</div>}
           </div>
@@ -1397,6 +1519,10 @@ export default function GenerateNextOrder({
                     ? "All regions"
                     : selectedRegionalConsumptionRegion}
               </strong>
+            </div>
+            <div>
+              📊 Regional comparison buffer:{" "}
+              <strong>{regionalComparisonBufferPercent}%</strong>
             </div>
           </div>
 
@@ -1426,12 +1552,12 @@ export default function GenerateNextOrder({
             ))}
           </select>
 
-          <label style={styles.label}>Regional par buffer % reference only</label>
+          <label style={styles.label}>Regional comparison buffer %</label>
           <input
             type="number"
             min="0"
             step="1"
-            value={regionalParBufferPercent || 0}
+            value={regionalComparisonBufferPercent}
             onChange={(event) =>
               setRegionalParBufferPercent?.(Number(event.target.value || 0))
             }
@@ -1439,8 +1565,8 @@ export default function GenerateNextOrder({
           />
 
           <p style={styles.emptyText}>
-            Main order calculation always uses voyage need + 25% order buffer.
-            Regional data is shown inside the More Info popup for comparison.
+            Main order calculation is fixed: voyage need + 25% buffer. Regional
+            comparison appears in the More Info popup.
           </p>
         </div>
       </section>
@@ -1532,6 +1658,10 @@ export default function GenerateNextOrder({
               </div>
               <div>
                 📋 FML rows found: <strong>{fmlRows.length}</strong>
+              </div>
+              <div>
+                🍽️ Recipe rows loaded:{" "}
+                <strong>{Math.max((recipeRows || []).length - 1, 0)}</strong>
               </div>
             </div>
 
@@ -2095,6 +2225,12 @@ export default function GenerateNextOrder({
               <div>
                 Matches found: <strong>{selectedRecipeUsageRows.length}</strong>
               </div>
+              {!recipeRows?.length && (
+                <div style={{ color: "#b00020" }}>
+                  No recipeRows received. Check page.js and pass recipeRows to
+                  GenerateNextOrder.
+                </div>
+              )}
             </div>
 
             {selectedRecipeUsageRows.length === 0 ? (
