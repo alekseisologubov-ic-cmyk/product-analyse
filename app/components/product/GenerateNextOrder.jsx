@@ -1218,7 +1218,7 @@ export default function GenerateNextOrder({
         cellDates: true,
       });
 
-      const parsed = parseNextOrderWorkbook(workbook);
+      const parsed = parseNextOrderWorkbook(workbook, file.name);
 
       setOrderRows(parsed.rows);
       setOrderMeta(parsed.meta);
