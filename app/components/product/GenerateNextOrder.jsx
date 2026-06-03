@@ -2663,49 +2663,70 @@ export default function GenerateNextOrder({
               <p style={styles.emptyText}>No FML running low rows found.</p>
             )}
 
-            <div style={styles.equipmentGrid}>
-              {(view === "fmlMissing"
-                ? visibleFmlMissingRows
-                : visibleFmlRunningLowRows
-              ).map((item, index) => (
-                <div
-                  key={`${view}-${item.code}-${item.product}-${index}`}
-                  style={{
-                    ...styles.equipmentCard,
-                    ...(view === "fmlMissing"
-                      ? styles.orderWarningCard
-                      : styles.orderNeededCard),
-                  }}
-                >
-                  <div style={styles.recipeMeta}>FML row {item.excelRow}</div>
-                  <div style={styles.recipeName}>{item.product}</div>
-                  <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                  <div style={styles.recipeMeta}>UOM: {item.uom || "N/A"}</div>
-                  <div style={styles.recipeMeta}>
-                    Venues: {item.venueText || "N/A"}
-                  </div>
-                  <div style={styles.recipeMeta}>
-                    Future orders: {formatQty(item.futureOrders)}
-                  </div>
-                  <div style={styles.recipeMeta}>
-                    Past consumption: {formatQty(item.pastConsumption)}
-                  </div>
-                  {view === "fmlLow" && (
-                    <div style={styles.statusGood}>
-                      Suggested: {formatQty(item.suggestedOrder)}
-                    </div>
-                  )}
-                  <div style={styles.statusWarning}>{item.reason}</div>
+            <div style={localStyles.fmlCompactGrid}>
+  {(view === "fmlMissing"
+    ? visibleFmlMissingRows
+    : visibleFmlRunningLowRows
+  ).map((item, index) => {
+    const reasonText =
+      view === "fmlMissing"
+        ? item.standardOrderRow
+          ? "No order / no use"
+          : "Not in order sheet"
+        : "Running low";
 
-                  <button
-                    type="button"
-                    style={styles.backButton}
-                    onClick={() => setSelectedRecipeUsageItem(item)}
-                  >
-                    🍽️ Recipe Usage
-                  </button>
-                </div>
-              ))}
+    return (
+      <div
+        key={`${view}-${item.code}-${item.product}-${index}`}
+        style={{
+          ...localStyles.fmlCompactCard,
+          ...(view === "fmlMissing"
+            ? localStyles.fmlCompactCardMissing
+            : localStyles.fmlCompactCardLow),
+        }}
+      >
+        <div style={localStyles.fmlTopLine}>FML row {item.excelRow}</div>
+
+        <div style={localStyles.fmlName}>
+          {item.product || "Unnamed item"}
+        </div>
+
+        <div style={localStyles.fmlMeta}>
+          Code: {item.code || "N/A"} • UOM: {item.uom || "N/A"}
+        </div>
+
+        <div style={localStyles.fmlMiniGrid}>
+          <div style={localStyles.fmlMiniBox}>
+            <span>Future</span>
+            <strong>{formatQty(item.futureOrders)}</strong>
+          </div>
+
+          <div style={localStyles.fmlMiniBox}>
+            <span>Past</span>
+            <strong>{formatQty(item.pastConsumption)}</strong>
+          </div>
+
+          {view === "fmlLow" && (
+            <div style={localStyles.fmlMiniBoxStrong}>
+              <span>Suggest</span>
+              <strong>{formatQty(item.suggestedOrder)}</strong>
+            </div>
+          )}
+        </div>
+
+        <div style={localStyles.fmlReason}>{reasonText}</div>
+
+        <button
+          type="button"
+          style={localStyles.fmlRecipeButton}
+          onClick={() => setSelectedRecipeUsageItem(item)}
+        >
+          🍽️ Recipe / Details
+        </button>
+      </div>
+    );
+  })}
+</div>
             </div>
           </>
         )}
