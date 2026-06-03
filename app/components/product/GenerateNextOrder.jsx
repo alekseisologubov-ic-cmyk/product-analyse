@@ -2944,14 +2944,45 @@ export default function GenerateNextOrder({
             </p>
 
             <div style={styles.infoBox}>
-              <div>
-                Recipe rows loaded:{" "}
-                <strong>{Math.max((recipeRows || []).length - 1, 0)}</strong>
-              </div>
-              <div>
-                Matches found: <strong>{selectedRecipeUsageRows.length}</strong>
-              </div>
-            </div>
+  <div>
+    Recipe rows loaded:{" "}
+    <strong>{Math.max((recipeRows || []).length - 1, 0)}</strong>
+  </div>
+
+  <div>
+    Matches found: <strong>{selectedRecipeUsageRows.length}</strong>
+  </div>
+
+  {selectedRecipeUsageItem.excelRow && (
+    <div>
+      FML row: <strong>{selectedRecipeUsageItem.excelRow}</strong>
+    </div>
+  )}
+
+  {selectedRecipeUsageItem.code && (
+    <div>
+      Code: <strong>{selectedRecipeUsageItem.code}</strong>
+    </div>
+  )}
+
+  {selectedRecipeUsageItem.uom && (
+    <div>
+      UOM: <strong>{selectedRecipeUsageItem.uom}</strong>
+    </div>
+  )}
+
+  {selectedRecipeUsageItem.venueText && (
+    <div>
+      FML venue(s): <strong>{selectedRecipeUsageItem.venueText}</strong>
+    </div>
+  )}
+
+  {selectedRecipeUsageItem.reason && (
+    <div>
+      Reason: <strong>{selectedRecipeUsageItem.reason}</strong>
+    </div>
+  )}
+</div>
 
             {selectedRecipeUsageRows.length === 0 ? (
               <p style={styles.emptyText}>
