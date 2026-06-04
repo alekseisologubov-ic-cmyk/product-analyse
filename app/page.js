@@ -5059,8 +5059,8 @@ const getEquipmentFallbackImage = (item) => {
 
         setMasterInventorySource("Uploaded from " + file.name);
         setMakeInventoryMessage(
-          activeEquipmentDepartmentLabel + " master inventory loaded from " + sourceSheetName + ". Saving shared list for all users..."
-        );
+  activeEquipmentDepartmentLabel + " Master List loaded from " + sourceSheetName + ". Saving shared list for all users..."
+);
 
         logUsageEvent("shared_master_inventory_uploaded", {
           module: "equipment_" + equipmentDepartment + "_make_inventory",
