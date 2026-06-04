@@ -1207,7 +1207,7 @@ const getActiveInventoryStationList = () => {
 };
   const getInventoryStationLabel = () => {
   if (equipmentDepartment === "bar") return "bar";
-  if (equipmentDepartment === "restaurant") return "restaurant / locker";
+  if (equipmentDepartment === "restaurant") return "restaurant";
 
   return "station";
 };
