@@ -1058,14 +1058,15 @@ const parseRestaurantSheetItems = ({
       "";
 
     const imageCandidates = getRestaurantImageCandidatesForRow({
-      worksheet,
-      imageMap,
-      row,
-      sourceRow,
-      detectedImageIndex: indexes.imageIndex,
-      primaryImageIndex,
-      masterImage,
-    });
+  worksheet,
+  imageMap,
+  row,
+  sourceRow,
+  detectedImageIndex: indexes.imageIndex,
+  primaryImageIndex,
+  masterImage,
+  isFirstSheet,
+});
 
     const image = imageCandidates[0] || "";
     const imageFallback =
