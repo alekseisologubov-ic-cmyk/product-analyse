@@ -1131,67 +1131,6 @@ const uploadNextOrderFile = (e) => {
     }
   });
 };
-  const uploadNextOrderFile = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    readExcelFile(file, (workbook) => {
-      try {
-        const parsed = parseNextOrderWorkbook({
-  workbook,
-  templateMap,
-});
-        setNextOrderFileName(file.name);
-        setNextOrderSourceRows(parsed.rows);
-        setNextOrderMeta(parsed.meta);
-        setNextOrderRows([]);
-        setFmlMissingRows(parsed.fmlReportRows || []);
-        setFmlLowRows(parsed.fmlRunningLowRows || []);
-        setNextOrderSearch("");
-        setFmlMissingSearch("");
-        setFmlLowSearch("");
-        setNextOrderFilter("all");
-        setNextOrderView("order");
-        setNextOrderMessage(
-          "Order file loaded. " +
-            parsed.meta.totalItems +
-            " product rows found. " +
-            parsed.meta.itemsNeedingOrder +
-            " need order, " +
-            parsed.meta.parCapItems +
-            " par cap, " +
-            parsed.meta.blueReviewItems +
-            " blue review, " +
-            parsed.meta.redReviewItems +
-            " red review, " +
-            parsed.meta.fmlMissingItems +
-            " FML not ordered/not used, " +
-            parsed.meta.fmlRunningLowItems +
-            " FML running low."
-        );
-        logUsageEvent("next_order_file_uploaded", {
-          module: "generate_next_order",
-          fileName: file.name,
-          sheetName: parsed.meta.sheetName,
-          totalItems: parsed.meta.totalItems,
-          itemsNeedingOrder: parsed.meta.itemsNeedingOrder,
-          parCapItems: parsed.meta.parCapItems,
-          blueReviewItems: parsed.meta.blueReviewItems,
-          redReviewItems: parsed.meta.redReviewItems,
-          fmlMissingItems: parsed.meta.fmlMissingItems,
-          fmlRunningLowItems: parsed.meta.fmlRunningLowItems,
-        });
-      } catch (error) {
-        setNextOrderFileName(file.name);
-        setNextOrderSourceRows([]);
-        setNextOrderMeta({});
-        setNextOrderRows([]);
-        setNextOrderSearch("");
-        setNextOrderFilter("all");
-        setNextOrderMessage(error?.message || "Could not read the order file.");
-      }
-    });
-  };
 
   const loadDefaultTemplate = async () => {
     try {
