@@ -1060,11 +1060,6 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
   const buildProductList = (rows) =>
     [...new Set(rows.slice(1).map((r) => String(r[6] || "").trim()).filter(Boolean))].sort();
 
-  const getTemplateShipScopeLabel = (shipScope) => {
-    const scope = Array.isArray(shipScope) ? shipScope.filter(Boolean) : [];
-    return scope.length ? "Used only on " + scope.join(", ") : "Used by all ships";
-  };
-
   const templateShipScopeMatches = (shipScope, currentShipCode) => {
     const scope = Array.isArray(shipScope) ? shipScope.filter(Boolean) : [];
     if (!scope.length) return true;
