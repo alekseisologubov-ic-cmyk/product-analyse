@@ -7511,7 +7511,7 @@ const exportYearlyRegionalConsumptionReportToExcel = () => {
   >
     <div style={styles.moduleIcon}>👨‍🍳</div>
     <strong>Culinary</strong>
-    <span>Product dashboard, next order, inventory, muster list and temperature checks</span>
+    <span>Product dashboard, next order, inventory, master list and temperature checks</span>
   </button>
 
   <button
@@ -7530,7 +7530,7 @@ const exportYearlyRegionalConsumptionReportToExcel = () => {
   >
     <div style={styles.moduleIcon}>🍸</div>
     <strong>Bar</strong>
-    <span>Generate next order, inventory and muster list for Bar equipment</span>
+    <span>Generate next order, inventory and master list for Bar equipment</span>
   </button>
 
   <button
@@ -7549,7 +7549,7 @@ const exportYearlyRegionalConsumptionReportToExcel = () => {
   >
     <div style={styles.moduleIcon}>🍽️</div>
     <strong>Restaurant</strong>
-    <span>Inventory and muster list for Restaurant equipment</span>
+   <span>Inventory and master list for Restaurant equipment</span>
   </button>
 </div>
         </section>
