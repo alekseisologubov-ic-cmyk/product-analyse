@@ -4214,8 +4214,8 @@ const inventoryRecordMatchesCurrentDepartment = (item) =>
         setSelectedEquipment(null);
 
         setMusterMessage(
-          activeEquipmentDepartmentLabel + " Equipment Muster List loaded from " + sourceSheetName + ". Saving shared list..."
-        );
+  activeEquipmentDepartmentLabel + " Equipment Master List loaded from " + sourceSheetName + ". Saving shared list..."
+);
 
         logUsageEvent("equipment_muster_file_uploaded", {
           module: "equipment_" + equipmentDepartment + "_muster",
