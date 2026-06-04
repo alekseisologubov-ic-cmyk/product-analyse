@@ -1200,7 +1200,30 @@ const getActiveInventoryStationList = () => {
   }
 
   if (equipmentDepartment === "restaurant") {
-    return getRestaurantStationList();
+    const stationsFromMasterList = [
+      ...new Set(
+        (makeInventoryItems || [])
+          .filter(
+            (item) =>
+              item?.equipmentDepartment === "restaurant" ||
+              equipmentDepartment === "restaurant"
+          )
+          .map((item) =>
+            String(item.stationName || item.sheetName || "").trim()
+          )
+          .filter(Boolean)
+      ),
+    ];
+
+    const masterStations = stationsFromMasterList.filter(
+      (station) => cleanText(station) === "MASTER"
+    );
+
+    const venueStations = stationsFromMasterList
+      .filter((station) => cleanText(station) !== "MASTER")
+      .sort((a, b) => a.localeCompare(b));
+
+    return [...masterStations, ...venueStations];
   }
 
   return CULINARY_STATIONS;
