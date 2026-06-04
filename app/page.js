@@ -744,6 +744,54 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+    useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const navigationState = getCurrentAppNavigationState();
+    const navigationStateKey = getAppNavigationStateKey(navigationState);
+
+    if (!browserHistoryReadyRef.current) {
+      browserHistoryReadyRef.current = true;
+      browserHistoryLastKeyRef.current = navigationStateKey;
+
+      window.history.replaceState(
+        buildAppBrowserHistoryState(window.history.state, navigationState),
+        "",
+        window.location.href
+      );
+
+      return;
+    }
+
+    if (browserHistoryRestoringRef.current) {
+      browserHistoryRestoringRef.current = false;
+      browserHistoryLastKeyRef.current = navigationStateKey;
+      return;
+    }
+
+    if (navigationStateKey === browserHistoryLastKeyRef.current) {
+      return;
+    }
+
+    browserHistoryLastKeyRef.current = navigationStateKey;
+
+    window.history.pushState(
+      buildAppBrowserHistoryState(window.history.state, navigationState),
+      "",
+      window.location.href
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    welcomeStarted,
+    emailConfirmed,
+    loggedIn,
+    userShip,
+    module,
+    productMode,
+    equipmentDepartment,
+    equipmentMode,
+    productReportView,
+  ]);
 
   const shipColumns = { BRL: 8, RL: 11, SC: 14, VL: 17 };
   const shipCostColumns = { BRL: 9, RL: 12, SC: 15, VL: 18 };
