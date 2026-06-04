@@ -720,6 +720,30 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     setInventoryQty("");
     setEditingInventoryId(null);
   };
+    useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleBrowserBackForward = (event) => {
+      const navigationState = getAppNavigationStateFromHistory(event.state);
+
+      if (!navigationState) {
+        return;
+      }
+
+      browserHistoryRestoringRef.current = true;
+      browserHistoryLastKeyRef.current =
+        getAppNavigationStateKey(navigationState);
+
+      applyAppNavigationState(navigationState);
+    };
+
+    window.addEventListener("popstate", handleBrowserBackForward);
+
+    return () => {
+      window.removeEventListener("popstate", handleBrowserBackForward);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const shipColumns = { BRL: 8, RL: 11, SC: 14, VL: 17 };
   const shipCostColumns = { BRL: 9, RL: 12, SC: 15, VL: 18 };
