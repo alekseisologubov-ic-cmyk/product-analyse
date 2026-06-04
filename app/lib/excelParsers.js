@@ -774,14 +774,19 @@ export const parseBarInventoryFile = async (input) => {
 };
 
 const RESTAURANT_PARSER_EXCLUDED_SHEETS = new Set([
-  "MASTER",
   "NEW PAR LEVELS",
   "CORE ITEMS",
   "COPY OF TEMPLATE",
   "ERP TRANSFERS",
   "IMAGES",
   "WAREHOUSE",
+  "SUMMARY",
+  "INDEX",
+  "COVER",
 ]);
+
+const getRestaurantImageLookupKey = (value) =>
+  cleanParserText(value).replace(/[^A-Z0-9]/g, "");
 
 const formatRestaurantParserCode = (value) => {
   const raw = String(value ?? "").trim();
@@ -797,183 +802,69 @@ const formatRestaurantParserCode = (value) => {
   return raw.replace(/\.0+$/, "");
 };
 
-const isRestaurantParserDataSheet = (sheetName) => {
-  const key = cleanParserText(sheetName);
+const parseRestaurantNumber = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
 
-  if (!key) return false;
-  if (RESTAURANT_PARSER_EXCLUDED_SHEETS.has(key)) return false;
+  const cleaned = String(value ?? "")
+    .replace(/,/g, "")
+    .replace(/[^0-9.\-]/g, "")
+    .trim();
+
+  const number = Number(cleaned);
+  return Number.isFinite(number) ? number : 0;
+};
+
+const isRestaurantVenueSheetName = (sheetName, firstSheetName) => {
+  const text = cleanParserText(sheetName);
+
+  if (!text) return false;
+  if (sheetName === firstSheetName) return false;
+  if (RESTAURANT_PARSER_EXCLUDED_SHEETS.has(text)) return false;
+  if (text.includes("MASTER")) return false;
+  if (text.includes("SUMMARY")) return false;
+  if (text.includes("INDEX")) return false;
+  if (text.includes("COVER")) return false;
 
   return true;
 };
 
-const findRestaurantParserHeaderIndexes = (rows) => {
-  let headerRowIndex = -1;
-  let headerRow = [];
+const shouldParseRestaurantSheet = (sheetName, firstSheetName) =>
+  sheetName === firstSheetName ||
+  isRestaurantVenueSheetName(sheetName, firstSheetName);
 
-  rows.slice(0, 12).some((row, index) => {
+const getWorksheetCellDisplayValue = (worksheet, rowNumber, colIndex) => {
+  if (!worksheet || !rowNumber || typeof colIndex !== "number" || colIndex < 0) {
+    return "";
+  }
+
+  const cellAddress = columnNumberToLetters(colIndex) + String(rowNumber);
+  const cell = worksheet[cellAddress];
+
+  return String(cell?.l?.Target || cell?.v || cell?.w || "").trim();
+};
+
+const findRestaurantHeaderIndexes = (rows, isFirstSheet) => {
+  let headerRowIndex = 0;
+  let headerRow = rows[0] || [];
+  let looseCandidate = null;
+
+  rows.slice(0, 20).some((row, index) => {
     const cleanRow = row.map((cell) => cleanParserText(cell));
 
     const hasCode = cleanRow.some(
       (cell) =>
         cell === "CODE" ||
         cell === "ERP CODE" ||
-        cell === "PRODUCT CODE" ||
-        cell.includes("CODE")
+        cell.includes("PRODUCT CODE") ||
+        cell.includes("ITEM CODE") ||
+        cell.includes("SKU") ||
+        cell.includes("APOLLO") ||
+        cell.includes("VV CODE")
     );
-
-    const hasDescription = cleanRow.some(
-      (cell) =>
-        cell === "DESCRIPTION" ||
-        cell === "PRODUCT NAME" ||
-        cell.includes("DESCRIPTION")
-    );
-
-    if (hasCode && hasDescription) {
-      headerRowIndex = index;
-      headerRow = row;
-      return true;
-    }
-
-    return false;
-  });
-
-  const cleanHeaders = headerRow.map((cell) => cleanParserText(cell));
-
-  const findIndex = (patterns, fallback) => {
-    const found = cleanHeaders.findIndex((header) =>
-      patterns.some((pattern) => header === pattern || header.includes(pattern))
-    );
-
-    return found >= 0 ? found : fallback;
-  };
-
-  return {
-    headerRowIndex,
-    codeIndex: findIndex(["CODE", "ERP CODE", "PRODUCT CODE"], 1),
-    nameIndex: findIndex(["DESCRIPTION", "PRODUCT NAME"], 2),
-    imageIndex: findIndex(["IMAGE", "PHOTO", "PICTURE", "LINK"], 3),
-    locationIndex: findIndex(["SPECIFIC LOCATION", "VENUE", "LOCATION"], 4),
-    parIndex: findIndex(["PAR LEVEL"], 5),
-    qtyIndex: findIndex(["QTY", "QUANTITY", "ON HAND", "TOTAL"], -1),
-  };
-};
-
-export const parseRestaurantInventoryFile = async (input) => {
-  const file = getFileFromParserInput(input);
-
-  if (!file) {
-    throw new Error("No Restaurant master list file selected.");
-  }
-
-  const arrayBuffer = await file.arrayBuffer();
-
-  const workbook = XLSX.read(arrayBuffer, {
-    type: "array",
-    cellDates: true,
-  });
-
-  const items = [];
-
-  workbook.SheetNames.forEach((sheetName) => {
-    if (!isRestaurantParserDataSheet(sheetName)) return;
-
-    const worksheet = workbook.Sheets[sheetName];
-    if (!worksheet) return;
-
-    const rows = XLSX.utils.sheet_to_json(worksheet, {
-      header: 1,
-      defval: "",
-    });
-
-    if (!rows.length) return;
-
-    const indexes = findRestaurantParserHeaderIndexes(rows);
-
-    if (indexes.headerRowIndex < 0) return;
-
-    rows.slice(indexes.headerRowIndex + 1).forEach((row, dataIndex) => {
-      const sourceRow = indexes.headerRowIndex + 2 + dataIndex;
-
-      const code = formatRestaurantParserCode(row[indexes.codeIndex]);
-
-      const name = String(row[indexes.nameIndex] || "")
-        .replace(/\s+/g, " ")
-        .trim();
-
-      if (!code && !name) return;
-      if (!name) return;
-
-      const cleanName = cleanParserText(name);
-      const cleanCode = cleanParserText(code);
-
-      if (cleanName === "DESCRIPTION") return;
-      if (cleanName === "PRODUCT NAME") return;
-      if (cleanCode === "CODE") return;
-      if (cleanCode === "ERP CODE") return;
-      if (cleanName.includes("#REF")) return;
-
-      const location = String(row[indexes.locationIndex] || "")
-        .replace(/\s+/g, " ")
-        .trim();
-
-      const rawImage =
-        indexes.imageIndex >= 0 ? String(row[indexes.imageIndex] || "").trim() : "";
-
-      const image = isParserUsableImageValue(rawImage) ? rawImage : "";
-
-      const parLevel =
-        indexes.parIndex >= 0 ? parserToNumber(row[indexes.parIndex]) : 0;
-
-      const qty =
-        indexes.qtyIndex >= 0 ? parserToNumber(row[indexes.qtyIndex]) : 0;
-
-      items.push({
-        equipmentDepartment: "restaurant",
-        sheetName,
-        stationName: sheetName,
-        category: location || sheetName,
-        code,
-        name,
-        unit: "EA",
-        um: "EA",
-        parLevel,
-        qty,
-        image,
-        imageFallback: "",
-        sourceRow,
-      });
-    });
-  });
-
-  return {
-    workbook,
-    items,
-    sourceSheetName: workbook.SheetNames.filter(isRestaurantParserDataSheet).join(", "),
-  };
-};
-const getWorksheetCellDisplayValue = (worksheet, rowNumber, colIndex) => {
-  if (!worksheet || !rowNumber || typeof colIndex !== "number") return "";
-
-  const cellAddress = columnNumberToLetters(colIndex) + String(rowNumber);
-  const cell = worksheet[cellAddress];
-
-  return String(
-    cell?.l?.Target ||
-      cell?.v ||
-      cell?.w ||
-      ""
-  ).trim();
-};
-
-const findRestaurantHeaderIndexes = (rows, isFirstSheet) => {
-  let headerRowIndex = 0;
-  let headerRow = rows[0] || [];
-
-  rows.slice(0, 20).some((row, index) => {
-    const cleanRow = row.map((cell) => cleanParserText(cell));
 
     const hasName = cleanRow.some(
       (cell) =>
+        cell.includes("FINAL DESCRIPTION") ||
         cell.includes("DESCRIPTION") ||
         cell.includes("ITEM NAME") ||
         cell.includes("PRODUCT NAME") ||
@@ -981,30 +872,34 @@ const findRestaurantHeaderIndexes = (rows, isFirstSheet) => {
         cell === "NAME"
     );
 
-    const hasCode = cleanRow.some(
-      (cell) =>
-        cell === "CODE" ||
-        cell.includes("ITEM CODE") ||
-        cell.includes("PRODUCT CODE") ||
-        cell.includes("SKU") ||
-        cell.includes("APOLLO") ||
-        cell.includes("VV")
-    );
-
-    if (hasName || hasCode) {
+    if (hasCode && hasName) {
       headerRowIndex = index;
       headerRow = row;
       return true;
     }
 
+    if (!looseCandidate && (hasCode || hasName)) {
+      looseCandidate = {
+        index,
+        row,
+      };
+    }
+
     return false;
   });
+
+  if (headerRowIndex === 0 && looseCandidate) {
+    headerRowIndex = looseCandidate.index;
+    headerRow = looseCandidate.row;
+  }
 
   const cleanHeaders = headerRow.map((cell) => cleanParserText(cell));
 
   const findIndex = (patterns, fallback) => {
     const found = cleanHeaders.findIndex((header) =>
-      patterns.some((pattern) => header.includes(pattern))
+      patterns.some(
+        (pattern) => header === pattern || header.includes(pattern)
+      )
     );
 
     return found >= 0 ? found : fallback;
@@ -1012,31 +907,173 @@ const findRestaurantHeaderIndexes = (rows, isFirstSheet) => {
 
   return {
     headerRowIndex,
+
+    // Master / first sheet usually: A code, B name, C picture.
+    // Venue sheets usually: B code, C name, D picture.
     codeIndex: findIndex(
-      ["CODE", "ITEM CODE", "PRODUCT CODE", "SKU", "APOLLO", "VV"],
-      0
+      ["CODE", "ERP CODE", "PRODUCT CODE", "ITEM CODE", "SKU", "APOLLO", "VV CODE"],
+      isFirstSheet ? 0 : 1
     ),
+
     nameIndex: findIndex(
       ["FINAL DESCRIPTION", "DESCRIPTION", "ITEM NAME", "PRODUCT NAME", "EQUIPMENT", "NAME"],
-      isFirstSheet ? 1 : 1
+      isFirstSheet ? 1 : 2
     ),
-    categoryIndex: findIndex(["CATEGORY", "LOCATION", "VENUE", "RESTAURANT"], -1),
-    imageIndex: isFirstSheet ? 2 : 3,
+
+    imageIndex: findIndex(
+      ["IMAGE", "PHOTO", "PICTURE", "LINK"],
+      isFirstSheet ? 2 : 3
+    ),
+
+    locationIndex: findIndex(
+      ["SPECIFIC LOCATION", "VENUE", "LOCATION", "RESTAURANT", "CATEGORY"],
+      isFirstSheet ? -1 : 4
+    ),
+
+    parIndex: findIndex(["PAR LEVEL", "PAR"], -1),
+    qtyIndex: findIndex(["QTY", "QUANTITY", "ON HAND", "TOTAL"], -1),
   };
 };
 
-const isRestaurantNonVenueSheetName = (sheetName, firstSheetName) => {
-  const text = cleanParserText(sheetName);
+const getRestaurantImageCandidatesForRow = ({
+  worksheet,
+  imageMap,
+  row,
+  sourceRow,
+  detectedImageIndex,
+  primaryImageIndex,
+  masterImage,
+}) => {
+  const imageColumnIndexes = [
+    primaryImageIndex,
+    detectedImageIndex,
+    2, // C fallback
+    3, // D fallback
+  ]
+    .filter((index) => typeof index === "number" && index >= 0)
+    .filter((index, position, array) => array.indexOf(index) === position);
 
-  if (sheetName === firstSheetName) return true;
+  const candidates = [];
 
-  return (
-    text === "MASTER" ||
-    text.includes("MASTER") ||
-    text.includes("SUMMARY") ||
-    text.includes("INDEX") ||
-    text.includes("COVER")
-  );
+  imageColumnIndexes.forEach((columnIndex) => {
+    const columnLetter = columnNumberToLetters(columnIndex);
+
+    candidates.push(imageMap[`${columnLetter}${sourceRow}`] || "");
+    candidates.push(getWorksheetCellDisplayValue(worksheet, sourceRow, columnIndex));
+    candidates.push(String(row[columnIndex] || "").trim());
+  });
+
+  candidates.push(masterImage || "");
+
+  return candidates
+    .map((value) => String(value || "").trim())
+    .filter((value) => isParserUsableImageValue(value))
+    .filter((value, index, array) => array.indexOf(value) === index);
+};
+
+const addRestaurantMasterImageToLookup = (lookup, item) => {
+  const image = String(item?.image || item?.imageFallback || "").trim();
+
+  if (!image) return;
+
+  const codeKey = getRestaurantImageLookupKey(item?.code);
+  const nameKey = getRestaurantImageLookupKey(item?.name);
+
+  if (codeKey && !lookup[codeKey]) lookup[codeKey] = image;
+  if (nameKey && !lookup[nameKey]) lookup[nameKey] = image;
+};
+
+const parseRestaurantSheetItems = ({
+  worksheet,
+  rows,
+  sheetName,
+  isFirstSheet,
+  isVenueSheet,
+  imageMap,
+  masterImageByKey,
+}) => {
+  const indexes = findRestaurantHeaderIndexes(rows, isFirstSheet);
+  const parsedItems = [];
+
+  const primaryImageIndex = isFirstSheet ? 2 : 3;
+
+  rows.slice(indexes.headerRowIndex + 1).forEach((row, dataIndex) => {
+    const sourceRow = indexes.headerRowIndex + 2 + dataIndex;
+
+    const code = formatRestaurantParserCode(row[indexes.codeIndex]);
+
+    const name = String(row[indexes.nameIndex] || "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (!code && !name) return;
+
+    const cleanCode = cleanParserText(code);
+    const cleanName = cleanParserText(name);
+
+    if (cleanCode === "CODE") return;
+    if (cleanCode === "ERP CODE") return;
+    if (cleanName === "DESCRIPTION") return;
+    if (cleanName === "FINAL DESCRIPTION") return;
+    if (cleanName === "ITEM NAME") return;
+    if (cleanName === "PRODUCT NAME") return;
+    if (cleanName.includes("#REF")) return;
+    if (cleanName.startsWith("TOTAL")) return;
+
+    const location =
+      indexes.locationIndex >= 0
+        ? String(row[indexes.locationIndex] || "")
+            .replace(/\s+/g, " ")
+            .trim()
+        : "";
+
+    const codeLookupKey = getRestaurantImageLookupKey(code);
+    const nameLookupKey = getRestaurantImageLookupKey(name);
+
+    const masterImage =
+      masterImageByKey[codeLookupKey] ||
+      masterImageByKey[nameLookupKey] ||
+      "";
+
+    const imageCandidates = getRestaurantImageCandidatesForRow({
+      worksheet,
+      imageMap,
+      row,
+      sourceRow,
+      detectedImageIndex: indexes.imageIndex,
+      primaryImageIndex,
+      masterImage,
+    });
+
+    const image = imageCandidates[0] || "";
+    const imageFallback =
+      imageCandidates.find((value) => value !== image) || "";
+
+    const parLevel =
+      indexes.parIndex >= 0 ? parseRestaurantNumber(row[indexes.parIndex]) : 0;
+
+    const qty =
+      indexes.qtyIndex >= 0 ? parseRestaurantNumber(row[indexes.qtyIndex]) : 0;
+
+    parsedItems.push({
+      equipmentDepartment: "restaurant",
+      sheetName,
+      stationName: isVenueSheet ? sheetName : "",
+      category: location || (isVenueSheet ? sheetName : "Restaurant Master"),
+      code,
+      name: name || code,
+      unit: "EA",
+      um: "EA",
+      parLevel,
+      qty,
+      image,
+      imageFallback,
+      sourceRow,
+      isVenueSheet,
+    });
+  });
+
+  return parsedItems;
 };
 
 export const parseRestaurantInventoryFile = async (input) => {
@@ -1053,10 +1090,14 @@ export const parseRestaurantInventoryFile = async (input) => {
     cellDates: true,
   });
 
-  const items = [];
   const firstSheetName = workbook.SheetNames[0] || "";
+  const masterImageByKey = {};
+  const masterFallbackItems = [];
+  const items = [];
 
   for (const sheetName of workbook.SheetNames) {
+    if (!shouldParseRestaurantSheet(sheetName, firstSheetName)) continue;
+
     const worksheet = workbook.Sheets[sheetName];
     if (!worksheet) continue;
 
@@ -1068,95 +1109,43 @@ export const parseRestaurantInventoryFile = async (input) => {
     if (!rows.length) continue;
 
     const isFirstSheet = sheetName === firstSheetName;
-    const indexes = findRestaurantHeaderIndexes(rows, isFirstSheet);
+    const isVenueSheet = isRestaurantVenueSheetName(sheetName, firstSheetName);
+
     const imageMap = await extractEmbeddedImagesByCell(arrayBuffer, sheetName);
 
-    const isVenueSheet = !isRestaurantNonVenueSheetName(
+    const sheetItems = parseRestaurantSheetItems({
+      worksheet,
+      rows,
       sheetName,
-      firstSheetName
-    );
-
-    rows.slice(indexes.headerRowIndex + 1).forEach((row, dataIndex) => {
-      const sourceRow = indexes.headerRowIndex + 2 + dataIndex;
-
-      const code = String(row[indexes.codeIndex] || "").trim();
-
-      const name = String(row[indexes.nameIndex] || "")
-        .replace(/\s+/g, " ")
-        .trim();
-
-      const category =
-        indexes.categoryIndex >= 0
-          ? String(row[indexes.categoryIndex] || "").trim()
-          : isVenueSheet
-          ? sheetName
-          : "Restaurant Master";
-
-      if (!name && !code) return;
-      if (cleanParserText(code) === "CODE") return;
-      if (cleanParserText(name).includes("DESCRIPTION")) return;
-      if (cleanParserText(name).includes("ITEM NAME")) return;
-      if (cleanParserText(name).includes("PRODUCT NAME")) return;
-
-      const imageColumnLetter = columnNumberToLetters(indexes.imageIndex);
-      const embeddedImage = imageMap[`${imageColumnLetter}${sourceRow}`] || "";
-
-      const imageFromCell = getWorksheetCellDisplayValue(
-        worksheet,
-        sourceRow,
-        indexes.imageIndex
-      );
-
-      const fallbackImageFromColumnC = getWorksheetCellDisplayValue(
-        worksheet,
-        sourceRow,
-        2
-      );
-
-      const fallbackEmbeddedColumnC = imageMap[`C${sourceRow}`] || "";
-
-      const fallbackImageFromColumnD = getWorksheetCellDisplayValue(
-        worksheet,
-        sourceRow,
-        3
-      );
-
-      const fallbackEmbeddedColumnD = imageMap[`D${sourceRow}`] || "";
-
-      const imageCandidates = [
-        embeddedImage,
-        imageFromCell,
-        fallbackEmbeddedColumnC,
-        fallbackImageFromColumnC,
-        fallbackEmbeddedColumnD,
-        fallbackImageFromColumnD,
-      ]
-        .map((value) => String(value || "").trim())
-        .filter((value) => isParserUsableImageValue(value));
-
-      const image = imageCandidates[0] || "";
-      const imageFallback =
-        imageCandidates.find((value) => value !== image) || "";
-
-      items.push({
-        equipmentDepartment: "restaurant",
-        sheetName,
-        stationName: isVenueSheet ? sheetName : "",
-        category: category || sheetName || "Restaurant",
-        code,
-        name: name || code,
-        image,
-        imageFallback,
-        sourceRow,
-        isVenueSheet,
-      });
+      isFirstSheet,
+      isVenueSheet,
+      imageMap,
+      masterImageByKey,
     });
+
+    if (isFirstSheet) {
+      masterFallbackItems.push(...sheetItems);
+      sheetItems.forEach((item) =>
+        addRestaurantMasterImageToLookup(masterImageByKey, item)
+      );
+      continue;
+    }
+
+    items.push(...sheetItems);
   }
+
+  const finalItems = items.length ? items : masterFallbackItems;
+
+  const venueSheetNames = workbook.SheetNames.filter((sheetName) =>
+    isRestaurantVenueSheetName(sheetName, firstSheetName)
+  );
 
   return {
     workbook,
-    items,
-    sourceSheetName: workbook.SheetNames.join(", "),
+    items: finalItems,
+    sourceSheetName: venueSheetNames.length
+      ? venueSheetNames.join(", ")
+      : firstSheetName || workbook.SheetNames.join(", "),
   };
 };
 export const parseEquipmentMasterFile = async (input) => {
