@@ -9,7 +9,7 @@ import {
   normalizeVenue,
   productNamesMatch,
   getProductMatchTokens,
-  getProductReportKey,
+  getProductReportKey as getReportProductKey,
   formatQty,
   formatMoney,
   getImageUrl,
