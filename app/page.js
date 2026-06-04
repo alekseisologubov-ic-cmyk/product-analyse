@@ -1060,18 +1060,6 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
   const buildProductList = (rows) =>
     [...new Set(rows.slice(1).map((r) => String(r[6] || "").trim()).filter(Boolean))].sort();
 
-  const normalizeOrderCode = (value) => {
-    const raw = String(value ?? "").trim();
-    if (!raw) return "";
-
-    const numberValue = Number(raw);
-    if (Number.isFinite(numberValue) && raw.replace(/\.0+$/, "") === String(Math.trunc(numberValue))) {
-      return String(Math.trunc(numberValue));
-    }
-
-    return cleanText(raw).replace(/\.0+$/, "");
-  };
-
   const splitFmlVenues = (value) =>
     String(value || "")
       .split(",")
