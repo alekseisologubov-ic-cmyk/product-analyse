@@ -1,5 +1,4 @@
 import * as XLSX from "xlsx";
-import JSZip from "jszip";
 
 export const readExcelFile = async (file, options = {}) => {
   if (!file) {
