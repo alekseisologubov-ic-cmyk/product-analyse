@@ -1165,29 +1165,46 @@ const uploadNextOrderFile = (e) => {
     );
   };
 
-  const getActiveInventoryStationList = () => {
+  const getRestaurantStationList = () => {
+  const sourceItems = makeInventoryItems.length ? makeInventoryItems : musterItems;
+
+  const stationsFromTabs = [
+    ...new Set(
+      sourceItems
+        .filter((item) => item?.equipmentDepartment === "restaurant")
+        .filter((item) => item?.isVenueSheet !== false)
+        .map((item) =>
+          String(item.stationName || item.sheetName || "").trim()
+        )
+        .filter(Boolean)
+        .filter((sheetName) => {
+          const text = cleanText(sheetName);
+
+          return (
+            text !== "MASTER" &&
+            !text.includes("MASTER") &&
+            !text.includes("SUMMARY") &&
+            !text.includes("INDEX") &&
+            !text.includes("COVER")
+          );
+        })
+    ),
+  ];
+
+  return stationsFromTabs.length ? stationsFromTabs.sort() : ["Restaurant"];
+};
+
+const getActiveInventoryStationList = () => {
   if (equipmentDepartment === "bar") {
     return BAR_STATIONS;
   }
 
   if (equipmentDepartment === "restaurant") {
-    const stationsFromMasterList = [
-      ...new Set(
-        (makeInventoryItems || [])
-          .filter((item) => item?.equipmentDepartment === "restaurant" || equipmentDepartment === "restaurant")
-          .map((item) => String(item.sheetName || "").trim())
-          .filter(Boolean)
-      ),
-    ];
-
-    return stationsFromMasterList.length
-      ? stationsFromMasterList
-      : RESTAURANT_STATIONS;
+    return getRestaurantStationList();
   }
 
   return CULINARY_STATIONS;
 };
-
   const getInventoryStationLabel = () => {
   if (equipmentDepartment === "bar") return "bar";
   if (equipmentDepartment === "restaurant") return "restaurant / locker";
