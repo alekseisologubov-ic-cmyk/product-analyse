@@ -8,9 +8,10 @@ import React, {
   useState,
 } from "react";
 import * as XLSX from "xlsx";
-import {
-  downloadIngredientByLocationFileFromStorage,
-} from "../../lib/permanentFiles";
+import { downloadIngredientByLocationFileFromStorage } from "../../lib/permanentFiles";
+
+const ALL_LOCATIONS_KEY = "__ALL_RESTAURANTS__";
+const UNKNOWN_LOCATION = "Unknown Location";
 
 const ALLERGEN_RULES = [
   {
@@ -160,16 +161,17 @@ const normalizeDisplayText = (value) =>
     .replace(/\s+/g, " ")
     .trim();
 
-const makeRecipeKey = ({ recipeCode, recipeName, venue }) => {
+const getLocationKey = (value) => cleanText(value || UNKNOWN_LOCATION);
+
+const makeRecipeKey = ({ recipeCode, recipeName }) => {
   const code = normalizeDisplayText(recipeCode);
   const name = normalizeDisplayText(recipeName);
-  const location = normalizeDisplayText(venue);
 
   if (code || name) {
     return `${cleanText(code)}__${cleanText(name || code)}`;
   }
 
-  return `VENUE__${cleanText(location)}__${Date.now()}`;
+  return "";
 };
 
 const getWorkbookRows = (workbook) => {
@@ -209,7 +211,9 @@ const findHeaderInfo = (rows) => {
 
     const hasLocation =
       cleanRow.some((cell) => cell.includes("LOCATION")) ||
-      cleanRow.some((cell) => cell.includes("VENUE"));
+      cleanRow.some((cell) => cell.includes("VENUE")) ||
+      cleanRow.some((cell) => cell.includes("OUTLET")) ||
+      cleanRow.some((cell) => cell.includes("RESTAURANT"));
 
     if ((hasRecipe && hasIngredient) || (hasLocation && hasIngredient)) {
       headerRowIndex = rowIndex;
@@ -282,10 +286,7 @@ const ruleMatchesProduct = (rule, product) => {
   );
 };
 
-const detectAllergensForRecipe = ({
-  ingredients,
-  subIngredientMap,
-}) => {
+const detectAllergensForRecipe = ({ ingredients, subIngredientMap }) => {
   const allergenMap = new Map();
 
   const addMatch = ({ allergen, displayName }) => {
@@ -346,6 +347,9 @@ const buildAllergenRecipeIndex = (rows) => {
   const recipeMap = new Map();
   const subIngredientMap = new Map();
 
+  // First pass: build sub-recipe ingredient lookup.
+  // If an ingredient name is also a recipe name somewhere else,
+  // its ingredients will show under that ingredient in the popup.
   dataRows.forEach((row) => {
     const recipeName = normalizeDisplayText(row[headerInfo.recipeNameIndex]);
 
@@ -365,14 +369,24 @@ const buildAllergenRecipeIndex = (rows) => {
     subIngredientMap.get(recipeNameKey).add(ingredient);
   });
 
+  const normalizedSubIngredientMap = new Map();
+
+  subIngredientMap.forEach((items, key) => {
+    normalizedSubIngredientMap.set(
+      key,
+      Array.from(items).sort((a, b) => a.localeCompare(b))
+    );
+  });
+
+  // Second pass: group recipes and collect every restaurant/location
+  // where that recipe appears.
   dataRows.forEach((row, index) => {
     const recipeCode = normalizeDisplayText(row[headerInfo.recipeCodeIndex]);
 
-    const recipeName = normalizeDisplayText(
-      row[headerInfo.recipeNameIndex]
-    );
+    const recipeName = normalizeDisplayText(row[headerInfo.recipeNameIndex]);
 
-    const venue = normalizeDisplayText(row[headerInfo.venueIndex]);
+    const venue =
+      normalizeDisplayText(row[headerInfo.venueIndex]) || UNKNOWN_LOCATION;
 
     const ingredient = normalizeDisplayText(
       row[headerInfo.productIndex] || row[headerInfo.backupProductIndex]
@@ -386,7 +400,8 @@ const buildAllergenRecipeIndex = (rows) => {
     if (
       cleanRecipeName === "RECIPE NAME" ||
       cleanRecipeName === "MENU ITEM" ||
-      cleanRecipeName === "MENU ITEM NAME"
+      cleanRecipeName === "MENU ITEM NAME" ||
+      cleanRecipeName === "DISH NAME"
     ) {
       return;
     }
@@ -394,8 +409,9 @@ const buildAllergenRecipeIndex = (rows) => {
     const key = makeRecipeKey({
       recipeCode,
       recipeName,
-      venue,
     });
+
+    if (!key) return;
 
     if (!recipeMap.has(key)) {
       recipeMap.set(key, {
@@ -403,6 +419,7 @@ const buildAllergenRecipeIndex = (rows) => {
         recipeCode: recipeCode || "N/A",
         recipeName: recipeName || recipeCode || "Unnamed Recipe",
         venues: new Set(),
+        venueKeys: new Set(),
         ingredients: new Set(),
         sourceRows: [],
       });
@@ -410,18 +427,14 @@ const buildAllergenRecipeIndex = (rows) => {
 
     const recipe = recipeMap.get(key);
 
-    if (venue) recipe.venues.add(venue);
+    if (venue) {
+      recipe.venues.add(venue);
+      recipe.venueKeys.add(getLocationKey(venue));
+    }
+
     if (ingredient) recipe.ingredients.add(ingredient);
+
     recipe.sourceRows.push(index + headerInfo.headerRowIndex + 2);
-  });
-
-  const normalizedSubIngredientMap = new Map();
-
-  subIngredientMap.forEach((items, key) => {
-    normalizedSubIngredientMap.set(
-      key,
-      Array.from(items).sort((a, b) => a.localeCompare(b))
-    );
   });
 
   return Array.from(recipeMap.values())
@@ -429,6 +442,12 @@ const buildAllergenRecipeIndex = (rows) => {
       const ingredients = Array.from(recipe.ingredients).sort((a, b) =>
         a.localeCompare(b)
       );
+
+      const ingredientDetails = ingredients.map((ingredient) => ({
+        ingredient,
+        subIngredients:
+          normalizedSubIngredientMap.get(cleanText(ingredient)) || [],
+      }));
 
       const allergenWarnings = detectAllergensForRecipe({
         ingredients,
@@ -439,12 +458,23 @@ const buildAllergenRecipeIndex = (rows) => {
         allergenWarnings.map((warning) => warning.allergen)
       );
 
+      const venues = Array.from(recipe.venues).sort((a, b) =>
+        a.localeCompare(b)
+      );
+
+      const venueKeys = Array.from(recipe.venueKeys);
+
+      const subIngredientSearchText = ingredientDetails
+        .flatMap((item) => item.subIngredients)
+        .join(" ");
+
       const searchText = cleanSearchText(
         [
           recipe.recipeCode,
           recipe.recipeName,
-          Array.from(recipe.venues).join(" "),
+          venues.join(" "),
           ingredients.join(" "),
+          subIngredientSearchText,
           allergenWarnings
             .map(
               (warning) =>
@@ -456,8 +486,10 @@ const buildAllergenRecipeIndex = (rows) => {
 
       return {
         ...recipe,
-        venues: Array.from(recipe.venues).sort((a, b) => a.localeCompare(b)),
+        venues,
+        venueKeys,
         ingredients,
+        ingredientDetails,
         allergenWarnings,
         allergenSet,
         allergenCount: allergenWarnings.length,
@@ -490,6 +522,13 @@ const getRecipeIsSafeForSelectedAllergens = (recipe, selectedAllergens) => {
   return !getRecipeHasSelectedAllergen(recipe, selectedAllergens);
 };
 
+const getRecipeMatchesLocation = (recipe, selectedLocationKey) => {
+  if (!selectedLocationKey) return false;
+  if (selectedLocationKey === ALL_LOCATIONS_KEY) return true;
+
+  return (recipe.venueKeys || []).includes(selectedLocationKey);
+};
+
 const badgeStyle = {
   display: "inline-flex",
   alignItems: "center",
@@ -516,25 +555,7 @@ const safeBadgeStyle = {
   border: "1px solid #9ccc9c",
 };
 
-const badBadgeStyle = {
-  ...badgeStyle,
-  background: "#fff0f0",
-  color: "#b00020",
-  border: "1px solid #f1b8b8",
-};
-
-const neutralBadgeStyle = {
-  ...badgeStyle,
-  background: "#f2f2f2",
-  color: "#555",
-};
-
-function AllergenChips({
-  styles,
-  selectedAllergens,
-  onToggle,
-  onClear,
-}) {
+function AllergenChips({ styles, selectedAllergens, onToggle, onClear }) {
   return (
     <div style={{ display: "grid", gap: 10 }}>
       <div
@@ -583,11 +604,7 @@ function AllergenChips({
 
 function RecipeAllergenBadges({ recipe }) {
   if (!recipe.allergenWarnings.length) {
-    return (
-      <div style={safeBadgeStyle}>
-        ✅ No keyword allergens detected
-      </div>
-    );
+    return <div style={safeBadgeStyle}>✅ No keyword allergens detected</div>;
   }
 
   return (
@@ -601,12 +618,82 @@ function RecipeAllergenBadges({ recipe }) {
   );
 }
 
-function RecipeCard({
+function LocationCard({
   styles,
-  recipe,
+  location,
   selectedAllergens,
   onOpen,
 }) {
+  const isAll = location.locationKey === ALL_LOCATIONS_KEY;
+
+  return (
+    <button
+      type="button"
+      style={{
+        ...(styles.equipmentCard || {}),
+        width: "100%",
+        cursor: "pointer",
+        textAlign: "left",
+        ...(isAll ? styles.countedCard || {} : {}),
+      }}
+      onClick={() => onOpen(location)}
+    >
+      <div
+        style={{
+          fontSize: 42,
+          lineHeight: 1,
+          textAlign: "center",
+          marginBottom: 4,
+        }}
+      >
+        {isAll ? "🌍" : "🍽️"}
+      </div>
+
+      <div style={styles.recipeName}>{location.locationName}</div>
+
+      <div style={styles.recipeMeta}>
+        Type: {isAll ? "All Restaurants" : "Restaurant / Location"}
+      </div>
+
+      <div style={styles.statusGood}>Dishes: {location.recipeCount}</div>
+
+      <div style={styles.recipeMeta}>
+        Dishes with warnings: {location.warningCount}
+      </div>
+
+      {selectedAllergens.length > 0 && (
+        <>
+          <div style={styles.recipeMeta}>
+            Safe for selected filter: {location.safeCount}
+          </div>
+
+          <div style={styles.recipeMeta}>
+            Contains selected allergen: {location.selectedRiskCount}
+          </div>
+        </>
+      )}
+
+      {location.sampleRecipes.length > 0 && (
+        <div style={styles.recipeMeta}>
+          Examples: {location.sampleRecipes.join(", ")}
+        </div>
+      )}
+
+      <button
+        type="button"
+        style={styles.imageButton}
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpen(location);
+        }}
+      >
+        Open Dishes
+      </button>
+    </button>
+  );
+}
+
+function RecipeCard({ styles, recipe, selectedAllergens, onOpen }) {
   const selectedRisk = getRecipeHasSelectedAllergen(
     recipe,
     selectedAllergens
@@ -625,6 +712,10 @@ function RecipeCard({
       }))
     )
     .slice(0, 4);
+
+  const subRecipeCount = recipe.ingredientDetails.filter(
+    (item) => item.subIngredients.length > 0
+  ).length;
 
   return (
     <button
@@ -646,12 +737,19 @@ function RecipeCard({
       </div>
 
       <div style={styles.recipeMeta}>
-        Venues: {recipe.venues.length ? recipe.venues.join(", ") : "N/A"}
+        Restaurant / Location:{" "}
+        {recipe.venues.length ? recipe.venues.join(", ") : "N/A"}
       </div>
 
       <div style={styles.recipeMeta}>
         Ingredients: {recipe.ingredients.length}
       </div>
+
+      {subRecipeCount > 0 && (
+        <div style={styles.recipeMeta}>
+          Sub-recipes detected: {subRecipeCount}
+        </div>
+      )}
 
       <RecipeAllergenBadges recipe={recipe} />
 
@@ -662,9 +760,7 @@ function RecipeCard({
       )}
 
       {selectedAllergens.length > 0 && selectedRisk && (
-        <div style={styles.statusBad}>
-          Contains selected allergen
-        </div>
+        <div style={styles.statusBad}>Contains selected allergen</div>
       )}
 
       {matchedPreview.length > 0 && (
@@ -728,17 +824,11 @@ function RecipeDetailModal({
         }}
         onClick={(event) => event.stopPropagation()}
       >
-        <button
-          type="button"
-          style={styles.closeButton}
-          onClick={onClose}
-        >
+        <button type="button" style={styles.closeButton} onClick={onClose}>
           ✕
         </button>
 
-        <h2 style={{ marginTop: 0 }}>
-          {recipe.recipeName || "Unnamed Recipe"}
-        </h2>
+        <h2 style={{ marginTop: 0 }}>{recipe.recipeName}</h2>
 
         <div style={styles.infoBox}>
           <div>
@@ -746,12 +836,21 @@ function RecipeDetailModal({
           </div>
 
           <div>
-            <strong>Venues:</strong>{" "}
+            <strong>Restaurant / Location:</strong>{" "}
             {recipe.venues.length ? recipe.venues.join(", ") : "N/A"}
           </div>
 
           <div>
             <strong>Ingredients:</strong> {recipe.ingredients.length}
+          </div>
+
+          <div>
+            <strong>Sub-recipes detected:</strong>{" "}
+            {
+              recipe.ingredientDetails.filter(
+                (item) => item.subIngredients.length > 0
+              ).length
+            }
           </div>
 
           <div>
@@ -768,8 +867,7 @@ function RecipeDetailModal({
             }}
           >
             {safeForSelected
-              ? "Safe for selected allergens: " +
-                selectedAllergens.join(", ")
+              ? "Safe for selected allergens: " + selectedAllergens.join(", ")
               : selectedRisk
               ? "Not safe for selected allergens: " +
                 selectedAllergens.join(", ")
@@ -819,28 +917,29 @@ function RecipeDetailModal({
           </div>
         )}
 
-        <h3 style={styles.sectionTitle}>🧾 Ingredients in recipe</h3>
+        <h3 style={styles.sectionTitle}>🧾 Ingredients and sub-recipes</h3>
 
-        <div
-          style={{
-            columns: "260px",
-            columnGap: 24,
-          }}
-        >
-          <ul style={{ marginTop: 0 }}>
-            {recipe.ingredients.map((ingredient, index) => (
-              <li
-                key={`${ingredient}-${index}`}
-                style={{
-                  breakInside: "avoid",
-                  marginBottom: 8,
-                }}
-              >
-                {ingredient}
+        {recipe.ingredientDetails.length === 0 ? (
+          <p style={styles.emptyText}>No ingredients found for this recipe.</p>
+        ) : (
+          <ul>
+            {recipe.ingredientDetails.map((item, index) => (
+              <li key={`${item.ingredient}-${index}`} style={{ marginBottom: 10 }}>
+                <strong>{item.ingredient}</strong>
+
+                {item.subIngredients.length > 0 && (
+                  <ul style={styles.subRecipeList}>
+                    {item.subIngredients.map((subItem, subIndex) => (
+                      <li key={`${item.ingredient}-${subItem}-${subIndex}`}>
+                        {subItem}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ul>
-        </div>
+        )}
 
         <p style={styles.warningText}>
           This is a keyword-based allergen warning. Always verify with the
@@ -871,7 +970,7 @@ function MatrixTable({
         style={{
           width: "100%",
           borderCollapse: "collapse",
-          minWidth: 980,
+          minWidth: 1100,
           fontSize: 13,
         }}
       >
@@ -901,7 +1000,7 @@ function MatrixTable({
                 color: "#fff",
               }}
             >
-              Venue
+              Restaurant / Location
             </th>
 
             {ALLERGEN_NAMES.map((allergen) => {
@@ -966,7 +1065,7 @@ function MatrixTable({
                   padding: 10,
                   borderBottom: "1px solid #eee",
                   color: "#555",
-                  minWidth: 180,
+                  minWidth: 220,
                 }}
               >
                 {recipe.venues.join(", ") || "N/A"}
@@ -1028,6 +1127,9 @@ export default function AllergenModule({
   const [selectedRecipe, setSelectedRecipe] = useState(null);
   const [visibleCount, setVisibleCount] = useState(DEFAULT_VISIBLE_COUNT);
 
+  const [selectedLocationKey, setSelectedLocationKey] = useState("");
+  const [selectedLocationName, setSelectedLocationName] = useState("");
+
   const parseArrayBuffer = useCallback(async ({ arrayBuffer, name }) => {
     const workbook = XLSX.read(arrayBuffer, {
       type: "array",
@@ -1040,6 +1142,9 @@ export default function AllergenModule({
     setFileName(name || "Ingredient by Location");
     setSourceSheet(sheetName || "");
     setVisibleCount(DEFAULT_VISIBLE_COUNT);
+    setSelectedLocationKey("");
+    setSelectedLocationName("");
+    setSelectedRecipe(null);
 
     return {
       sheetName,
@@ -1086,6 +1191,8 @@ export default function AllergenModule({
       setRecipeRows([]);
       setFileName("");
       setSourceSheet("");
+      setSelectedLocationKey("");
+      setSelectedLocationName("");
       setMessage(
         error?.message ||
           "Could not load permanent Ingredient by Location file. Upload manually."
@@ -1101,7 +1208,12 @@ export default function AllergenModule({
 
   useEffect(() => {
     setVisibleCount(DEFAULT_VISIBLE_COUNT);
-  }, [deferredSearch, viewMode, selectedAllergens.join("|")]);
+  }, [
+    deferredSearch,
+    viewMode,
+    selectedAllergens.join("|"),
+    selectedLocationKey,
+  ]);
 
   const uploadIngredientFile = async (event) => {
     const file = event.target.files?.[0];
@@ -1148,6 +1260,104 @@ export default function AllergenModule({
     [recipeRows]
   );
 
+  const locationCards = useMemo(() => {
+    const map = new Map();
+
+    recipeIndex.forEach((recipe) => {
+      const venues = recipe.venues.length ? recipe.venues : [UNKNOWN_LOCATION];
+
+      venues.forEach((venue) => {
+        const locationKey = getLocationKey(venue);
+
+        if (!map.has(locationKey)) {
+          map.set(locationKey, {
+            locationKey,
+            locationName: venue || UNKNOWN_LOCATION,
+            recipes: new Map(),
+            warningCount: 0,
+            safeCount: 0,
+            selectedRiskCount: 0,
+            searchText: venue || UNKNOWN_LOCATION,
+          });
+        }
+
+        const location = map.get(locationKey);
+
+        if (!location.recipes.has(recipe.key)) {
+          location.recipes.set(recipe.key, recipe);
+
+          if (recipe.allergenWarnings.length > 0) {
+            location.warningCount += 1;
+          }
+
+          if (
+            selectedAllergens.length > 0 &&
+            getRecipeIsSafeForSelectedAllergens(recipe, selectedAllergens)
+          ) {
+            location.safeCount += 1;
+          }
+
+          if (
+            selectedAllergens.length > 0 &&
+            getRecipeHasSelectedAllergen(recipe, selectedAllergens)
+          ) {
+            location.selectedRiskCount += 1;
+          }
+
+          location.searchText += " " + recipe.searchText;
+        }
+      });
+    });
+
+    const actualLocationCards = Array.from(map.values())
+      .map((location) => ({
+        ...location,
+        recipeCount: location.recipes.size,
+        sampleRecipes: Array.from(location.recipes.values())
+          .slice(0, 3)
+          .map((recipe) => recipe.recipeName),
+      }))
+      .sort((a, b) => a.locationName.localeCompare(b.locationName));
+
+    const allCard = {
+      locationKey: ALL_LOCATIONS_KEY,
+      locationName: "All Restaurants",
+      recipes: new Map(recipeIndex.map((recipe) => [recipe.key, recipe])),
+      recipeCount: recipeIndex.length,
+      warningCount: recipeIndex.filter(
+        (recipe) => recipe.allergenWarnings.length > 0
+      ).length,
+      safeCount: selectedAllergens.length
+        ? recipeIndex.filter((recipe) =>
+            getRecipeIsSafeForSelectedAllergens(recipe, selectedAllergens)
+          ).length
+        : 0,
+      selectedRiskCount: selectedAllergens.length
+        ? recipeIndex.filter((recipe) =>
+            getRecipeHasSelectedAllergen(recipe, selectedAllergens)
+          ).length
+        : 0,
+      sampleRecipes: recipeIndex.slice(0, 3).map((recipe) => recipe.recipeName),
+      searchText: "all restaurants all locations all venues",
+    };
+
+    return recipeIndex.length ? [allCard, ...actualLocationCards] : [];
+  }, [recipeIndex, selectedAllergens]);
+
+  const availableLocationKeys = useMemo(
+    () => new Set(locationCards.map((location) => location.locationKey)),
+    [locationCards]
+  );
+
+  useEffect(() => {
+    if (!selectedLocationKey) return;
+
+    if (!availableLocationKeys.has(selectedLocationKey)) {
+      setSelectedLocationKey("");
+      setSelectedLocationName("");
+    }
+  }, [selectedLocationKey, availableLocationKeys]);
+
   const allergenSummary = useMemo(() => {
     const summary = new Map();
 
@@ -1173,10 +1383,28 @@ export default function AllergenModule({
     return Array.from(summary.values());
   }, [recipeIndex]);
 
+  const activeLocationRecipes = useMemo(() => {
+    if (!selectedLocationKey) return [];
+
+    return recipeIndex.filter((recipe) =>
+      getRecipeMatchesLocation(recipe, selectedLocationKey)
+    );
+  }, [recipeIndex, selectedLocationKey]);
+
+  const filteredLocationCards = useMemo(() => {
+    const query = cleanSearchText(deferredSearch);
+
+    return locationCards.filter((location) => {
+      if (!query) return true;
+
+      return cleanSearchText(location.searchText).includes(query);
+    });
+  }, [locationCards, deferredSearch]);
+
   const filteredRecipes = useMemo(() => {
     const query = cleanSearchText(deferredSearch);
 
-    return recipeIndex.filter((recipe) => {
+    return activeLocationRecipes.filter((recipe) => {
       if (query && !recipe.searchText.includes(query)) {
         return false;
       }
@@ -1192,28 +1420,37 @@ export default function AllergenModule({
 
       return true;
     });
-  }, [recipeIndex, deferredSearch, viewMode, selectedAllergens]);
+  }, [
+    activeLocationRecipes,
+    deferredSearch,
+    viewMode,
+    selectedAllergens,
+  ]);
 
   const visibleRecipes = useMemo(
     () => filteredRecipes.slice(0, visibleCount),
     [filteredRecipes, visibleCount]
   );
 
+  const safeScopeRecipes = selectedLocationKey
+    ? activeLocationRecipes
+    : recipeIndex;
+
   const safeRecipeCount = useMemo(() => {
     if (!selectedAllergens.length) return 0;
 
-    return recipeIndex.filter((recipe) =>
+    return safeScopeRecipes.filter((recipe) =>
       getRecipeIsSafeForSelectedAllergens(recipe, selectedAllergens)
     ).length;
-  }, [recipeIndex, selectedAllergens]);
+  }, [safeScopeRecipes, selectedAllergens]);
 
   const selectedRiskCount = useMemo(() => {
     if (!selectedAllergens.length) return 0;
 
-    return recipeIndex.filter((recipe) =>
+    return safeScopeRecipes.filter((recipe) =>
       getRecipeHasSelectedAllergen(recipe, selectedAllergens)
     ).length;
-  }, [recipeIndex, selectedAllergens]);
+  }, [safeScopeRecipes, selectedAllergens]);
 
   const recipesWithWarnings = useMemo(
     () => recipeIndex.filter((recipe) => recipe.allergenWarnings.length > 0),
@@ -1222,12 +1459,40 @@ export default function AllergenModule({
 
   const recipesWithoutWarnings = recipeIndex.length - recipesWithWarnings.length;
 
+  const activeLocationLabel = selectedLocationName || "Choose restaurant";
+
   const toggleAllergen = (allergen) => {
     setSelectedAllergens((current) =>
       current.includes(allergen)
         ? current.filter((item) => item !== allergen)
         : [...current, allergen]
     );
+  };
+
+  const openLocation = (location) => {
+    setSelectedLocationKey(location.locationKey);
+    setSelectedLocationName(location.locationName);
+    setSearch("");
+    setSelectedRecipe(null);
+    setVisibleCount(DEFAULT_VISIBLE_COUNT);
+
+    if (typeof logUsageEvent === "function") {
+      logUsageEvent("allergen_location_opened", {
+        module: "allergen",
+        ship: userShip,
+        userEmail,
+        locationName: location.locationName,
+        recipeCount: location.recipeCount,
+      });
+    }
+  };
+
+  const backToLocations = () => {
+    setSelectedLocationKey("");
+    setSelectedLocationName("");
+    setSearch("");
+    setSelectedRecipe(null);
+    setVisibleCount(DEFAULT_VISIBLE_COUNT);
   };
 
   const openRecipe = (recipe) => {
@@ -1238,6 +1503,7 @@ export default function AllergenModule({
         module: "allergen",
         ship: userShip,
         userEmail,
+        locationName: activeLocationLabel,
         recipeCode: recipe.recipeCode,
         recipeName: recipe.recipeName,
         allergens: recipe.allergenWarnings.map((item) => item.allergen),
@@ -1249,6 +1515,10 @@ export default function AllergenModule({
     ...(styles.viewModeButton || {}),
     ...(active ? styles.viewModeButtonActive || {} : {}),
   });
+
+  const searchPlaceholder = selectedLocationKey
+    ? "Search dish, recipe code, ingredient, sub-recipe, allergen..."
+    : "Search restaurant / location, dish, ingredient, allergen...";
 
   return (
     <main style={styles.page}>
@@ -1273,8 +1543,8 @@ export default function AllergenModule({
           <h2 style={styles.cardTitle}>🧬 Allergen Matrix</h2>
 
           <p style={styles.emptyText}>
-            Fast recipe allergen search, recipe cards, matrix view, and safe
-            dish finder.
+            Choose restaurant / location first, then open the dishes used there.
+            Recipe popup shows ingredients and sub-recipes.
           </p>
 
           <button
@@ -1309,7 +1579,14 @@ export default function AllergenModule({
             </div>
 
             <div>
-              🍽️ Recipes indexed: <strong>{recipeIndex.length}</strong>
+              🍽️ Restaurants / locations:{" "}
+              <strong>
+                {locationCards.length ? locationCards.length - 1 : 0}
+              </strong>
+            </div>
+
+            <div>
+              📋 Recipes indexed: <strong>{recipeIndex.length}</strong>
             </div>
 
             <div>
@@ -1333,8 +1610,8 @@ export default function AllergenModule({
           <h2 style={styles.cardTitle}>✅ Safe Dish Finder</h2>
 
           <p style={styles.emptyText}>
-            Choose allergens to avoid. Safe dishes will be dishes where none of
-            those selected allergens were detected by the keyword rules.
+            Choose allergens to avoid. Safe dishes will be filtered inside the
+            selected restaurant / location.
           </p>
 
           <AllergenChips
@@ -1345,6 +1622,10 @@ export default function AllergenModule({
           />
 
           <div style={styles.infoBox}>
+            <div>
+              📍 Scope: <strong>{activeLocationLabel}</strong>
+            </div>
+
             <div>
               🚫 Avoiding:{" "}
               <strong>
@@ -1383,13 +1664,30 @@ export default function AllergenModule({
           }}
         >
           <div>
-            <h2 style={styles.productTitle}>🔎 Search & View</h2>
+            <h2 style={styles.productTitle}>
+              {selectedLocationKey
+                ? `🍽️ ${activeLocationLabel}`
+                : "🍽️ Choose Restaurant / Location"}
+            </h2>
+
             <p style={{ ...(styles.emptyText || {}), margin: 0 }}>
-              Search by dish, recipe code, venue, ingredient, or allergen.
+              {selectedLocationKey
+                ? "Showing dishes used in this restaurant / location."
+                : "Select a restaurant / location card first."}
             </p>
           </div>
 
           <div style={styles.headerActions}>
+            {selectedLocationKey && (
+              <button
+                type="button"
+                style={styles.backButton}
+                onClick={backToLocations}
+              >
+                ← Restaurants
+              </button>
+            )}
+
             <button
               type="button"
               style={viewButtonStyle(viewMode === "cards")}
@@ -1425,36 +1723,93 @@ export default function AllergenModule({
         </div>
 
         <input
-          placeholder="Search dish, recipe code, venue, ingredient, allergen..."
+          placeholder={searchPlaceholder}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           style={styles.searchInput}
         />
 
         <div style={styles.infoBox}>
-          <div>
-            👀 Showing: <strong>{visibleRecipes.length}</strong> /{" "}
-            {filteredRecipes.length}
-          </div>
+          {!selectedLocationKey ? (
+            <>
+              <div>
+                🍽️ Restaurants / locations shown:{" "}
+                <strong>{filteredLocationCards.length}</strong>
+              </div>
 
-          <div>
-            📋 Total indexed recipes: <strong>{recipeIndex.length}</strong>
-          </div>
+              <div>
+                📋 Total restaurants / locations:{" "}
+                <strong>
+                  {locationCards.length ? locationCards.length - 1 : 0}
+                </strong>
+              </div>
 
-          <div>
-            🧭 Current view:{" "}
-            <strong>
-              {viewMode === "cards"
-                ? "Recipe Cards"
-                : viewMode === "matrix"
-                ? "Matrix"
-                : viewMode === "safe"
-                ? "Safe Dishes"
-                : "Warnings Only"}
-            </strong>
-          </div>
+              <div>
+                Open a restaurant / location card to see its dishes.
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                📍 Location: <strong>{activeLocationLabel}</strong>
+              </div>
+
+              <div>
+                👀 Dishes showing: <strong>{visibleRecipes.length}</strong> /{" "}
+                {filteredRecipes.length}
+              </div>
+
+              <div>
+                📋 Dishes in location:{" "}
+                <strong>{activeLocationRecipes.length}</strong>
+              </div>
+
+              <div>
+                🧭 Current view:{" "}
+                <strong>
+                  {viewMode === "cards"
+                    ? "Recipe Cards"
+                    : viewMode === "matrix"
+                    ? "Matrix"
+                    : viewMode === "safe"
+                    ? "Safe Dishes"
+                    : "Warnings Only"}
+                </strong>
+              </div>
+            </>
+          )}
         </div>
       </section>
+
+      {!selectedLocationKey && (
+        <section style={styles.card}>
+          <h2 style={styles.productTitle}>🍽️ Restaurants / Locations</h2>
+
+          {recipeRows.length === 0 && (
+            <p style={styles.emptyText}>
+              Load or upload the Ingredient by Location file to begin.
+            </p>
+          )}
+
+          {recipeRows.length > 0 && filteredLocationCards.length === 0 && (
+            <p style={styles.emptyText}>
+              No restaurant / location matched your search.
+            </p>
+          )}
+
+          <div style={styles.equipmentGrid}>
+            {filteredLocationCards.map((location) => (
+              <LocationCard
+                key={location.locationKey}
+                styles={styles}
+                location={location}
+                selectedAllergens={selectedAllergens}
+                onOpen={openLocation}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       <section style={styles.card}>
         <h2 style={styles.productTitle}>📊 Allergen Summary</h2>
@@ -1477,19 +1832,13 @@ export default function AllergenModule({
                 {item.allergen}
               </div>
 
-              <div style={styles.recipeMeta}>
-                Recipes: {item.recipes}
-              </div>
+              <div style={styles.recipeMeta}>Recipes: {item.recipes}</div>
 
               <div style={styles.recipeMeta}>
                 Matched ingredient items: {item.matchedItems}
               </div>
 
-              <div
-                style={
-                  item.recipes > 0 ? allergenBadgeStyle : safeBadgeStyle
-                }
-              >
+              <div style={item.recipes > 0 ? allergenBadgeStyle : safeBadgeStyle}>
                 {item.recipes > 0 ? "Detected" : "No matches"}
               </div>
             </button>
@@ -1497,77 +1846,74 @@ export default function AllergenModule({
         </div>
       </section>
 
-      <section style={styles.card}>
-        <h2 style={styles.productTitle}>
-          {viewMode === "matrix"
-            ? "🧬 Allergen Matrix"
-            : viewMode === "safe"
-            ? "✅ Safe Dish Results"
-            : viewMode === "warnings"
-            ? "⚠️ Recipes With Allergen Warnings"
-            : "🍽️ Recipe Cards"}
-        </h2>
+      {selectedLocationKey && (
+        <section style={styles.card}>
+          <h2 style={styles.productTitle}>
+            {viewMode === "matrix"
+              ? "🧬 Allergen Matrix"
+              : viewMode === "safe"
+              ? "✅ Safe Dish Results"
+              : viewMode === "warnings"
+              ? "⚠️ Recipes With Allergen Warnings"
+              : "🍽️ Recipe Cards"}
+          </h2>
 
-        {recipeRows.length === 0 && (
-          <p style={styles.emptyText}>
-            Load or upload the Ingredient by Location file to begin.
-          </p>
-        )}
+          {viewMode === "safe" && !selectedAllergens.length && (
+            <p style={styles.warningText}>
+              Select one or more allergens in Safe Dish Finder to filter safe
+              dishes.
+            </p>
+          )}
 
-        {recipeRows.length > 0 && filteredRecipes.length === 0 && (
-          <p style={styles.emptyText}>
-            No recipes match the current search/filter.
-          </p>
-        )}
+          {filteredRecipes.length === 0 && (
+            <p style={styles.emptyText}>
+              No dishes match the current search/filter in{" "}
+              {activeLocationLabel}.
+            </p>
+          )}
 
-        {viewMode === "safe" && !selectedAllergens.length && (
-          <p style={styles.warningText}>
-            Select one or more allergens in Safe Dish Finder to filter safe
-            dishes.
-          </p>
-        )}
+          {viewMode === "matrix" ? (
+            <MatrixTable
+              styles={styles}
+              recipes={visibleRecipes}
+              selectedAllergens={selectedAllergens}
+              onOpenRecipe={openRecipe}
+            />
+          ) : (
+            <div style={styles.equipmentGrid}>
+              {visibleRecipes.map((recipe) => (
+                <RecipeCard
+                  key={recipe.key}
+                  styles={styles}
+                  recipe={recipe}
+                  selectedAllergens={selectedAllergens}
+                  onOpen={openRecipe}
+                />
+              ))}
+            </div>
+          )}
 
-        {viewMode === "matrix" ? (
-          <MatrixTable
-            styles={styles}
-            recipes={visibleRecipes}
-            selectedAllergens={selectedAllergens}
-            onOpenRecipe={openRecipe}
-          />
-        ) : (
-          <div style={styles.equipmentGrid}>
-            {visibleRecipes.map((recipe) => (
-              <RecipeCard
-                key={recipe.key}
-                styles={styles}
-                recipe={recipe}
-                selectedAllergens={selectedAllergens}
-                onOpen={openRecipe}
-              />
-            ))}
-          </div>
-        )}
-
-        {filteredRecipes.length > visibleRecipes.length && (
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              marginTop: 18,
-            }}
-          >
-            <button
-              type="button"
-              style={styles.primaryButton}
-              onClick={() =>
-                setVisibleCount((current) => current + VISIBLE_STEP)
-              }
+          {filteredRecipes.length > visibleRecipes.length && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "center",
+                marginTop: 18,
+              }}
             >
-              Show More ({visibleRecipes.length} / {filteredRecipes.length})
-            </button>
-          </div>
-        )}
-      </section>
+              <button
+                type="button"
+                style={styles.primaryButton}
+                onClick={() =>
+                  setVisibleCount((current) => current + VISIBLE_STEP)
+                }
+              >
+                Show More ({visibleRecipes.length} / {filteredRecipes.length})
+              </button>
+            </div>
+          )}
+        </section>
+      )}
 
       <RecipeDetailModal
         styles={styles}
