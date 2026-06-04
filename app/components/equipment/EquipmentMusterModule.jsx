@@ -5,6 +5,12 @@ import React, { useEffect, useMemo, useState } from "react";
 const cleanMusterSearchText = (value) =>
   String(value || "").toLowerCase().replace(/\s+/g, " ").trim();
 
+const cleanMusterKeyText = (value) =>
+  String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+
 const getMusterDuplicateKey = (item) => {
   const code = String(item?.code || "")
     .trim()
@@ -33,7 +39,9 @@ const getMusterStationName = (item, equipmentDepartment) => {
       item?.sourceSheetName ||
       "MASTER";
 
-    return String(stationName || "MASTER").replace(/\s+/g, " ").trim() || "MASTER";
+    return (
+      String(stationName || "MASTER").replace(/\s+/g, " ").trim() || "MASTER"
+    );
   }
 
   return (
@@ -44,16 +52,68 @@ const getMusterStationName = (item, equipmentDepartment) => {
 };
 
 const getMusterStationKey = (value) =>
-  String(value || "MASTER")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toUpperCase() || "MASTER";
+  cleanMusterKeyText(value || "MASTER") || "MASTER";
 
 const isMasterStationName = (value) => getMusterStationKey(value) === "MASTER";
+
+const isMasterRestaurantItem = (item, equipmentDepartment) => {
+  const department = String(equipmentDepartment || "").toLowerCase();
+
+  if (department !== "restaurant") return false;
+
+  if (item?.isMasterSheet) return true;
+
+  const stationName = getMusterStationName(item, equipmentDepartment);
+  const sheetName = item?.sheetName;
+  const category = item?.category;
+
+  return (
+    isMasterStationName(stationName) ||
+    isMasterStationName(sheetName) ||
+    isMasterStationName(category)
+  );
+};
+
+const getMusterRestaurantSectionName = (item, equipmentDepartment) => {
+  if (isMasterRestaurantItem(item, equipmentDepartment)) {
+    return "MASTER";
+  }
+
+  const stationName = getMusterStationName(item, equipmentDepartment);
+  const category = String(item?.category || item?.sourceSheetName || "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const stationKey = getMusterStationKey(stationName);
+  const categoryKey = getMusterStationKey(category);
+
+  if (!category || categoryKey === stationKey) {
+    return stationName || "Restaurant";
+  }
+
+  return `${stationName} - ${category}`;
+};
+
+const getMusterRestaurantSectionKey = (item, equipmentDepartment) => {
+  if (isMasterRestaurantItem(item, equipmentDepartment)) {
+    return "MASTER";
+  }
+
+  const stationName = getMusterStationName(item, equipmentDepartment);
+  const category = String(item?.category || item?.sourceSheetName || stationName)
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const stationKey = getMusterStationKey(stationName);
+  const categoryKey = getMusterStationKey(category);
+
+  return `${stationKey}|||${categoryKey}`;
+};
 
 const getMusterLocationText = (item) =>
   [
     item?.stationName || item?.sheetName,
+    item?.sourceSheetName,
     item?.category,
   ]
     .filter(Boolean)
@@ -311,7 +371,7 @@ export default function EquipmentMusterModule({
 }) {
   const [musterSearch, setMusterSearch] = useState("");
   const [selectedEquipment, setSelectedEquipment] = useState(null);
-  const [selectedRestaurantStation, setSelectedRestaurantStation] = useState("");
+  const [selectedRestaurantSection, setSelectedRestaurantSection] = useState("");
 
   const departmentLabel = activeEquipmentDepartmentLabel || "Equipment";
   const isRestaurantDepartment =
@@ -339,13 +399,13 @@ export default function EquipmentMusterModule({
       ? getImageUrl(value, size)
       : String(value || "").trim();
 
-  const allRestaurantStationKeys = useMemo(() => {
+  const allRestaurantSectionKeys = useMemo(() => {
     if (!isRestaurantDepartment) return new Set();
 
     return new Set(
       (musterItems || [])
         .map((item) =>
-          getMusterStationKey(getMusterStationName(item, equipmentDepartment))
+          getMusterRestaurantSectionKey(item, equipmentDepartment)
         )
         .filter(Boolean)
     );
@@ -353,110 +413,122 @@ export default function EquipmentMusterModule({
 
   useEffect(() => {
     if (!isRestaurantDepartment) {
-      setSelectedRestaurantStation("");
+      setSelectedRestaurantSection("");
       return;
     }
 
     if (
-      selectedRestaurantStation &&
-      !allRestaurantStationKeys.has(selectedRestaurantStation)
+      selectedRestaurantSection &&
+      !allRestaurantSectionKeys.has(selectedRestaurantSection)
     ) {
-      setSelectedRestaurantStation("");
+      setSelectedRestaurantSection("");
     }
   }, [
     isRestaurantDepartment,
-    selectedRestaurantStation,
-    allRestaurantStationKeys,
+    selectedRestaurantSection,
+    allRestaurantSectionKeys,
   ]);
 
   useEffect(() => {
     setSelectedEquipment(null);
-  }, [selectedRestaurantStation, equipmentDepartment]);
+  }, [selectedRestaurantSection, equipmentDepartment]);
 
-  const selectedRestaurantStationName = useMemo(() => {
-    if (!selectedRestaurantStation) return "";
+  const selectedRestaurantSectionName = useMemo(() => {
+    if (!selectedRestaurantSection) return "";
 
     const matchingItem = (musterItems || []).find(
       (item) =>
-        getMusterStationKey(getMusterStationName(item, equipmentDepartment)) ===
-        selectedRestaurantStation
+        getMusterRestaurantSectionKey(item, equipmentDepartment) ===
+        selectedRestaurantSection
     );
 
     return (
-      getMusterStationName(matchingItem, equipmentDepartment) ||
-      selectedRestaurantStation
+      getMusterRestaurantSectionName(matchingItem, equipmentDepartment) ||
+      selectedRestaurantSection
     );
-  }, [musterItems, equipmentDepartment, selectedRestaurantStation]);
+  }, [musterItems, equipmentDepartment, selectedRestaurantSection]);
 
-  const restaurantStationCards = useMemo(() => {
+  const restaurantSectionCards = useMemo(() => {
     if (!isRestaurantDepartment) return [];
 
     const query = cleanMusterSearchText(musterSearch);
-    const stationMap = new Map();
+    const sectionMap = new Map();
 
     (musterItems || []).forEach((item) => {
-      const stationName = getMusterStationName(item, equipmentDepartment);
-      const stationKey = getMusterStationKey(stationName);
+      const sectionKey = getMusterRestaurantSectionKey(
+        item,
+        equipmentDepartment
+      );
 
-      if (!stationMap.has(stationKey)) {
-        stationMap.set(stationKey, {
-          stationKey,
+      const sectionName = getMusterRestaurantSectionName(
+        item,
+        equipmentDepartment
+      );
+
+      const stationName = getMusterStationName(item, equipmentDepartment);
+      const category = String(item?.category || sectionName || "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!sectionMap.has(sectionKey)) {
+        sectionMap.set(sectionKey, {
+          sectionKey,
+          sectionName,
           stationName,
+          category,
           rawItems: [],
           uniqueKeys: new Set(),
           pictureCount: 0,
-          searchText: stationName,
+          searchText: `${sectionName} ${stationName} ${category}`,
           sampleImage: "",
           sampleFallbackImage: "",
+          isMaster: isMasterRestaurantItem(item, equipmentDepartment),
         });
       }
 
-      const station = stationMap.get(stationKey);
+      const section = sectionMap.get(sectionKey);
       const duplicateKey = getMusterDuplicateKey(item);
 
-      station.rawItems.push(item);
+      section.rawItems.push(item);
 
       if (duplicateKey) {
-        station.uniqueKeys.add(duplicateKey);
+        section.uniqueKeys.add(duplicateKey);
       }
 
       const image = String(item?.image || "").trim();
       const fallbackImage = String(item?.imageFallback || "").trim();
 
       if (image || fallbackImage) {
-        station.pictureCount += 1;
+        section.pictureCount += 1;
       }
 
-      if (!station.sampleImage && image) {
-        station.sampleImage = image;
+      if (!section.sampleImage && image) {
+        section.sampleImage = image;
       }
 
-      if (!station.sampleFallbackImage && fallbackImage) {
-        station.sampleFallbackImage = fallbackImage;
+      if (!section.sampleFallbackImage && fallbackImage) {
+        section.sampleFallbackImage = fallbackImage;
       }
 
-      station.searchText += " " + getMusterItemSearchText(item);
+      section.searchText += " " + getMusterItemSearchText(item);
     });
 
-    return Array.from(stationMap.values())
-      .map((station) => ({
-        ...station,
-        rawCount: station.rawItems.length,
-        uniqueCount: station.uniqueKeys.size || station.rawItems.length,
+    return Array.from(sectionMap.values())
+      .map((section) => ({
+        ...section,
+        rawCount: section.rawItems.length,
+        uniqueCount: section.uniqueKeys.size || section.rawItems.length,
       }))
-      .filter((station) => {
+      .filter((section) => {
         if (!query) return true;
 
-        return cleanMusterSearchText(station.searchText).includes(query);
+        return cleanMusterSearchText(section.searchText).includes(query);
       })
       .sort((a, b) => {
-        const aMaster = isMasterStationName(a.stationName);
-        const bMaster = isMasterStationName(b.stationName);
+        if (a.isMaster !== b.isMaster) return a.isMaster ? -1 : 1;
 
-        if (aMaster !== bMaster) return aMaster ? -1 : 1;
-
-        return String(a.stationName || "").localeCompare(
-          String(b.stationName || "")
+        return String(a.sectionName || "").localeCompare(
+          String(b.sectionName || "")
         );
       });
   }, [
@@ -471,20 +543,20 @@ export default function EquipmentMusterModule({
       return musterItems || [];
     }
 
-    if (!selectedRestaurantStation) {
+    if (!selectedRestaurantSection) {
       return [];
     }
 
     return (musterItems || []).filter(
       (item) =>
-        getMusterStationKey(getMusterStationName(item, equipmentDepartment)) ===
-        selectedRestaurantStation
+        getMusterRestaurantSectionKey(item, equipmentDepartment) ===
+        selectedRestaurantSection
     );
   }, [
     musterItems,
     equipmentDepartment,
     isRestaurantDepartment,
-    selectedRestaurantStation,
+    selectedRestaurantSection,
   ]);
 
   const groupedMuster = useMemo(() => {
@@ -516,7 +588,7 @@ export default function EquipmentMusterModule({
       if (query && !searchText.includes(query)) return;
 
       const groupKey = isRestaurantDepartment
-        ? item.category || selectedRestaurantStationName || "Restaurant"
+        ? item.category || selectedRestaurantSectionName || "Restaurant"
         : `${item.sheetName || "Unknown Sheet"} / ${
             item.category || "Uncategorized"
           }`;
@@ -533,7 +605,7 @@ export default function EquipmentMusterModule({
     visibleMusterItems,
     musterSearch,
     isRestaurantDepartment,
-    selectedRestaurantStationName,
+    selectedRestaurantSectionName,
   ]);
 
   const totalItems = useMemo(
@@ -561,24 +633,28 @@ export default function EquipmentMusterModule({
   );
 
   const sheetCount = useMemo(() => {
-    const values = (musterItems || []).map((item) =>
-      isRestaurantDepartment
-        ? getMusterStationName(item, equipmentDepartment)
-        : item.sheetName
-    );
+    if (isRestaurantDepartment) {
+      const values = (musterItems || []).map((item) =>
+        getMusterRestaurantSectionName(item, equipmentDepartment)
+      );
 
-    return [...new Set(values)].filter(Boolean).length;
+      return [...new Set(values)].filter(Boolean).length;
+    }
+
+    return [...new Set((musterItems || []).map((item) => item.sheetName))]
+      .filter(Boolean)
+      .length;
   }, [musterItems, equipmentDepartment, isRestaurantDepartment]);
 
   const groupCount = Object.keys(groupedMuster || {}).length;
 
-  const restaurantUniqueItemsShown = restaurantStationCards.reduce(
-    (sum, station) => sum + Number(station.uniqueCount || 0),
+  const restaurantUniqueItemsShown = restaurantSectionCards.reduce(
+    (sum, section) => sum + Number(section.uniqueCount || 0),
     0
   );
 
-  const restaurantPicturesShown = restaurantStationCards.reduce(
-    (sum, station) => sum + Number(station.pictureCount || 0),
+  const restaurantPicturesShown = restaurantSectionCards.reduce(
+    (sum, section) => sum + Number(section.pictureCount || 0),
     0
   );
 
@@ -593,18 +669,18 @@ export default function EquipmentMusterModule({
     });
   };
 
-  const openRestaurantStation = (stationKey) => {
-    setSelectedRestaurantStation(stationKey);
+  const openRestaurantSection = (sectionKey) => {
+    setSelectedRestaurantSection(sectionKey);
     setMusterSearch("");
   };
 
   const searchPlaceholder =
-    isRestaurantDepartment && !selectedRestaurantStation
-      ? "Search MASTER, restaurant/venue, code or equipment..."
+    isRestaurantDepartment && !selectedRestaurantSection
+      ? "Search MASTER, restaurant, category, code or equipment..."
       : "Search equipment, code, sheet or subcategory...";
 
   const helpText = isRestaurantDepartment
-    ? "Restaurant file: first MASTER sheet picture column C; venue tabs picture column D."
+    ? "Restaurant file: A = picture, B = code, C = description. MASTER and each restaurant/category tab open as cards first."
     : equipmentDepartment === "bar"
     ? "Bar file: picture is read from column D or column I when available."
     : "C = Subcategory, D = Code, E = Name, I = Product Picture, H = backup only.";
@@ -685,11 +761,11 @@ export default function EquipmentMusterModule({
           {musterMessage && <p style={styles.message}>{musterMessage}</p>}
 
           <div style={styles.infoBox}>
-            {isRestaurantDepartment && !selectedRestaurantStation ? (
+            {isRestaurantDepartment && !selectedRestaurantSection ? (
               <>
                 <div>
-                  🍽️ MASTER / venues shown:{" "}
-                  <strong>{restaurantStationCards.length}</strong>
+                  🍽️ MASTER / section cards shown:{" "}
+                  <strong>{restaurantSectionCards.length}</strong>
                 </div>
 
                 <div>
@@ -708,18 +784,17 @@ export default function EquipmentMusterModule({
                 </div>
 
                 <div>
-                  📄 MASTER / venue sheets included:{" "}
-                  <strong>{sheetCount}</strong>
+                  📄 MASTER / sections included: <strong>{sheetCount}</strong>
                 </div>
 
                 <div>{helpText}</div>
               </>
             ) : (
               <>
-                {isRestaurantDepartment && selectedRestaurantStation && (
+                {isRestaurantDepartment && selectedRestaurantSection && (
                   <div>
                     🍽️ Selected:{" "}
-                    <strong>{selectedRestaurantStationName}</strong>
+                    <strong>{selectedRestaurantSectionName}</strong>
                   </div>
                 )}
 
@@ -738,7 +813,7 @@ export default function EquipmentMusterModule({
                 </div>
 
                 <div>
-                  📄 Sheets / stations included: <strong>{sheetCount}</strong>
+                  📄 Sheets / sections included: <strong>{sheetCount}</strong>
                 </div>
 
                 <div>
@@ -761,22 +836,22 @@ export default function EquipmentMusterModule({
             style={styles.searchInput}
           />
 
-          {isRestaurantDepartment && selectedRestaurantStation && (
+          {isRestaurantDepartment && selectedRestaurantSection && (
             <button
               type="button"
               style={styles.backButton}
               onClick={() => {
-                setSelectedRestaurantStation("");
+                setSelectedRestaurantSection("");
                 setMusterSearch("");
               }}
             >
-              ← Back to MASTER / Venues
+              ← Back to MASTER / Sections
             </button>
           )}
 
           <p style={styles.emptyText}>
-            {isRestaurantDepartment && !selectedRestaurantStation
-              ? "Select MASTER or a restaurant/venue card first. Then the equipment for that section will be shown."
+            {isRestaurantDepartment && !selectedRestaurantSection
+              ? "Select MASTER or a restaurant/category card first. Then the equipment for that section will be shown."
               : "Click any equipment card to open the picture and full details."}
           </p>
         </div>
@@ -793,35 +868,36 @@ export default function EquipmentMusterModule({
         >
           <div>
             <h2 style={styles.productTitle}>
-              {isRestaurantDepartment && selectedRestaurantStation
-                ? `🍽️ ${selectedRestaurantStationName}`
+              {isRestaurantDepartment && selectedRestaurantSection
+                ? `🍽️ ${selectedRestaurantSectionName}`
                 : `📋 ${departmentLabel} Master List`}
             </h2>
 
-            {isRestaurantDepartment && selectedRestaurantStation && (
+            {isRestaurantDepartment && selectedRestaurantSection && (
               <p style={{ ...styles.emptyText, margin: 0 }}>
                 Showing equipment assigned to{" "}
-                <strong>{selectedRestaurantStationName}</strong>.
+                <strong>{selectedRestaurantSectionName}</strong>.
               </p>
             )}
 
-            {isRestaurantDepartment && !selectedRestaurantStation && (
+            {isRestaurantDepartment && !selectedRestaurantSection && (
               <p style={{ ...styles.emptyText, margin: 0 }}>
-                Choose MASTER or a restaurant/venue to view its equipment.
+                Choose MASTER or a restaurant/category section to view its
+                equipment.
               </p>
             )}
           </div>
 
-          {isRestaurantDepartment && selectedRestaurantStation && (
+          {isRestaurantDepartment && selectedRestaurantSection && (
             <button
               type="button"
               style={styles.backButton}
               onClick={() => {
-                setSelectedRestaurantStation("");
+                setSelectedRestaurantSection("");
                 setMusterSearch("");
               }}
             >
-              ← MASTER / Venues
+              ← MASTER / Sections
             </button>
           )}
         </div>
@@ -832,64 +908,95 @@ export default function EquipmentMusterModule({
 
         {isRestaurantDepartment &&
           (musterItems || []).length > 0 &&
-          !selectedRestaurantStation && (
+          !selectedRestaurantSection && (
             <>
-              {restaurantStationCards.length === 0 && (
+              {restaurantSectionCards.length === 0 && (
                 <p style={styles.emptyText}>
-                  No MASTER / restaurant venue matched your search.
+                  No MASTER / restaurant section matched your search.
                 </p>
               )}
 
               <div style={styles.equipmentGrid}>
-                {restaurantStationCards.map((station) => {
-                  const isMaster = isMasterStationName(station.stationName);
+                {restaurantSectionCards.map((section) => {
+                  const isMaster = section.isMaster;
 
                   return (
                     <div
-                      key={station.stationKey}
+                      key={section.sectionKey}
                       role="button"
                       tabIndex={0}
                       style={{
                         ...styles.equipmentCard,
                         ...(isMaster ? styles.countedCard : {}),
                       }}
-                      onClick={() => openRestaurantStation(station.stationKey)}
+                      onClick={() => openRestaurantSection(section.sectionKey)}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
-                          openRestaurantStation(station.stationKey);
+                          openRestaurantSection(section.sectionKey);
                         }
                       }}
                     >
-                      <div
-                        style={{
-                          fontSize: 42,
-                          lineHeight: 1,
-                          textAlign: "center",
-                          marginBottom: 4,
-                        }}
-                      >
-                        {isMaster ? "📘" : "🍽️"}
-                      </div>
+                      {section.sampleImage || section.sampleFallbackImage ? (
+                        <MusterImagePreview
+                          styles={styles}
+                          item={{ name: section.sectionName }}
+                          displayImage={section.sampleImage}
+                          fallbackImage={section.sampleFallbackImage}
+                          getImageSrc={getImageSrc}
+                          height={130}
+                          size="w360"
+                          showOpenButton={false}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            fontSize: 42,
+                            lineHeight: 1,
+                            textAlign: "center",
+                            marginBottom: 4,
+                            minHeight: 130,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            background: "#f2f2f2",
+                            borderRadius: 10,
+                          }}
+                        >
+                          {isMaster ? "📘" : "🍽️"}
+                        </div>
+                      )}
 
                       <div style={styles.recipeName}>
-                        {station.stationName}
+                        {section.sectionName}
                       </div>
 
                       <div style={styles.recipeMeta}>
-                        Type: {isMaster ? "Master" : "Restaurant / Venue"}
+                        Type: {isMaster ? "Master full list" : "Restaurant section"}
                       </div>
+
+                      {!isMaster && section.stationName && (
+                        <div style={styles.recipeMeta}>
+                          Restaurant: {section.stationName}
+                        </div>
+                      )}
+
+                      {!isMaster && section.category && (
+                        <div style={styles.recipeMeta}>
+                          Category: {section.category}
+                        </div>
+                      )}
 
                       <div style={styles.statusGood}>
-                        Equipment: {station.uniqueCount}
+                        Equipment: {section.uniqueCount}
                       </div>
 
                       <div style={styles.recipeMeta}>
-                        Total rows: {station.rawCount}
+                        Total rows: {section.rawCount}
                       </div>
 
                       <div style={styles.recipeMeta}>
-                        Pictures: {station.pictureCount}
+                        Pictures: {section.pictureCount}
                       </div>
 
                       <button
@@ -897,7 +1004,7 @@ export default function EquipmentMusterModule({
                         style={styles.imageButton}
                         onClick={(event) => {
                           event.stopPropagation();
-                          openRestaurantStation(station.stationKey);
+                          openRestaurantSection(section.sectionKey);
                         }}
                       >
                         Open Equipment
@@ -909,7 +1016,7 @@ export default function EquipmentMusterModule({
             </>
           )}
 
-        {(!isRestaurantDepartment || selectedRestaurantStation) && (
+        {(!isRestaurantDepartment || selectedRestaurantSection) && (
           <>
             {(musterItems || []).length > 0 && totalItems === 0 && (
               <p style={styles.emptyText}>No equipment matched your search.</p>
@@ -959,7 +1066,17 @@ export default function EquipmentMusterModule({
 
                         {isRestaurantDepartment && (
                           <div style={styles.recipeMeta}>
-                            Station / Venue:{" "}
+                            Section:{" "}
+                            {getMusterRestaurantSectionName(
+                              item,
+                              equipmentDepartment
+                            )}
+                          </div>
+                        )}
+
+                        {isRestaurantDepartment && (
+                          <div style={styles.recipeMeta}>
+                            Restaurant:{" "}
                             {item.stationName || item.sheetName || "N/A"}
                           </div>
                         )}
@@ -1013,7 +1130,17 @@ export default function EquipmentMusterModule({
 
               {isRestaurantDepartment && (
                 <p>
-                  <strong>Station / Venue:</strong>{" "}
+                  <strong>Section:</strong>{" "}
+                  {getMusterRestaurantSectionName(
+                    selectedEquipment,
+                    equipmentDepartment
+                  )}
+                </p>
+              )}
+
+              {isRestaurantDepartment && (
+                <p>
+                  <strong>Restaurant:</strong>{" "}
                   {selectedEquipment.stationName ||
                     selectedEquipment.sheetName ||
                     "N/A"}
