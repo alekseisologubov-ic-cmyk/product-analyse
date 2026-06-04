@@ -48,6 +48,7 @@ import {
 
 import {
   BAR_STATIONS,
+  RESTAURANT_STATIONS,
   CULINARY_STATIONS,
   EQUIPMENT_PICTURE_BUCKET,
   getMasterInventoryScope,
