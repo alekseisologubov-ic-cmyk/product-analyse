@@ -4281,7 +4281,10 @@ const inventoryRecordMatchesCurrentDepartment = (item) =>
 
     (async () => {
       try {
-        const { workbook, items, sourceSheetName } = await parseEquipmentMasterFile(file);
+        const { workbook, items, sourceSheetName } = await parseEquipmentMasterFile({
+  file,
+  equipmentDepartment,
+});
 
         setMusterItems(items);
         setMakeInventoryItems(items);
