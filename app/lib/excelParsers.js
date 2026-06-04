@@ -966,6 +966,9 @@ export const parseEquipmentMasterFile = async (input) => {
     return parseBarInventoryFile({ file });
   }
 
+  if (equipmentDepartment === "restaurant") {
+  return parseRestaurantInventoryFile({ file });
+}
   const arrayBuffer = await file.arrayBuffer();
 
   const workbook = XLSX.read(arrayBuffer, {
