@@ -954,15 +954,21 @@ const getRestaurantImageCandidatesForRow = ({
   detectedImageIndex,
   primaryImageIndex,
   masterImage,
+  isFirstSheet,
 }) => {
-  const imageColumnIndexes = [
-    primaryImageIndex,
-    detectedImageIndex,
-    2, // C fallback
-    3, // D fallback
-  ]
-    .filter((index) => typeof index === "number" && index >= 0)
-    .filter((index, position, array) => array.indexOf(index) === position);
+  // Restaurant picture rule:
+  // MASTER / first sheet = column C = index 2
+  // Venue sheets = column D = index 3
+  const imageColumnIndexes = isFirstSheet
+    ? [2] // force MASTER to use column C only
+    : [
+        primaryImageIndex,
+        detectedImageIndex,
+        3, // venue picture column D
+        2, // backup fallback only for venue sheets
+      ]
+        .filter((index) => typeof index === "number" && index >= 0)
+        .filter((index, position, array) => array.indexOf(index) === position);
 
   const candidates = [];
 
@@ -974,7 +980,11 @@ const getRestaurantImageCandidatesForRow = ({
     candidates.push(String(row[columnIndex] || "").trim());
   });
 
-  candidates.push(masterImage || "");
+  // Venue sheets can still use MASTER image as fallback by code/name.
+  // MASTER itself should use column C only, so do not add masterImage for MASTER rows.
+  if (!isFirstSheet) {
+    candidates.push(masterImage || "");
+  }
 
   return candidates
     .map((value) => String(value || "").trim())
