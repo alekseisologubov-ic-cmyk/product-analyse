@@ -23,13 +23,46 @@ const getMusterDuplicateKey = (item) => {
   return name ? "NAME:" + name : "";
 };
 
+const getMusterStationName = (item, equipmentDepartment) => {
+  const department = String(equipmentDepartment || "").toLowerCase();
+
+  if (department === "restaurant") {
+    const stationName =
+      item?.stationName ||
+      item?.sheetName ||
+      item?.sourceSheetName ||
+      "MASTER";
+
+    return String(stationName || "MASTER").replace(/\s+/g, " ").trim() || "MASTER";
+  }
+
+  return (
+    String(item?.sheetName || "Unknown Sheet")
+      .replace(/\s+/g, " ")
+      .trim() || "Unknown Sheet"
+  );
+};
+
+const getMusterStationKey = (value) =>
+  String(value || "MASTER")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase() || "MASTER";
+
+const isMasterStationName = (value) => getMusterStationKey(value) === "MASTER";
+
 const getMusterLocationText = (item) =>
-  [item?.sheetName, item?.category].filter(Boolean).join(" / ");
+  [
+    item?.stationName || item?.sheetName,
+    item?.category,
+  ]
+    .filter(Boolean)
+    .join(" / ");
 
 const getMusterItemSearchText = (item) =>
-  `${item?.sheetName || ""} ${item?.category || ""} ${item?.code || ""} ${
-    item?.name || ""
-  }`;
+  `${item?.stationName || ""} ${item?.sheetName || ""} ${
+    item?.sourceSheetName || ""
+  } ${item?.category || ""} ${item?.code || ""} ${item?.name || ""}`;
 
 const createDedupedMusterItem = (item) => ({
   ...item,
@@ -278,8 +311,11 @@ export default function EquipmentMusterModule({
 }) {
   const [musterSearch, setMusterSearch] = useState("");
   const [selectedEquipment, setSelectedEquipment] = useState(null);
+  const [selectedRestaurantStation, setSelectedRestaurantStation] = useState("");
 
   const departmentLabel = activeEquipmentDepartmentLabel || "Equipment";
+  const isRestaurantDepartment =
+    String(equipmentDepartment || "").toLowerCase() === "restaurant";
 
   const shipDisplayName =
     typeof getShipDisplayName === "function"
@@ -288,12 +324,175 @@ export default function EquipmentMusterModule({
 
   const refreshShip = makeInventoryShip || userShip;
 
+  const getDisplayImage = (item) =>
+    typeof getEquipmentDisplayImage === "function"
+      ? getEquipmentDisplayImage(item)
+      : item?.image || item?.imageFallback || "";
+
+  const getFallbackImage = (item) =>
+    typeof getEquipmentFallbackImage === "function"
+      ? getEquipmentFallbackImage(item)
+      : item?.imageFallback || "";
+
+  const getImageSrc = (value, size = "w800") =>
+    typeof getImageUrl === "function"
+      ? getImageUrl(value, size)
+      : String(value || "").trim();
+
+  const allRestaurantStationKeys = useMemo(() => {
+    if (!isRestaurantDepartment) return new Set();
+
+    return new Set(
+      (musterItems || [])
+        .map((item) =>
+          getMusterStationKey(getMusterStationName(item, equipmentDepartment))
+        )
+        .filter(Boolean)
+    );
+  }, [musterItems, equipmentDepartment, isRestaurantDepartment]);
+
+  useEffect(() => {
+    if (!isRestaurantDepartment) {
+      setSelectedRestaurantStation("");
+      return;
+    }
+
+    if (
+      selectedRestaurantStation &&
+      !allRestaurantStationKeys.has(selectedRestaurantStation)
+    ) {
+      setSelectedRestaurantStation("");
+    }
+  }, [
+    isRestaurantDepartment,
+    selectedRestaurantStation,
+    allRestaurantStationKeys,
+  ]);
+
+  useEffect(() => {
+    setSelectedEquipment(null);
+  }, [selectedRestaurantStation, equipmentDepartment]);
+
+  const selectedRestaurantStationName = useMemo(() => {
+    if (!selectedRestaurantStation) return "";
+
+    const matchingItem = (musterItems || []).find(
+      (item) =>
+        getMusterStationKey(getMusterStationName(item, equipmentDepartment)) ===
+        selectedRestaurantStation
+    );
+
+    return (
+      getMusterStationName(matchingItem, equipmentDepartment) ||
+      selectedRestaurantStation
+    );
+  }, [musterItems, equipmentDepartment, selectedRestaurantStation]);
+
+  const restaurantStationCards = useMemo(() => {
+    if (!isRestaurantDepartment) return [];
+
+    const query = cleanMusterSearchText(musterSearch);
+    const stationMap = new Map();
+
+    (musterItems || []).forEach((item) => {
+      const stationName = getMusterStationName(item, equipmentDepartment);
+      const stationKey = getMusterStationKey(stationName);
+
+      if (!stationMap.has(stationKey)) {
+        stationMap.set(stationKey, {
+          stationKey,
+          stationName,
+          rawItems: [],
+          uniqueKeys: new Set(),
+          pictureCount: 0,
+          searchText: stationName,
+          sampleImage: "",
+          sampleFallbackImage: "",
+        });
+      }
+
+      const station = stationMap.get(stationKey);
+      const duplicateKey = getMusterDuplicateKey(item);
+
+      station.rawItems.push(item);
+
+      if (duplicateKey) {
+        station.uniqueKeys.add(duplicateKey);
+      }
+
+      const image = String(item?.image || "").trim();
+      const fallbackImage = String(item?.imageFallback || "").trim();
+
+      if (image || fallbackImage) {
+        station.pictureCount += 1;
+      }
+
+      if (!station.sampleImage && image) {
+        station.sampleImage = image;
+      }
+
+      if (!station.sampleFallbackImage && fallbackImage) {
+        station.sampleFallbackImage = fallbackImage;
+      }
+
+      station.searchText += " " + getMusterItemSearchText(item);
+    });
+
+    return Array.from(stationMap.values())
+      .map((station) => ({
+        ...station,
+        rawCount: station.rawItems.length,
+        uniqueCount: station.uniqueKeys.size || station.rawItems.length,
+      }))
+      .filter((station) => {
+        if (!query) return true;
+
+        return cleanMusterSearchText(station.searchText).includes(query);
+      })
+      .sort((a, b) => {
+        const aMaster = isMasterStationName(a.stationName);
+        const bMaster = isMasterStationName(b.stationName);
+
+        if (aMaster !== bMaster) return aMaster ? -1 : 1;
+
+        return String(a.stationName || "").localeCompare(
+          String(b.stationName || "")
+        );
+      });
+  }, [
+    musterItems,
+    musterSearch,
+    equipmentDepartment,
+    isRestaurantDepartment,
+  ]);
+
+  const visibleMusterItems = useMemo(() => {
+    if (!isRestaurantDepartment) {
+      return musterItems || [];
+    }
+
+    if (!selectedRestaurantStation) {
+      return [];
+    }
+
+    return (musterItems || []).filter(
+      (item) =>
+        getMusterStationKey(getMusterStationName(item, equipmentDepartment)) ===
+        selectedRestaurantStation
+    );
+  }, [
+    musterItems,
+    equipmentDepartment,
+    isRestaurantDepartment,
+    selectedRestaurantStation,
+  ]);
+
   const groupedMuster = useMemo(() => {
     const grouped = {};
     const query = cleanMusterSearchText(musterSearch);
     const uniqueByCode = new Map();
 
-    (musterItems || []).forEach((item) => {
+    (visibleMusterItems || []).forEach((item) => {
       const duplicateKey = getMusterDuplicateKey(item);
 
       if (!duplicateKey) return;
@@ -316,9 +515,11 @@ export default function EquipmentMusterModule({
 
       if (query && !searchText.includes(query)) return;
 
-      const groupKey = `${item.sheetName || "Unknown Sheet"} / ${
-        item.category || "Uncategorized"
-      }`;
+      const groupKey = isRestaurantDepartment
+        ? item.category || selectedRestaurantStationName || "Restaurant"
+        : `${item.sheetName || "Unknown Sheet"} / ${
+            item.category || "Uncategorized"
+          }`;
 
       if (!grouped[groupKey]) {
         grouped[groupKey] = [];
@@ -328,7 +529,12 @@ export default function EquipmentMusterModule({
     });
 
     return grouped;
-  }, [musterItems, musterSearch]);
+  }, [
+    visibleMusterItems,
+    musterSearch,
+    isRestaurantDepartment,
+    selectedRestaurantStationName,
+  ]);
 
   const totalItems = useMemo(
     () =>
@@ -354,30 +560,27 @@ export default function EquipmentMusterModule({
     [groupedMuster]
   );
 
-  const sheetCount = useMemo(
-    () =>
-      [...new Set((musterItems || []).map((item) => item.sheetName))].filter(
-        Boolean
-      ).length,
-    [musterItems]
-  );
+  const sheetCount = useMemo(() => {
+    const values = (musterItems || []).map((item) =>
+      isRestaurantDepartment
+        ? getMusterStationName(item, equipmentDepartment)
+        : item.sheetName
+    );
+
+    return [...new Set(values)].filter(Boolean).length;
+  }, [musterItems, equipmentDepartment, isRestaurantDepartment]);
 
   const groupCount = Object.keys(groupedMuster || {}).length;
 
-  const getDisplayImage = (item) =>
-    typeof getEquipmentDisplayImage === "function"
-      ? getEquipmentDisplayImage(item)
-      : item?.image || item?.imageFallback || "";
+  const restaurantUniqueItemsShown = restaurantStationCards.reduce(
+    (sum, station) => sum + Number(station.uniqueCount || 0),
+    0
+  );
 
-  const getFallbackImage = (item) =>
-    typeof getEquipmentFallbackImage === "function"
-      ? getEquipmentFallbackImage(item)
-      : item?.imageFallback || "";
-
-  const getImageSrc = (value, size = "w800") =>
-    typeof getImageUrl === "function"
-      ? getImageUrl(value, size)
-      : String(value || "").trim();
+  const restaurantPicturesShown = restaurantStationCards.reduce(
+    (sum, station) => sum + Number(station.pictureCount || 0),
+    0
+  );
 
   const openSelectedEquipment = (item) => {
     const displayImage = getDisplayImage(item);
@@ -389,6 +592,22 @@ export default function EquipmentMusterModule({
       imageFallback: fallbackImage,
     });
   };
+
+  const openRestaurantStation = (stationKey) => {
+    setSelectedRestaurantStation(stationKey);
+    setMusterSearch("");
+  };
+
+  const searchPlaceholder =
+    isRestaurantDepartment && !selectedRestaurantStation
+      ? "Search MASTER, restaurant/venue, code or equipment..."
+      : "Search equipment, code, sheet or subcategory...";
+
+  const helpText = isRestaurantDepartment
+    ? "Restaurant file: first MASTER sheet picture column C; venue tabs picture column D."
+    : equipmentDepartment === "bar"
+    ? "Bar file: picture is read from column D or column I when available."
+    : "C = Subcategory, D = Code, E = Name, I = Product Picture, H = backup only.";
 
   return (
     <main style={styles.page}>
@@ -424,8 +643,11 @@ export default function EquipmentMusterModule({
             type="button"
             style={styles.backButton}
             onClick={() => loadMasterInventoryItems(refreshShip)}
+            disabled={masterInventoryLoading}
           >
-            🔄 Refresh Shared Master List
+            {masterInventoryLoading
+              ? "Refreshing..."
+              : "🔄 Refresh Shared Master List"}
           </button>
 
           {isAdmin && equipmentDepartment === "culinary" && (
@@ -463,30 +685,69 @@ export default function EquipmentMusterModule({
           {musterMessage && <p style={styles.message}>{musterMessage}</p>}
 
           <div style={styles.infoBox}>
-            <div>
-              📋 Items shown: <strong>{totalItems}</strong>
-            </div>
+            {isRestaurantDepartment && !selectedRestaurantStation ? (
+              <>
+                <div>
+                  🍽️ MASTER / venues shown:{" "}
+                  <strong>{restaurantStationCards.length}</strong>
+                </div>
 
-            <div>
-              🔁 Duplicate codes hidden: <strong>{hiddenDuplicateCount}</strong>
-            </div>
+                <div>
+                  📦 Unique equipment records shown:{" "}
+                  <strong>{restaurantUniqueItemsShown}</strong>
+                </div>
 
-            <div>
-              📋 Master items loaded: <strong>{(musterItems || []).length}</strong>
-            </div>
+                <div>
+                  🖼️ Rows with pictures:{" "}
+                  <strong>{restaurantPicturesShown}</strong>
+                </div>
 
-            <div>
-              📄 Sheets included: <strong>{sheetCount}</strong>
-            </div>
+                <div>
+                  📋 Total rows loaded:{" "}
+                  <strong>{(musterItems || []).length}</strong>
+                </div>
 
-            <div>
-              🗂️ Groups shown: <strong>{groupCount}</strong>
-            </div>
+                <div>
+                  📄 MASTER / venue sheets included:{" "}
+                  <strong>{sheetCount}</strong>
+                </div>
 
-            <div>
-              C = Subcategory, D = Code, E = Name, I = Product Picture, H =
-              backup only
-            </div>
+                <div>{helpText}</div>
+              </>
+            ) : (
+              <>
+                {isRestaurantDepartment && selectedRestaurantStation && (
+                  <div>
+                    🍽️ Selected:{" "}
+                    <strong>{selectedRestaurantStationName}</strong>
+                  </div>
+                )}
+
+                <div>
+                  📋 Items shown: <strong>{totalItems}</strong>
+                </div>
+
+                <div>
+                  🔁 Duplicate codes hidden:{" "}
+                  <strong>{hiddenDuplicateCount}</strong>
+                </div>
+
+                <div>
+                  📋 Master rows loaded:{" "}
+                  <strong>{(musterItems || []).length}</strong>
+                </div>
+
+                <div>
+                  📄 Sheets / stations included: <strong>{sheetCount}</strong>
+                </div>
+
+                <div>
+                  🗂️ Groups shown: <strong>{groupCount}</strong>
+                </div>
+
+                <div>{helpText}</div>
+              </>
+            )}
           </div>
         </div>
 
@@ -494,91 +755,238 @@ export default function EquipmentMusterModule({
           <h2 style={styles.cardTitle}>🔍 Search Equipment</h2>
 
           <input
-            placeholder="Search equipment, code, sheet or subcategory..."
+            placeholder={searchPlaceholder}
             value={musterSearch}
             onChange={(event) => setMusterSearch(event.target.value)}
             style={styles.searchInput}
           />
 
+          {isRestaurantDepartment && selectedRestaurantStation && (
+            <button
+              type="button"
+              style={styles.backButton}
+              onClick={() => {
+                setSelectedRestaurantStation("");
+                setMusterSearch("");
+              }}
+            >
+              ← Back to MASTER / Venues
+            </button>
+          )}
+
           <p style={styles.emptyText}>
-            Click any equipment card to open the picture and full details.
+            {isRestaurantDepartment && !selectedRestaurantStation
+              ? "Select MASTER or a restaurant/venue card first. Then the equipment for that section will be shown."
+              : "Click any equipment card to open the picture and full details."}
           </p>
         </div>
       </section>
 
       <section style={styles.card}>
-        <h2 style={styles.productTitle}>📋 {departmentLabel} Master List</h2>
+        <div
+          style={{
+            ...styles.header,
+            boxShadow: "none",
+            padding: 0,
+            marginBottom: 16,
+          }}
+        >
+          <div>
+            <h2 style={styles.productTitle}>
+              {isRestaurantDepartment && selectedRestaurantStation
+                ? `🍽️ ${selectedRestaurantStationName}`
+                : `📋 ${departmentLabel} Master List`}
+            </h2>
+
+            {isRestaurantDepartment && selectedRestaurantStation && (
+              <p style={{ ...styles.emptyText, margin: 0 }}>
+                Showing equipment assigned to{" "}
+                <strong>{selectedRestaurantStationName}</strong>.
+              </p>
+            )}
+
+            {isRestaurantDepartment && !selectedRestaurantStation && (
+              <p style={{ ...styles.emptyText, margin: 0 }}>
+                Choose MASTER or a restaurant/venue to view its equipment.
+              </p>
+            )}
+          </div>
+
+          {isRestaurantDepartment && selectedRestaurantStation && (
+            <button
+              type="button"
+              style={styles.backButton}
+              onClick={() => {
+                setSelectedRestaurantStation("");
+                setMusterSearch("");
+              }}
+            >
+              ← MASTER / Venues
+            </button>
+          )}
+        </div>
 
         {(musterItems || []).length === 0 && (
           <p style={styles.emptyText}>Upload the master list file to begin.</p>
         )}
 
-        {(musterItems || []).length > 0 && totalItems === 0 && (
-          <p style={styles.emptyText}>No equipment matched your search.</p>
-        )}
+        {isRestaurantDepartment &&
+          (musterItems || []).length > 0 &&
+          !selectedRestaurantStation && (
+            <>
+              {restaurantStationCards.length === 0 && (
+                <p style={styles.emptyText}>
+                  No MASTER / restaurant venue matched your search.
+                </p>
+              )}
 
-        {Object.entries(groupedMuster || {}).map(([category, items]) => (
-          <div key={category} style={styles.equipmentCategory}>
-            <h3 style={styles.sectionTitle}>🗂️ {category}</h3>
+              <div style={styles.equipmentGrid}>
+                {restaurantStationCards.map((station) => {
+                  const isMaster = isMasterStationName(station.stationName);
 
-            <div style={styles.equipmentGrid}>
-              {items.map((item, index) => {
-                const displayImage = getDisplayImage(item);
-                const fallbackImage = getFallbackImage(item);
-
-                return (
-                  <div
-                    key={`${item.sheetName || "sheet"}-${
-                      item.code || "code"
-                    }-${index}`}
-                    role="button"
-                    tabIndex={0}
-                    style={styles.equipmentCard}
-                    onClick={() => openSelectedEquipment(item)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        openSelectedEquipment(item);
-                      }
-                    }}
-                  >
-                    <MusterImagePreview
-                      styles={styles}
-                      item={item}
-                      displayImage={displayImage}
-                      fallbackImage={fallbackImage}
-                      getImageSrc={getImageSrc}
-                      height={150}
-                      size="w360"
-                      showOpenButton={false}
-                    />
-
-                    <div style={styles.recipeName}>{item.name}</div>
-
-                    <div style={styles.recipeMeta}>
-                      Code: {item.code || "N/A"}
-                    </div>
-
-                    <div style={styles.recipeMeta}>
-                      Sheet: {item.sheetName || "N/A"}
-                    </div>
-
-                    <div style={styles.recipeMeta}>
-                      Category: {item.category || "N/A"}
-                    </div>
-
-                    {Number(item.duplicateCount || 1) > 1 && (
-                      <div style={styles.statusNeutral}>
-                        Duplicate code hidden:{" "}
-                        {Number(item.duplicateCount || 1) - 1}
+                  return (
+                    <div
+                      key={station.stationKey}
+                      role="button"
+                      tabIndex={0}
+                      style={{
+                        ...styles.equipmentCard,
+                        ...(isMaster ? styles.countedCard : {}),
+                      }}
+                      onClick={() => openRestaurantStation(station.stationKey)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          openRestaurantStation(station.stationKey);
+                        }
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 42,
+                          lineHeight: 1,
+                          textAlign: "center",
+                          marginBottom: 4,
+                        }}
+                      >
+                        {isMaster ? "📘" : "🍽️"}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+
+                      <div style={styles.recipeName}>
+                        {station.stationName}
+                      </div>
+
+                      <div style={styles.recipeMeta}>
+                        Type: {isMaster ? "Master" : "Restaurant / Venue"}
+                      </div>
+
+                      <div style={styles.statusGood}>
+                        Equipment: {station.uniqueCount}
+                      </div>
+
+                      <div style={styles.recipeMeta}>
+                        Total rows: {station.rawCount}
+                      </div>
+
+                      <div style={styles.recipeMeta}>
+                        Pictures: {station.pictureCount}
+                      </div>
+
+                      <button
+                        type="button"
+                        style={styles.imageButton}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openRestaurantStation(station.stationKey);
+                        }}
+                      >
+                        Open Equipment
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+        {(!isRestaurantDepartment || selectedRestaurantStation) && (
+          <>
+            {(musterItems || []).length > 0 && totalItems === 0 && (
+              <p style={styles.emptyText}>No equipment matched your search.</p>
+            )}
+
+            {Object.entries(groupedMuster || {}).map(([category, items]) => (
+              <div key={category} style={styles.equipmentCategory}>
+                <h3 style={styles.sectionTitle}>🗂️ {category}</h3>
+
+                <div style={styles.equipmentGrid}>
+                  {items.map((item, index) => {
+                    const displayImage = getDisplayImage(item);
+                    const fallbackImage = getFallbackImage(item);
+
+                    return (
+                      <div
+                        key={`${item.stationName || item.sheetName || "sheet"}-${
+                          item.code || "code"
+                        }-${index}`}
+                        role="button"
+                        tabIndex={0}
+                        style={styles.equipmentCard}
+                        onClick={() => openSelectedEquipment(item)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            openSelectedEquipment(item);
+                          }
+                        }}
+                      >
+                        <MusterImagePreview
+                          styles={styles}
+                          item={item}
+                          displayImage={displayImage}
+                          fallbackImage={fallbackImage}
+                          getImageSrc={getImageSrc}
+                          height={150}
+                          size="w360"
+                          showOpenButton={false}
+                        />
+
+                        <div style={styles.recipeName}>{item.name}</div>
+
+                        <div style={styles.recipeMeta}>
+                          Code: {item.code || "N/A"}
+                        </div>
+
+                        {isRestaurantDepartment && (
+                          <div style={styles.recipeMeta}>
+                            Station / Venue:{" "}
+                            {item.stationName || item.sheetName || "N/A"}
+                          </div>
+                        )}
+
+                        <div style={styles.recipeMeta}>
+                          Sheet:{" "}
+                          {item.sourceSheetName || item.sheetName || "N/A"}
+                        </div>
+
+                        <div style={styles.recipeMeta}>
+                          Category: {item.category || "N/A"}
+                        </div>
+
+                        {Number(item.duplicateCount || 1) > 1 && (
+                          <div style={styles.statusNeutral}>
+                            Duplicate code hidden:{" "}
+                            {Number(item.duplicateCount || 1) - 1}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
 
         {selectedEquipment && (
           <div
@@ -603,8 +1011,20 @@ export default function EquipmentMusterModule({
                 <strong>Code:</strong> {selectedEquipment.code || "N/A"}
               </p>
 
+              {isRestaurantDepartment && (
+                <p>
+                  <strong>Station / Venue:</strong>{" "}
+                  {selectedEquipment.stationName ||
+                    selectedEquipment.sheetName ||
+                    "N/A"}
+                </p>
+              )}
+
               <p>
-                <strong>Sheet:</strong> {selectedEquipment.sheetName || "N/A"}
+                <strong>Sheet:</strong>{" "}
+                {selectedEquipment.sourceSheetName ||
+                  selectedEquipment.sheetName ||
+                  "N/A"}
               </p>
 
               <p>
