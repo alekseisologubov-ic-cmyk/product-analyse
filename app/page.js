@@ -682,9 +682,13 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
   const [pictureLibraryMessage, setPictureLibraryMessage] = useState("");
   const [drivePictureLibraryByCode, setDrivePictureLibraryByCode] = useState({});
 
-  const realtimeRefreshTimersRef = useRef({});
+    const realtimeRefreshTimersRef = useRef({});
   const printBusyRef = useRef(false);
   const saveBusyRef = useRef(false);
+
+  const browserHistoryReadyRef = useRef(false);
+  const browserHistoryRestoringRef = useRef(false);
+  const browserHistoryLastKeyRef = useRef("");
 
   const shipColumns = { BRL: 8, RL: 11, SC: 14, VL: 17 };
   const shipCostColumns = { BRL: 9, RL: 12, SC: 15, VL: 18 };
