@@ -552,6 +552,26 @@ const getDefaultNextYearStartDate = () => {
   return String(nextYear) + "-01-01";
 };
 
+const APP_BROWSER_HISTORY_KEY = "__vv_app_navigation_state__";
+
+const getAppNavigationStateFromHistory = (historyState) => {
+  if (!historyState || typeof historyState !== "object") {
+    return null;
+  }
+
+  return historyState[APP_BROWSER_HISTORY_KEY] || null;
+};
+
+const buildAppBrowserHistoryState = (currentHistoryState, navigationState) => ({
+  ...(currentHistoryState && typeof currentHistoryState === "object"
+    ? currentHistoryState
+    : {}),
+  [APP_BROWSER_HISTORY_KEY]: navigationState,
+});
+
+const getAppNavigationStateKey = (navigationState) =>
+  JSON.stringify(navigationState || {});
+
 export default function App() {
   const [consumptionRows, setConsumptionRows] = useState([]);
   const [recipeRows, setRecipeRows] = useState([]);
