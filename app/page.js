@@ -1127,20 +1127,23 @@ const uploadNextOrderFile = (e) => {
 
   const getFilteredMakeInventoryItems = () => {
   const searchTerm = makeInventorySearch.toLowerCase();
-  const selectedRestaurantStation = cleanText(inventoryStation);
 
-  return makeInventoryItems.filter((item) => {
-    const matchesRestaurantStation =
-      equipmentDepartment !== "restaurant" ||
-      !selectedRestaurantStation ||
-      cleanText(item.sheetName) === selectedRestaurantStation;
+  return makeInventoryItems
+    .filter((item) => {
+      if (equipmentDepartment !== "restaurant") return true;
+      if (!inventoryStation) return true;
 
-    if (!matchesRestaurantStation) return false;
+      const itemStation = String(
+        item.stationName || item.sheetName || ""
+      ).trim();
 
-    return `${item.sheetName} ${item.category} ${item.code} ${item.name}`
-      .toLowerCase()
-      .includes(searchTerm);
-  });
+      return cleanText(itemStation) === cleanText(inventoryStation);
+    })
+    .filter((item) =>
+      `${item.stationName || ""} ${item.sheetName} ${item.category} ${item.code} ${item.name}`
+        .toLowerCase()
+        .includes(searchTerm)
+    );
 };
 
   const getEffectiveInventoryUserName = () => {
