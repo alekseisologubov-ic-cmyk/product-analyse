@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 
 const cleanMusterSearchText = (value) =>
   String(value || "").toLowerCase().replace(/\s+/g, " ").trim();
+
 const getMusterDuplicateKey = (item) => {
   const code = String(item?.code || "")
     .trim()
@@ -43,7 +44,6 @@ const mergeDedupedMusterItem = (existing, duplicate) => {
   return {
     ...existing,
 
-    // Keep the first visible row, but rescue image data from duplicate rows.
     image: existing.image || duplicate.image || "",
     imageFallback:
       existing.imageFallback ||
@@ -161,7 +161,8 @@ function MusterImagePreview({
   }, [displayImage, fallbackImage]);
 
   const previewSrc = candidates[candidateIndex] || "";
-  const openSrc = openCandidates[0] || candidates[0] || displayImage || fallbackImage || "";
+  const openSrc =
+    openCandidates[0] || candidates[0] || displayImage || fallbackImage || "";
   const hasAnyImage = Boolean(displayImage || fallbackImage);
   const previewUnavailable = hasAnyImage && !previewSrc;
 
@@ -245,11 +246,7 @@ function MusterImagePreview({
       )}
 
       {(showOpenButton || previewUnavailable) && openSrc && (
-        <button
-          type="button"
-          style={styles.imageButton}
-          onClick={openPicture}
-        >
+        <button type="button" style={styles.imageButton} onClick={openPicture}>
           Open Picture
         </button>
       )}
@@ -292,46 +289,46 @@ export default function EquipmentMusterModule({
   const refreshShip = makeInventoryShip || userShip;
 
   const groupedMuster = useMemo(() => {
-  const grouped = {};
-  const query = cleanMusterSearchText(musterSearch);
-  const uniqueByCode = new Map();
+    const grouped = {};
+    const query = cleanMusterSearchText(musterSearch);
+    const uniqueByCode = new Map();
 
-  (musterItems || []).forEach((item) => {
-    const duplicateKey = getMusterDuplicateKey(item);
+    (musterItems || []).forEach((item) => {
+      const duplicateKey = getMusterDuplicateKey(item);
 
-    if (!duplicateKey) return;
+      if (!duplicateKey) return;
 
-    if (!uniqueByCode.has(duplicateKey)) {
-      uniqueByCode.set(duplicateKey, createDedupedMusterItem(item));
-      return;
-    }
+      if (!uniqueByCode.has(duplicateKey)) {
+        uniqueByCode.set(duplicateKey, createDedupedMusterItem(item));
+        return;
+      }
 
-    uniqueByCode.set(
-      duplicateKey,
-      mergeDedupedMusterItem(uniqueByCode.get(duplicateKey), item)
-    );
-  });
+      uniqueByCode.set(
+        duplicateKey,
+        mergeDedupedMusterItem(uniqueByCode.get(duplicateKey), item)
+      );
+    });
 
-  Array.from(uniqueByCode.values()).forEach((item) => {
-    const searchText = cleanMusterSearchText(
-      item.duplicateSearchText || getMusterItemSearchText(item)
-    );
+    Array.from(uniqueByCode.values()).forEach((item) => {
+      const searchText = cleanMusterSearchText(
+        item.duplicateSearchText || getMusterItemSearchText(item)
+      );
 
-    if (query && !searchText.includes(query)) return;
+      if (query && !searchText.includes(query)) return;
 
-    const groupKey = `${item.sheetName || "Unknown Sheet"} / ${
-      item.category || "Uncategorized"
-    }`;
+      const groupKey = `${item.sheetName || "Unknown Sheet"} / ${
+        item.category || "Uncategorized"
+      }`;
 
-    if (!grouped[groupKey]) {
-      grouped[groupKey] = [];
-    }
+      if (!grouped[groupKey]) {
+        grouped[groupKey] = [];
+      }
 
-    grouped[groupKey].push(item);
-  });
+      grouped[groupKey].push(item);
+    });
 
-  return grouped;
-}, [musterItems, musterSearch]);
+    return grouped;
+  }, [musterItems, musterSearch]);
 
   const totalItems = useMemo(
     () =>
@@ -341,20 +338,21 @@ export default function EquipmentMusterModule({
       ),
     [groupedMuster]
   );
+
   const hiddenDuplicateCount = useMemo(
-  () =>
-    Object.values(groupedMuster).reduce(
-      (sum, items) =>
-        sum +
-        items.reduce(
-          (itemSum, item) =>
-            itemSum + Math.max(Number(item.duplicateCount || 1) - 1, 0),
-          0
-        ),
-      0
-    ),
-  [groupedMuster]
-);
+    () =>
+      Object.values(groupedMuster).reduce(
+        (sum, items) =>
+          sum +
+          items.reduce(
+            (itemSum, item) =>
+              itemSum + Math.max(Number(item.duplicateCount || 1) - 1, 0),
+            0
+          ),
+        0
+      ),
+    [groupedMuster]
+  );
 
   const sheetCount = useMemo(
     () =>
@@ -377,7 +375,9 @@ export default function EquipmentMusterModule({
       : item?.imageFallback || "";
 
   const getImageSrc = (value, size = "w800") =>
-    typeof getImageUrl === "function" ? getImageUrl(value, size) : String(value || "").trim();
+    typeof getImageUrl === "function"
+      ? getImageUrl(value, size)
+      : String(value || "").trim();
 
   const openSelectedEquipment = (item) => {
     const displayImage = getDisplayImage(item);
@@ -410,9 +410,9 @@ export default function EquipmentMusterModule({
 
       <section style={styles.grid}>
         <div style={styles.card}>
-          <h2 style={styles.cardTitle}>📤 Upload Muster File</h2>
+          <h2 style={styles.cardTitle}>📤 Upload Master List File</h2>
 
-          <label style={styles.label}>Muster list file</label>
+          <label style={styles.label}>Master list file</label>
           <input
             type="file"
             accept=".xlsx,.xls,.xlsm"
@@ -466,20 +466,25 @@ export default function EquipmentMusterModule({
             <div>
               📋 Items shown: <strong>{totalItems}</strong>
             </div>
-             <div>
-  🔁 Duplicate codes hidden: <strong>{hiddenDuplicateCount}</strong>
-</div>
+
+            <div>
+              🔁 Duplicate codes hidden: <strong>{hiddenDuplicateCount}</strong>
+            </div>
+
             <div>
               📋 Master items loaded: <strong>{(musterItems || []).length}</strong>
             </div>
+
             <div>
               📄 Sheets included: <strong>{sheetCount}</strong>
             </div>
+
             <div>
               🗂️ Groups shown: <strong>{groupCount}</strong>
             </div>
+
             <div>
-              C = Sub Category, D = Code, E = Name, I = Product Picture, H =
+              C = Subcategory, D = Code, E = Name, I = Product Picture, H =
               backup only
             </div>
           </div>
@@ -489,7 +494,7 @@ export default function EquipmentMusterModule({
           <h2 style={styles.cardTitle}>🔍 Search Equipment</h2>
 
           <input
-            placeholder="Search equipment, code, sheet or sub category..."
+            placeholder="Search equipment, code, sheet or subcategory..."
             value={musterSearch}
             onChange={(event) => setMusterSearch(event.target.value)}
             style={styles.searchInput}
@@ -502,10 +507,10 @@ export default function EquipmentMusterModule({
       </section>
 
       <section style={styles.card}>
-        <h2 style={styles.productTitle}>📋 {departmentLabel} Muster List</h2>
+        <h2 style={styles.productTitle}>📋 {departmentLabel} Master List</h2>
 
         {(musterItems || []).length === 0 && (
-          <p style={styles.emptyText}>Upload the muster list file to begin.</p>
+          <p style={styles.emptyText}>Upload the master list file to begin.</p>
         )}
 
         {(musterItems || []).length > 0 && totalItems === 0 && (
@@ -549,20 +554,25 @@ export default function EquipmentMusterModule({
                     />
 
                     <div style={styles.recipeName}>{item.name}</div>
+
                     <div style={styles.recipeMeta}>
                       Code: {item.code || "N/A"}
                     </div>
+
                     <div style={styles.recipeMeta}>
                       Sheet: {item.sheetName || "N/A"}
                     </div>
+
                     <div style={styles.recipeMeta}>
                       Category: {item.category || "N/A"}
                     </div>
+
                     {Number(item.duplicateCount || 1) > 1 && (
-  <div style={styles.statusNeutral}>
-    Duplicate code hidden: {Number(item.duplicateCount || 1) - 1}
-  </div>
-)}
+                      <div style={styles.statusNeutral}>
+                        Duplicate code hidden:{" "}
+                        {Number(item.duplicateCount || 1) - 1}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -592,26 +602,30 @@ export default function EquipmentMusterModule({
               <p>
                 <strong>Code:</strong> {selectedEquipment.code || "N/A"}
               </p>
+
               <p>
                 <strong>Sheet:</strong> {selectedEquipment.sheetName || "N/A"}
               </p>
+
               <p>
                 <strong>Category:</strong>{" "}
                 {selectedEquipment.category || "N/A"}
               </p>
-              {Number(selectedEquipment.duplicateCount || 1) > 1 && (
-  <>
-    <p>
-      <strong>Duplicate rows hidden:</strong>{" "}
-      {Number(selectedEquipment.duplicateCount || 1) - 1}
-    </p>
 
-    <p>
-      <strong>Found in:</strong>{" "}
-      {(selectedEquipment.duplicateLocations || []).join(", ") || "N/A"}
-    </p>
-  </>
-)}
+              {Number(selectedEquipment.duplicateCount || 1) > 1 && (
+                <>
+                  <p>
+                    <strong>Duplicate rows hidden:</strong>{" "}
+                    {Number(selectedEquipment.duplicateCount || 1) - 1}
+                  </p>
+
+                  <p>
+                    <strong>Found in:</strong>{" "}
+                    {(selectedEquipment.duplicateLocations || []).join(", ") ||
+                      "N/A"}
+                  </p>
+                </>
+              )}
 
               <MusterImagePreview
                 styles={styles}
