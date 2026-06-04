@@ -1060,102 +1060,82 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
   const buildProductList = (rows) =>
     [...new Set(rows.slice(1).map((r) => String(r[6] || "").trim()).filter(Boolean))].sort();
 
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", range: fmlRange });
+    const visibleShips = viewMode === "single" ? [userShip] : SHIPS;
 
-    const orderByCode = {};
-    const orderByProductKey = {};
+const buildProductList = (rows) =>
+  [
+    ...new Set(
+      rows
+        .slice(1)
+        .map((r) => String(r[6] || "").trim())
+        .filter(Boolean)
+    ),
+  ].sort();
 
-    orderRows.forEach((item) => {
-      const codeKey = normalizeOrderCode(item.code);
-      const productKey = getProductReportKey(item.product);
+const uploadNextOrderFile = (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
 
-      if (codeKey) orderByCode[codeKey] = item;
-      if (productKey && !orderByProductKey[productKey]) orderByProductKey[productKey] = item;
-    });
+  readExcelFile(file, (workbook) => {
+    try {
+      const parsed = parseNextOrderWorkbook({
+        workbook,
+        templateMap,
+      });
 
-    const reportRows = [];
-    const seen = new Set();
+      setNextOrderFileName(file.name);
+      setNextOrderSourceRows(parsed.rows);
+      setNextOrderMeta(parsed.meta);
+      setNextOrderRows([]);
+      setFmlMissingRows(parsed.fmlReportRows || []);
+      setFmlLowRows(parsed.fmlRunningLowRows || []);
+      setNextOrderSearch("");
+      setFmlMissingSearch("");
+      setFmlLowSearch("");
+      setNextOrderFilter("all");
+      setNextOrderView("order");
 
-    rows.slice(3).forEach((row, index) => {
-      const excelRow = index + 4;
-      const department = String(row[0] || "").trim();
-      const category = String(row[1] || "").trim();
-      const subCategory = String(row[2] || "").trim();
-      const code = String(row[3] || "").trim();
-      const product = String(row[4] || "").replace(/\s+/g, " ").trim();
-      const venueText = String(row[5] || "").replace(/\s+/g, " ").trim();
-      const uom = String(row[8] || "").trim();
-
-      if (!code || !product || !venueText) return;
-      if (cleanText(code) === "PRODUCT" || cleanText(product) === "PRODUCT NAME") return;
-
-      const venues = splitFmlVenues(venueText);
-      if (!venues.length) return;
-
-      const codeKey = normalizeOrderCode(code);
-      const productKey = getProductReportKey(product);
-      const orderItem = orderByCode[codeKey] || orderByProductKey[productKey] || null;
-      if (!orderItem) return;
-
-      const futureOrders = Number(orderItem.futureOrders || 0);
-      const pastConsumption = Number(orderItem.pastConsumption || 0);
-
-      if (futureOrders > 0 || pastConsumption > 0) return;
-
-      const templateMatches = getTemplateMatchesForFmlProduct(
-        { code, product, venues },
-        currentShipCode
+      setNextOrderMessage(
+        "Order file loaded. " +
+          parsed.meta.totalItems +
+          " product rows found. " +
+          parsed.meta.itemsNeedingOrder +
+          " need order, " +
+          parsed.meta.parCapItems +
+          " par cap, " +
+          parsed.meta.blueReviewItems +
+          " blue review, " +
+          parsed.meta.redReviewItems +
+          " red review, " +
+          parsed.meta.fmlMissingItems +
+          " FML not ordered/not used, " +
+          parsed.meta.fmlRunningLowItems +
+          " FML running low."
       );
 
-      if (!templateMatches.length) return;
-
-      const uniqueKey = codeKey || productKey || cleanText(product + "|" + excelRow);
-      if (seen.has(uniqueKey)) return;
-      seen.add(uniqueKey);
-
-      const matchedVenues = [
-        ...new Set(templateMatches.flatMap((match) => match.matchedVenues || [])),
-      ];
-      const templateShipScopeLabels = [
-        ...new Set(templateMatches.map((match) => match.shipScopeLabel || "Used by all ships")),
-      ];
-      const templateLocationNames = [
-        ...new Set(templateMatches.map((match) => match.displayName || match.templateName || "Template")),
-      ];
-      const templateSheetNames = [
-        ...new Set(templateMatches.map((match) => match.sheetName).filter(Boolean)),
-      ];
-
-      reportRows.push({
-        excelRow,
-        standardOrderRow: orderItem?.excelRow || "",
-        code,
-        product,
-        uom: orderItem?.uom || uom || "",
-        department,
-        category,
-        subCategory,
-        venues,
-        venueText,
-        matchedVenues,
-        templateMatches,
-        templateLocationNames,
-        templateSheetNames,
-        templateShipScopeLabels,
-        templateShipScopeNote: templateShipScopeLabels.join("; "),
-        stockOnHand: Number(orderItem?.stockOnHand || 0),
-        futureOrders,
-        pastConsumption,
-        foundInOrderTemplate: Boolean(orderItem),
-        foundInTemplate: true,
-        currentShipCode,
-        reason: "FML product matches the ERP template for this ship and has 0 future orders plus 0 past consumption in Standard Order Template.",
+      logUsageEvent("next_order_file_uploaded", {
+        module: "generate_next_order",
+        fileName: file.name,
+        sheetName: parsed.meta.sheetName,
+        totalItems: parsed.meta.totalItems,
+        itemsNeedingOrder: parsed.meta.itemsNeedingOrder,
+        parCapItems: parsed.meta.parCapItems,
+        blueReviewItems: parsed.meta.blueReviewItems,
+        redReviewItems: parsed.meta.redReviewItems,
+        fmlMissingItems: parsed.meta.fmlMissingItems,
+        fmlRunningLowItems: parsed.meta.fmlRunningLowItems,
       });
-    });
-
-    return reportRows.sort((a, b) => Number(a.excelRow || 0) - Number(b.excelRow || 0));
-  };
-
+    } catch (error) {
+      setNextOrderFileName(file.name);
+      setNextOrderSourceRows([]);
+      setNextOrderMeta({});
+      setNextOrderRows([]);
+      setNextOrderSearch("");
+      setNextOrderFilter("all");
+      setNextOrderMessage(error?.message || "Could not read the order file.");
+    }
+  });
+};
   const uploadNextOrderFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
