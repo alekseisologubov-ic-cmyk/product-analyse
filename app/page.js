@@ -8866,7 +8866,7 @@ setCurrentInventoryItem({
           <div style={styles.card}>
             <h2 style={styles.cardTitle}>📤 Upload Inventory in Use</h2>
 
-            <label style={styles.label}>Step 1: Equipment Muster List file</label>
+            <label style={styles.label}>Step 1: Equipment Master List file</label>
             <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadMusterFile} style={styles.fileInput} />
 
             <label style={styles.label}>Step 2: Inventory in Use file</label>
@@ -8879,7 +8879,7 @@ setCurrentInventoryItem({
               <div>❌ Missing from Inventory: <strong>{missingItems.length}</strong></div>
               <div>⚠️ Zero Count: <strong>{zeroItems.length}</strong></div>
               <div>✅ In Use: <strong>{activeItems.length}</strong></div>
-              <div>Muster: C = Category, D = Code, E = Name</div>
+              <div>Master List: C = Category, D = Code, E = Name</div>
               <div>In Use: A = Code, B = Name, H = On Hand</div>
             </div>
           </div>
@@ -8903,7 +8903,7 @@ setCurrentInventoryItem({
         <section style={styles.card}>
           <h2 style={{ ...styles.productTitle, color: "#b00020" }}>❌ Missing from Inventory</h2>
 
-          {musterItems.length === 0 && <p style={styles.emptyText}>Upload the Equipment Muster List first.</p>}
+          {musterItems.length === 0 && <p style={styles.emptyText}>Upload the Equipment Master List first.</p>}
           {inUseRows.length === 0 && <p style={styles.emptyText}>Upload the Inventory in Use file to compare.</p>}
           {musterItems.length > 0 && inUseRows.length > 0 && missingItems.length === 0 && (
             <p style={styles.emptyText}>No missing items found.</p>
