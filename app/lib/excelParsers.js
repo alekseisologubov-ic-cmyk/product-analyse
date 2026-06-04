@@ -1111,6 +1111,7 @@ export const parseRestaurantInventoryFile = async (input) => {
 
   const firstSheetName = workbook.SheetNames[0] || "";
   const masterImageByKey = {};
+
   const masterItems = [];
   const venueItems = [];
 
@@ -1143,31 +1144,56 @@ export const parseRestaurantInventoryFile = async (input) => {
     });
 
     if (isFirstSheet) {
-      masterItems.push(...sheetItems);
-      sheetItems.forEach((item) =>
+      const normalizedMasterItems = sheetItems.map((item) => ({
+        ...item,
+        equipmentDepartment: "restaurant",
+        sheetName: sheetName || "MASTER",
+        sourceSheetName: sheetName || "MASTER",
+        stationName: "MASTER",
+        category: item.category || "Restaurant Master",
+        isVenueSheet: false,
+      }));
+
+      masterItems.push(...normalizedMasterItems);
+
+      normalizedMasterItems.forEach((item) =>
         addRestaurantMasterImageToLookup(masterImageByKey, item)
       );
+
       continue;
     }
 
-    venueItems.push(...sheetItems);
+    venueItems.push(
+      ...sheetItems.map((item) => ({
+        ...item,
+        equipmentDepartment: "restaurant",
+        sourceSheetName: sheetName,
+        stationName: item.stationName || sheetName,
+        isVenueSheet: true,
+      }))
+    );
   }
 
+  // Important:
+  // Keep MASTER first, then all restaurant / venue sheets.
+  // Before, MASTER was only used as fallback when no venues existed.
   const finalItems = [...masterItems, ...venueItems];
 
   const venueSheetNames = workbook.SheetNames.filter((sheetName) =>
     isRestaurantVenueSheetName(sheetName, firstSheetName)
   );
 
+  const includedSheetNames = [
+    firstSheetName,
+    ...venueSheetNames,
+  ].filter(Boolean);
+
   return {
     workbook,
     items: finalItems,
-    sourceSheetName: [
-      firstSheetName || "MASTER",
-      ...venueSheetNames,
-    ]
-      .filter(Boolean)
-      .join(", "),
+    sourceSheetName: includedSheetNames.length
+      ? includedSheetNames.join(", ")
+      : workbook.SheetNames.join(", "),
   };
 };
 
