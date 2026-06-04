@@ -1126,12 +1126,22 @@ const uploadNextOrderFile = (e) => {
   };
 
   const getFilteredMakeInventoryItems = () => {
-    return makeInventoryItems.filter((item) =>
-      `${item.sheetName} ${item.category} ${item.code} ${item.name}`
-        .toLowerCase()
-        .includes(makeInventorySearch.toLowerCase())
-    );
-  };
+  const searchTerm = makeInventorySearch.toLowerCase();
+  const selectedRestaurantStation = cleanText(inventoryStation);
+
+  return makeInventoryItems.filter((item) => {
+    const matchesRestaurantStation =
+      equipmentDepartment !== "restaurant" ||
+      !selectedRestaurantStation ||
+      cleanText(item.sheetName) === selectedRestaurantStation;
+
+    if (!matchesRestaurantStation) return false;
+
+    return `${item.sheetName} ${item.category} ${item.code} ${item.name}`
+      .toLowerCase()
+      .includes(searchTerm);
+  });
+};
 
   const getEffectiveInventoryUserName = () => {
     const name = inventoryUserName.trim();
