@@ -8,8 +8,7 @@ import {
   readExcelFile,
   workbookToRows,
   parseTemplateWorkbook,
-  parseMusterWorkbook,
-  extractEmbeddedImagesByCell,
+  parseEquipmentMasterFile,
 } from "./lib/excelParsers";
 
 import {
