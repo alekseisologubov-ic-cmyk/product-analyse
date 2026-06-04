@@ -1126,24 +1126,36 @@ const uploadNextOrderFile = (e) => {
   };
 
   const getFilteredMakeInventoryItems = () => {
-  const searchTerm = makeInventorySearch.toLowerCase();
+  const searchText = makeInventorySearch.toLowerCase();
+  const selectedRestaurantStation = cleanText(inventoryStation);
 
-  return makeInventoryItems
-    .filter((item) => {
-      if (equipmentDepartment !== "restaurant") return true;
-      if (!inventoryStation) return true;
+  return makeInventoryItems.filter((item) => {
+    const matchesSearch = `${item.sheetName} ${item.category} ${item.code} ${item.name}`
+      .toLowerCase()
+      .includes(searchText);
 
-      const itemStation = String(
-        item.stationName || item.sheetName || ""
-      ).trim();
+    if (!matchesSearch) return false;
 
-      return cleanText(itemStation) === cleanText(inventoryStation);
-    })
-    .filter((item) =>
-      `${item.stationName || ""} ${item.sheetName} ${item.category} ${item.code} ${item.name}`
-        .toLowerCase()
-        .includes(searchTerm)
-    );
+    if (equipmentDepartment !== "restaurant") {
+      return true;
+    }
+
+    if (!selectedRestaurantStation) {
+      return true;
+    }
+
+    const itemStation = cleanText(item.stationName || item.sheetName || "");
+    const isMasterItem =
+      itemStation === "MASTER" ||
+      cleanText(item.category) === "MASTER" ||
+      cleanText(item.sheetName).includes("MASTER");
+
+    if (isMasterItem) {
+      return false;
+    }
+
+    return itemStation === selectedRestaurantStation;
+  });
 };
 
   const getEffectiveInventoryUserName = () => {
