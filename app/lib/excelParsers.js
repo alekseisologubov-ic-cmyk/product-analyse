@@ -169,13 +169,13 @@ export const readExcelFile = (file, callback, onError) => {
 };
 
 export const workbookToRows = (workbook) => {
-  const ws = workbook?.Sheets?.[workbook?.SheetNames?.[0]];
+  const worksheet = workbook?.Sheets?.[workbook?.SheetNames?.[0]];
 
-  if (!ws) {
+  if (!worksheet) {
     return [];
   }
 
-  return XLSX.utils.sheet_to_json(ws, {
+  return XLSX.utils.sheet_to_json(worksheet, {
     header: 1,
     defval: "",
   });
@@ -184,13 +184,20 @@ export const workbookToRows = (workbook) => {
 export const parseTemplateWorkbook = (workbook) => {
   const map = {};
 
+  if (!workbook?.SheetNames?.length) {
+    return map;
+  }
+
   workbook.SheetNames.forEach((sheetName) => {
     const venueKey = normalizeParserVenue(sheetName);
     if (!venueKey) return;
 
     if (!map[venueKey]) map[venueKey] = {};
 
-    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+    const worksheet = workbook.Sheets[sheetName];
+    if (!worksheet) return;
+
+    const rows = XLSX.utils.sheet_to_json(worksheet, {
       header: 1,
       defval: "",
     });
@@ -269,7 +276,7 @@ export const parseTemplateWorkbook = (workbook) => {
       ];
 
       map[venueKey][productKey].templates = [
-        ...map[venueKey][productKey].templates,
+        ...(map[venueKey][productKey].templates || []),
       ];
 
       map[venueKey][productKey].templateLocations = [
@@ -334,12 +341,19 @@ const resolveZipPath = (basePath, target) => {
   return normalizeZipPath(baseDir + "/" + value);
 };
 
-const getElementsByLocalName = (node, localName) =>
-  Array.from(node.getElementsByTagName("*")).filter(
+const getElementsByLocalName = (node, localName) => {
+  if (!node) return [];
+
+  return Array.from(node.getElementsByTagName("*")).filter(
     (element) => element.localName === localName
   );
+};
 
 const getXmlRelationships = (xmlText) => {
+  if (typeof DOMParser === "undefined") {
+    return {};
+  }
+
   const doc = new DOMParser().parseFromString(xmlText, "application/xml");
   const rels = {};
 
@@ -358,6 +372,8 @@ const getWorkbookSheetPath = async (zip, sheetNameToFind) => {
     ?.async("text");
 
   if (!workbookXml || !workbookRelsXml) return "";
+
+  if (typeof DOMParser === "undefined") return "";
 
   const workbookDoc = new DOMParser().parseFromString(
     workbookXml,
@@ -408,6 +424,14 @@ export const isParserUsableImageValue = (value) => {
 
 export const extractEmbeddedImagesByCell = async (arrayBuffer, sheetName) => {
   const imageMap = {};
+
+  if (!arrayBuffer || !sheetName) {
+    return imageMap;
+  }
+
+  if (typeof DOMParser === "undefined") {
+    return imageMap;
+  }
 
   try {
     const zip = await JSZip.loadAsync(arrayBuffer);
@@ -527,6 +551,10 @@ export const extractEmbeddedImagesByCell = async (arrayBuffer, sheetName) => {
 export const parseMusterWorkbook = (workbook, imageMapsBySheet = {}) => {
   const items = [];
 
+  if (!workbook?.SheetNames?.length) {
+    return items;
+  }
+
   const findHeaderIndexes = (rows) => {
     let headerRowIndex = 0;
     let headerRow = rows[0] || [];
@@ -575,7 +603,10 @@ export const parseMusterWorkbook = (workbook, imageMapsBySheet = {}) => {
   };
 
   workbook.SheetNames.forEach((sheetName) => {
-    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+    const worksheet = workbook.Sheets[sheetName];
+    if (!worksheet) return;
+
+    const rows = XLSX.utils.sheet_to_json(worksheet, {
       header: 1,
       defval: "",
     });
@@ -649,7 +680,15 @@ export const parseMusterWorkbook = (workbook, imageMapsBySheet = {}) => {
   return items;
 };
 
-export const parseBarInventoryFile = async (file) => {
+const getFileFromParserInput = (input) => input?.file || input;
+
+export const parseBarInventoryFile = async (input) => {
+  const file = getFileFromParserInput(input);
+
+  if (!file) {
+    throw new Error("No Bar master list file selected.");
+  }
+
   const arrayBuffer = await file.arrayBuffer();
 
   const workbook = XLSX.read(arrayBuffer, {
@@ -736,17 +775,18 @@ export const parseBarInventoryFile = async (file) => {
 };
 
 export const parseEquipmentMasterFile = async (input) => {
-  const file = input?.file || input;
+  const file = getFileFromParserInput(input);
+
   const equipmentDepartment = String(
     input?.equipmentDepartment || "culinary"
   ).toLowerCase();
 
   if (!file) {
-    throw new Error("No equipment master file selected.");
+    throw new Error("No equipment master list file selected.");
   }
 
   if (equipmentDepartment === "bar") {
-    return parseBarInventoryFile(file);
+    return parseBarInventoryFile({ file });
   }
 
   const arrayBuffer = await file.arrayBuffer();
