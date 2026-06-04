@@ -1060,27 +1060,6 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
   const buildProductList = (rows) =>
     [...new Set(rows.slice(1).map((r) => String(r[6] || "").trim()).filter(Boolean))].sort();
 
-  const splitFmlVenues = (value) =>
-    String(value || "")
-      .split(",")
-      .map((venue) => venue.replace(/\s+/g, " ").trim())
-      .filter(Boolean);
-
-  const getLooseVenueMatchKey = (value) =>
-    normalizeVenue(value).replace(/[^A-Z0-9]/g, "");
-
-  const getTemplateSheetShipScope = (sheetName) => {
-    const text = cleanText(sheetName).replace(/RESILIANT/g, "RESILIENT");
-    const scope = [];
-
-    if (/\bSCL\b/.test(text) || /\bSC\b/.test(text) || text.includes("SCARLET")) scope.push("SC");
-    if (/\bVAL\b/.test(text) || /\bVL\b/.test(text) || text.includes("VALIANT")) scope.push("VL");
-    if (/\bRES\b/.test(text) || /\bRL\b/.test(text) || text.includes("RESILIENT")) scope.push("RL");
-    if (/\bBRL\b/.test(text) || text.includes("BRILLIANT")) scope.push("BRL");
-
-    return [...new Set(scope)];
-  };
-
   const getTemplateShipScopeLabel = (shipScope) => {
     const scope = Array.isArray(shipScope) ? shipScope.filter(Boolean) : [];
     return scope.length ? "Used only on " + scope.join(", ") : "Used by all ships";
