@@ -1570,7 +1570,10 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
 
     readExcelFile(file, (workbook) => {
       try {
-        const parsed = parseNextOrderWorkbook(workbook);
+        const parsed = parseNextOrderWorkbook({
+  workbook,
+  templateMap,
+});
         setNextOrderFileName(file.name);
         setNextOrderSourceRows(parsed.rows);
         setNextOrderMeta(parsed.meta);
