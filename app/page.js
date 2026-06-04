@@ -1155,8 +1155,28 @@ const uploadNextOrderFile = (e) => {
     );
   };
 
-  const getActiveInventoryStationList = () =>
-  equipmentDepartment === "bar" ? BAR_STATIONS : CULINARY_STATIONS;
+  const getActiveInventoryStationList = () => {
+  if (equipmentDepartment === "bar") {
+    return BAR_STATIONS;
+  }
+
+  if (equipmentDepartment === "restaurant") {
+    const stationsFromMasterList = [
+      ...new Set(
+        (makeInventoryItems || [])
+          .filter((item) => item?.equipmentDepartment === "restaurant" || equipmentDepartment === "restaurant")
+          .map((item) => String(item.sheetName || "").trim())
+          .filter(Boolean)
+      ),
+    ];
+
+    return stationsFromMasterList.length
+      ? stationsFromMasterList
+      : RESTAURANT_STATIONS;
+  }
+
+  return CULINARY_STATIONS;
+};
 
   const getInventoryStationLabel = () =>
     equipmentDepartment === "bar" ? "bar" : "station";
