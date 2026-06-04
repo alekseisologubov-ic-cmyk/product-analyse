@@ -7854,7 +7854,7 @@ isAdmin={isAdmin}
             >
               <div style={styles.moduleIcon}>👨‍🍳</div>
               <strong>Culinary</strong>
-              <span>Current equipment tools: muster list, inventory in use, warehouse and make inventory.</span>
+              <span>Current equipment tools: master list, inventory in use, warehouse and make inventory.</span>
             </button>
 
             <button
@@ -7867,7 +7867,7 @@ isAdmin={isAdmin}
             >
               <div style={styles.moduleIcon}>🍸</div>
               <strong>Bar</strong>
-              <span>Muster list and inventory tools for Bar equipment.</span>
+              <span>Master list and inventory tools for Bar equipment.</span>
             </button>
 
             <button
@@ -7880,7 +7880,7 @@ isAdmin={isAdmin}
             >
               <div style={styles.moduleIcon}>🍽️</div>
               <strong>Restaurant</strong>
-              <span>Muster list and inventory tools for Restaurant equipment.</span>
+              <span>Master list and inventory tools for Restaurant equipment.</span>
             </button>
           </div>
         </section>
