@@ -4742,11 +4742,6 @@ const getEquipmentFallbackImage = (item) => {
     return [...productMap.values()].sort((a, b) => a.localeCompare(b));
   };
 
-  const getReportProductKey = (product) => {
-    const tokens = [...new Set(getProductMatchTokens(product))].sort();
-    return tokens.length ? tokens.join("|") : cleanText(product);
-  };
-
   const getConsumptionCostReportRows = () => {
     let currentVenue = "";
     const productMap = new Map();
