@@ -1159,7 +1159,7 @@ export const parseEquipmentMasterFile = async (input) => {
     throw new Error("No equipment master list file selected.");
   }
 
-    if (equipmentDepartment === "bar") {
+  if (equipmentDepartment === "bar") {
     return parseBarInventoryFile({ file });
   }
 
@@ -1167,9 +1167,6 @@ export const parseEquipmentMasterFile = async (input) => {
     return parseRestaurantInventoryFile({ file });
   }
 
-  if (equipmentDepartment === "restaurant") {
-  return parseRestaurantInventoryFile({ file });
-}
   const arrayBuffer = await file.arrayBuffer();
 
   const workbook = XLSX.read(arrayBuffer, {
@@ -1196,7 +1193,6 @@ export const parseEquipmentMasterFile = async (input) => {
     sourceSheetName: workbook.SheetNames.join(", "),
   };
 };
-
 const parserToNumber = (value) => {
   if (typeof value === "number" && Number.isFinite(value)) return value;
 
