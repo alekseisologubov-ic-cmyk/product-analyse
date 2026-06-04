@@ -689,6 +689,37 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
   const browserHistoryReadyRef = useRef(false);
   const browserHistoryRestoringRef = useRef(false);
   const browserHistoryLastKeyRef = useRef("");
+    const getCurrentAppNavigationState = () => ({
+    welcomeStarted,
+    emailConfirmed,
+    loggedIn,
+    userShip,
+    module,
+    productMode,
+    equipmentDepartment,
+    equipmentMode,
+    productReportView,
+  });
+
+  const applyAppNavigationState = (navigationState = {}) => {
+    setWelcomeStarted(Boolean(navigationState.welcomeStarted));
+    setEmailConfirmed(Boolean(navigationState.emailConfirmed));
+    setLoggedIn(Boolean(navigationState.loggedIn));
+    setUserShip(navigationState.userShip || "");
+    setModule(navigationState.module || "");
+    setProductMode(navigationState.productMode || "");
+    setEquipmentDepartment(navigationState.equipmentDepartment || "");
+    setEquipmentMode(navigationState.equipmentMode || "");
+    setProductReportView(navigationState.productReportView || "main");
+
+    // Close detail screens/modals that should not survive a browser-back jump.
+    setSelectedProduct("");
+    setSelectedRecipe(null);
+    setSelectedEquipment(null);
+    setCurrentInventoryItem(null);
+    setInventoryQty("");
+    setEditingInventoryId(null);
+  };
 
   const shipColumns = { BRL: 8, RL: 11, SC: 14, VL: 17 };
   const shipCostColumns = { BRL: 9, RL: 12, SC: 15, VL: 18 };
