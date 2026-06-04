@@ -815,3 +815,910 @@ export const parseEquipmentMasterFile = async (input) => {
     sourceSheetName: workbook.SheetNames.join(", "),
   };
 };
+const parserToNumber = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  const cleaned = String(value ?? "")
+    .replace(/,/g, "")
+    .replace(/[^0-9.\-]/g, "")
+    .trim();
+
+  const number = Number(cleaned);
+  return Number.isFinite(number) ? number : 0;
+};
+
+export const normalizeParserShipCode = (value) => {
+  const text = cleanParserText(value);
+
+  if (!text) return "";
+
+  if (
+    text === "SC" ||
+    text.includes("SCARLET") ||
+    text.includes("SCARLET LADY")
+  ) {
+    return "SC";
+  }
+
+  if (
+    text === "VL" ||
+    text.includes("VALIANT") ||
+    text.includes("VALIANT LADY")
+  ) {
+    return "VL";
+  }
+
+  if (
+    text === "BRL" ||
+    text === "BR" ||
+    text.includes("BRILLIANT") ||
+    text.includes("BRILLIANT LADY")
+  ) {
+    return "BRL";
+  }
+
+  if (
+    text === "RL" ||
+    text === "RES" ||
+    text.includes("RESILIENT") ||
+    text.includes("RESILIENT LADY")
+  ) {
+    return "RL";
+  }
+
+  return "";
+};
+
+const normalizeParserOrderCode = (value) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+
+  const numberValue = Number(raw);
+
+  if (
+    Number.isFinite(numberValue) &&
+    raw.replace(/\.0+$/, "") === String(Math.trunc(numberValue))
+  ) {
+    return String(Math.trunc(numberValue));
+  }
+
+  return cleanParserText(raw).replace(/\.0+$/, "");
+};
+
+const splitParserFmlVenues = (value) =>
+  String(value || "")
+    .split(",")
+    .map((venue) => venue.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+const getParserLooseVenueMatchKey = (value) =>
+  normalizeParserVenue(value).replace(/[^A-Z0-9]/g, "");
+
+const PARSER_PRODUCT_MATCH_STOP_WORDS = new Set([
+  "FRESH",
+  "BABY",
+  "LARGE",
+  "SMALL",
+  "REGULAR",
+  "HYDROPONIC",
+  "OR",
+  "AND",
+  "THE",
+  "FOR",
+  "WITH",
+  "WITHOUT",
+  "LBS",
+  "LB",
+  "KG",
+  "G",
+  "OZ",
+  "CS",
+  "CASE",
+  "BOX",
+  "PC",
+  "PCS",
+  "PK",
+  "PACK",
+  "CT",
+  "EA",
+  "EACH",
+]);
+
+const singularizeParserProductToken = (token) => {
+  if (!token) return "";
+  if (token.length > 4 && token.endsWith("IES")) {
+    return `${token.slice(0, -3)}Y`;
+  }
+
+  if (token.length > 4 && token.endsWith("ES") && !token.endsWith("SES")) {
+    return token.slice(0, -2);
+  }
+
+  if (token.length > 3 && token.endsWith("S") && !token.endsWith("SS")) {
+    return token.slice(0, -1);
+  }
+
+  return token;
+};
+
+const getParserProductMatchTokens = (value) =>
+  cleanParserText(value)
+    .replace(/[^A-Z0-9]+/g, " ")
+    .split(" ")
+    .map((token) => singularizeParserProductToken(token.trim()))
+    .filter((token) => token && token.length > 2)
+    .filter((token) => !/^\d+$/.test(token))
+    .filter((token) => !PARSER_PRODUCT_MATCH_STOP_WORDS.has(token));
+
+const parserProductNamesMatch = (left, right) => {
+  const a = cleanParserText(left);
+  const b = cleanParserText(right);
+
+  if (!a || !b) return false;
+  if (a === b) return true;
+
+  if (a.length > 12 && (a.includes(b) || b.includes(a))) return true;
+  if (b.length > 12 && (a.includes(b) || b.includes(a))) return true;
+
+  const aTokens = getParserProductMatchTokens(a);
+  const bTokens = getParserProductMatchTokens(b);
+
+  if (!aTokens.length || !bTokens.length) return false;
+
+  const shortTokens = aTokens.length <= bTokens.length ? aTokens : bTokens;
+
+  const longTokenSet = new Set(
+    aTokens.length <= bTokens.length ? bTokens : aTokens
+  );
+
+  const matchedCount = shortTokens.filter((token) =>
+    longTokenSet.has(token)
+  ).length;
+
+  if (shortTokens.length === 1) {
+    const token = shortTokens[0];
+    return token.length >= 4 && matchedCount === 1;
+  }
+
+  return matchedCount >= Math.ceil(shortTokens.length * 0.75);
+};
+
+const getParserProductReportKey = (value) => {
+  const displayValue = String(value || "").trim();
+  if (!displayValue) return "";
+
+  const tokens = [...new Set(getParserProductMatchTokens(displayValue))].sort();
+
+  return tokens.length ? tokens.join("|") : cleanParserText(displayValue);
+};
+
+const parserTemplateShipScopeMatches = (shipScope, currentShipCode) => {
+  const scope = Array.isArray(shipScope) ? shipScope.filter(Boolean) : [];
+
+  if (!scope.length) return true;
+  if (!currentShipCode) return false;
+
+  return scope.includes(currentShipCode);
+};
+
+const getParserTemplateMatchesForFmlProduct = ({
+  fmlItem,
+  currentShipCode,
+  templateMap = {},
+}) => {
+  const matches = [];
+  const seen = new Set();
+
+  const fmlVenues = fmlItem.venues || [];
+
+  const fmlVenueKeys = fmlVenues
+    .map((venue) => getParserLooseVenueMatchKey(venue))
+    .filter(Boolean);
+
+  const fmlCodeKey = normalizeParserOrderCode(fmlItem.code);
+
+  Object.entries(templateMap || {}).forEach(([venueKey, productsByKey]) => {
+    Object.values(productsByKey || {}).forEach((templateItem) => {
+      const templateCodes = Array.isArray(templateItem.productCodes)
+        ? templateItem.productCodes
+        : [];
+
+      const codeMatches =
+        fmlCodeKey &&
+        templateCodes.some(
+          (code) => normalizeParserOrderCode(code) === fmlCodeKey
+        );
+
+      const nameMatches = parserProductNamesMatch(
+        fmlItem.product,
+        templateItem.product
+      );
+
+      if (!codeMatches && !nameMatches) return;
+
+      const locations =
+        Array.isArray(templateItem.templateLocations) &&
+        templateItem.templateLocations.length
+          ? templateItem.templateLocations
+          : [
+              {
+                locationKey: venueKey,
+                displayName: venueKey,
+                sheetName: "",
+                templateName: "",
+                shipScope: [],
+                shipScopeLabel: "Used by all ships",
+              },
+            ];
+
+      locations.forEach((location) => {
+        const shipScope = Array.isArray(location.shipScope)
+          ? location.shipScope
+          : [];
+
+        if (!parserTemplateShipScopeMatches(shipScope, currentShipCode)) {
+          return;
+        }
+
+        const candidateKeys = [
+          location.locationKey,
+          location.displayName,
+          location.sheetName,
+          venueKey,
+        ]
+          .map((value) => getParserLooseVenueMatchKey(value))
+          .filter(Boolean);
+
+        const matchedFmlVenueIndexes = fmlVenueKeys
+          .map((fmlKey, index) =>
+            candidateKeys.some(
+              (candidateKey) =>
+                candidateKey === fmlKey ||
+                candidateKey.includes(fmlKey) ||
+                fmlKey.includes(candidateKey)
+            )
+              ? index
+              : -1
+          )
+          .filter((index) => index >= 0);
+
+        if (!matchedFmlVenueIndexes.length) return;
+
+        const uniqueKey = [
+          location.sheetName || venueKey,
+          location.templateName || "",
+          templateItem.product || "",
+          shipScope.join("-") || "ALL",
+        ].join("|");
+
+        if (seen.has(uniqueKey)) return;
+        seen.add(uniqueKey);
+
+        matches.push({
+          templateProduct: templateItem.product || fmlItem.product,
+          templateName: location.templateName || "Template",
+          sheetName: location.sheetName || "",
+          displayName:
+            location.displayName || location.locationKey || venueKey,
+          shipScope,
+          shipScopeLabel: getParserTemplateShipScopeLabel(shipScope),
+          matchedVenues: [
+            ...new Set(
+              matchedFmlVenueIndexes
+                .map((index) => fmlVenues[index])
+                .filter(Boolean)
+            ),
+          ],
+        });
+      });
+    });
+  });
+
+  return matches;
+};
+
+export const parseFmlNotOrderedUnusedReport = ({
+  workbook,
+  orderRows,
+  currentShipCode,
+  templateMap = {},
+}) => {
+  const fmlSheetName =
+    workbook.SheetNames.find((name) => cleanParserText(name) === "FML") ||
+    workbook.SheetNames.find((name) => cleanParserText(name).includes("FML"));
+
+  if (!fmlSheetName) return [];
+
+  const worksheet = workbook.Sheets[fmlSheetName];
+  if (!worksheet) return [];
+
+  const decodedRange = XLSX.utils.decode_range(worksheet["!ref"] || "A1:I1");
+
+  const fmlRange = {
+    s: { r: decodedRange.s.r, c: 0 },
+    e: { r: decodedRange.e.r, c: Math.max(decodedRange.e.c, 8) },
+  };
+
+  const rows = XLSX.utils.sheet_to_json(worksheet, {
+    header: 1,
+    defval: "",
+    range: fmlRange,
+  });
+
+  const orderByCode = {};
+  const orderByProductKey = {};
+
+  orderRows.forEach((item) => {
+    const codeKey = normalizeParserOrderCode(item.code);
+    const productKey = getParserProductReportKey(item.product);
+
+    if (codeKey) orderByCode[codeKey] = item;
+    if (productKey && !orderByProductKey[productKey]) {
+      orderByProductKey[productKey] = item;
+    }
+  });
+
+  const reportRows = [];
+  const seen = new Set();
+
+  rows.slice(3).forEach((row, index) => {
+    const excelRow = index + 4;
+    const department = String(row[0] || "").trim();
+    const category = String(row[1] || "").trim();
+    const subCategory = String(row[2] || "").trim();
+    const code = String(row[3] || "").trim();
+
+    const product = String(row[4] || "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const venueText = String(row[5] || "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const uom = String(row[8] || "").trim();
+
+    if (!code || !product || !venueText) return;
+    if (cleanParserText(code) === "PRODUCT") return;
+    if (cleanParserText(product) === "PRODUCT NAME") return;
+
+    const venues = splitParserFmlVenues(venueText);
+    if (!venues.length) return;
+
+    const codeKey = normalizeParserOrderCode(code);
+    const productKey = getParserProductReportKey(product);
+
+    const orderItem =
+      orderByCode[codeKey] || orderByProductKey[productKey] || null;
+
+    if (!orderItem) return;
+
+    const futureOrders = Number(orderItem.futureOrders || 0);
+    const pastConsumption = Number(orderItem.pastConsumption || 0);
+
+    if (futureOrders > 0 || pastConsumption > 0) return;
+
+    const templateMatches = getParserTemplateMatchesForFmlProduct({
+      fmlItem: { code, product, venues },
+      currentShipCode,
+      templateMap,
+    });
+
+    if (!templateMatches.length) return;
+
+    const uniqueKey =
+      codeKey || productKey || cleanParserText(product + "|" + excelRow);
+
+    if (seen.has(uniqueKey)) return;
+    seen.add(uniqueKey);
+
+    const matchedVenues = [
+      ...new Set(
+        templateMatches.flatMap((match) => match.matchedVenues || [])
+      ),
+    ];
+
+    const templateShipScopeLabels = [
+      ...new Set(
+        templateMatches.map(
+          (match) => match.shipScopeLabel || "Used by all ships"
+        )
+      ),
+    ];
+
+    const templateLocationNames = [
+      ...new Set(
+        templateMatches.map(
+          (match) => match.displayName || match.templateName || "Template"
+        )
+      ),
+    ];
+
+    const templateSheetNames = [
+      ...new Set(templateMatches.map((match) => match.sheetName).filter(Boolean)),
+    ];
+
+    reportRows.push({
+      excelRow,
+      standardOrderRow: orderItem?.excelRow || "",
+      code,
+      product,
+      uom: orderItem?.uom || uom || "",
+      department,
+      category,
+      subCategory,
+      venues,
+      venueText,
+      matchedVenues,
+      templateMatches,
+      templateLocationNames,
+      templateSheetNames,
+      templateShipScopeLabels,
+      templateShipScopeNote: templateShipScopeLabels.join("; "),
+      stockOnHand: Number(orderItem?.stockOnHand || 0),
+      futureOrders,
+      pastConsumption,
+      foundInOrderTemplate: Boolean(orderItem),
+      foundInTemplate: true,
+      currentShipCode,
+      reason:
+        "FML product matches the ERP template for this ship and has 0 future orders plus 0 past consumption in Standard Order Template.",
+    });
+  });
+
+  return reportRows.sort(
+    (a, b) => Number(a.excelRow || 0) - Number(b.excelRow || 0)
+  );
+};
+
+export const parseFmlRunningLowReport = ({
+  workbook,
+  orderRows,
+  currentShipCode,
+  templateMap = {},
+}) => {
+  const fmlSheetName =
+    workbook.SheetNames.find((name) => cleanParserText(name) === "FML") ||
+    workbook.SheetNames.find((name) => cleanParserText(name).includes("FML"));
+
+  if (!fmlSheetName) return [];
+
+  const worksheet = workbook.Sheets[fmlSheetName];
+  if (!worksheet) return [];
+
+  const decodedRange = XLSX.utils.decode_range(worksheet["!ref"] || "A1:I1");
+
+  const fmlRange = {
+    s: { r: decodedRange.s.r, c: 0 },
+    e: { r: decodedRange.e.r, c: Math.max(decodedRange.e.c, 8) },
+  };
+
+  const rows = XLSX.utils.sheet_to_json(worksheet, {
+    header: 1,
+    defval: "",
+    range: fmlRange,
+  });
+
+  const orderByCode = {};
+  const orderByProductKey = {};
+
+  orderRows.forEach((item) => {
+    const codeKey = normalizeParserOrderCode(item.code);
+    const productKey = getParserProductReportKey(item.product);
+
+    if (codeKey) orderByCode[codeKey] = item;
+    if (productKey && !orderByProductKey[productKey]) {
+      orderByProductKey[productKey] = item;
+    }
+  });
+
+  const reportRows = [];
+  const seen = new Set();
+
+  rows.slice(3).forEach((row, index) => {
+    const excelRow = index + 4;
+    const department = String(row[0] || "").trim();
+    const category = String(row[1] || "").trim();
+    const subCategory = String(row[2] || "").trim();
+    const code = String(row[3] || "").trim();
+
+    const product = String(row[4] || "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const venueText = String(row[5] || "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const uom = String(row[8] || "").trim();
+
+    if (!code || !product || !venueText) return;
+    if (cleanParserText(code) === "PRODUCT") return;
+    if (cleanParserText(product) === "PRODUCT NAME") return;
+
+    const venues = splitParserFmlVenues(venueText);
+    if (!venues.length) return;
+
+    const codeKey = normalizeParserOrderCode(code);
+    const productKey = getParserProductReportKey(product);
+
+    const orderItem =
+      orderByCode[codeKey] || orderByProductKey[productKey] || null;
+
+    if (!orderItem) return;
+
+    const futureOrders = Number(orderItem.futureOrders || 0);
+    const pastConsumption = Number(orderItem.pastConsumption || 0);
+    const averageConsumptionPerDay = Number(
+      orderItem.averageConsumptionPerDay || 0
+    );
+    const availableAtArrival = Number(orderItem.availableAtArrival || 0);
+
+    if (futureOrders > 0) return;
+    if (pastConsumption <= 0 || averageConsumptionPerDay <= 0) return;
+
+    const oneDayBuffer = averageConsumptionPerDay;
+    const isRunningLowAtArrival = availableAtArrival <= oneDayBuffer;
+
+    if (!isRunningLowAtArrival) return;
+
+    const templateMatches = getParserTemplateMatchesForFmlProduct({
+      fmlItem: { code, product, venues },
+      currentShipCode,
+      templateMap,
+    });
+
+    if (!templateMatches.length) return;
+
+    const uniqueKey =
+      codeKey || productKey || cleanParserText(product + "|" + excelRow);
+
+    if (seen.has(uniqueKey)) return;
+    seen.add(uniqueKey);
+
+    const matchedVenues = [
+      ...new Set(
+        templateMatches.flatMap((match) => match.matchedVenues || [])
+      ),
+    ];
+
+    const templateShipScopeLabels = [
+      ...new Set(
+        templateMatches.map(
+          (match) => match.shipScopeLabel || "Used by all ships"
+        )
+      ),
+    ];
+
+    const templateLocationNames = [
+      ...new Set(
+        templateMatches.map(
+          (match) => match.displayName || match.templateName || "Template"
+        )
+      ),
+    ];
+
+    const templateSheetNames = [
+      ...new Set(templateMatches.map((match) => match.sheetName).filter(Boolean)),
+    ];
+
+    const daysOfCoverAtArrival =
+      averageConsumptionPerDay > 0
+        ? availableAtArrival / averageConsumptionPerDay
+        : 0;
+
+    const reason =
+      availableAtArrival <= 0
+        ? "No future order. Based on average daily consumption, this product is expected to be out before or by arrival day."
+        : "No future order. Based on average daily consumption, this product will have less than one day of stock at arrival.";
+
+    reportRows.push({
+      excelRow,
+      standardOrderRow: orderItem?.excelRow || "",
+      code,
+      product,
+      uom: orderItem?.uom || uom || "",
+      department,
+      category,
+      subCategory,
+      venues,
+      venueText,
+      matchedVenues,
+      templateMatches,
+      templateLocationNames,
+      templateSheetNames,
+      templateShipScopeLabels,
+      templateShipScopeNote: templateShipScopeLabels.join("; "),
+      stockOnHand: Number(orderItem?.stockOnHand || 0),
+      futureOrders,
+      pastConsumption,
+      averageConsumptionPerDay,
+      consumptionUntilArrival: Number(orderItem?.consumptionUntilArrival || 0),
+      availableAtArrival,
+      daysOfCoverAtArrival,
+      suggestedOrder: Number(orderItem?.suggestedOrder || 0),
+      foundInOrderTemplate: Boolean(orderItem),
+      foundInTemplate: true,
+      currentShipCode,
+      reason,
+    });
+  });
+
+  return reportRows.sort(
+    (a, b) => Number(a.excelRow || 0) - Number(b.excelRow || 0)
+  );
+};
+
+const getParserHistoricalSailorDays = (cellA, cellB) => {
+  const a = parserToNumber(cellA);
+  const b = parserToNumber(cellB);
+
+  if (!a && !b) return 0;
+  if (a && !b) return a;
+  if (!a && b) return b;
+
+  const low = Math.min(Math.abs(a), Math.abs(b));
+  const high = Math.max(Math.abs(a), Math.abs(b));
+
+  if (low > 0 && high > low * 1000) return high;
+
+  return a * b;
+};
+
+const parserExcelDateToDate = (value) => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const excelEpoch = Date.UTC(1899, 11, 30);
+    return new Date(excelEpoch + value * 24 * 60 * 60 * 1000);
+  }
+
+  const text = String(value || "").trim();
+  if (!text) return null;
+
+  const parsed = new Date(text);
+  if (!Number.isNaN(parsed.getTime())) return parsed;
+
+  return null;
+};
+
+const formatParserDateCell = (value) => {
+  const date = parserExcelDateToDate(value);
+
+  if (!date) {
+    return String(value || "").trim();
+  }
+
+  return date.toLocaleDateString();
+};
+
+const getParserDaysBetweenCells = (startValue, endValue) => {
+  const startDate = parserExcelDateToDate(startValue);
+  const endDate = parserExcelDateToDate(endValue);
+
+  if (!startDate || !endDate) return 0;
+
+  const startUtc = Date.UTC(
+    startDate.getUTCFullYear(),
+    startDate.getUTCMonth(),
+    startDate.getUTCDate()
+  );
+
+  const endUtc = Date.UTC(
+    endDate.getUTCFullYear(),
+    endDate.getUTCMonth(),
+    endDate.getUTCDate()
+  );
+
+  const days = Math.round((endUtc - startUtc) / (24 * 60 * 60 * 1000));
+
+  return Number.isFinite(days) && days > 0 ? days : 0;
+};
+
+export const parseNextOrderWorkbook = (input) => {
+  const workbook = input?.workbook || input;
+  const templateMap = input?.templateMap || {};
+
+  if (!workbook?.SheetNames?.length) {
+    throw new Error("Could not read the next order workbook.");
+  }
+
+  const sheetName = workbook.SheetNames.includes("Standard Order Template")
+    ? "Standard Order Template"
+    : workbook.SheetNames.includes("Order Sheet")
+    ? "Order Sheet"
+    : workbook.SheetNames[0];
+
+  const worksheet = workbook.Sheets[sheetName];
+
+  if (!worksheet) {
+    throw new Error("Could not find the next order worksheet.");
+  }
+
+  const rows = XLSX.utils.sheet_to_json(worksheet, {
+    header: 1,
+    defval: "",
+  });
+
+  const orderShipName = String(rows[0]?.[1] || "").trim();
+  const orderShipCode = normalizeParserShipCode(orderShipName);
+  const rawOrderDate = rows[1]?.[1];
+  const rawArrivalDate = rows[2]?.[1];
+  const targetSailors = parserToNumber(rows[4]?.[1]);
+  const targetDays = parserToNumber(rows[5]?.[1]);
+  const daysUntilArrival = getParserDaysBetweenCells(
+    rawOrderDate,
+    rawArrivalDate
+  );
+
+  const currentPeriodSailorDays = targetSailors * targetDays;
+
+  const futureOrderColumns = [5, 6, 7, 8, 9, 10, 11, 12, 13];
+  const pastConsumptionColumns = [34, 35, 36, 37, 38, 39];
+
+  const historicalSailorDays = pastConsumptionColumns.reduce(
+    (sum, colIndex) =>
+      sum +
+      getParserHistoricalSailorDays(
+        rows[4]?.[colIndex],
+        rows[5]?.[colIndex]
+      ),
+    0
+  );
+
+  const parsedRows = [];
+
+  rows.slice(9).forEach((row, rowOffset) => {
+    const excelRow = rowOffset + 10;
+    const code = String(row[0] || "").trim();
+    const product = String(row[1] || "").trim();
+    const uom = String(row[2] || "").trim();
+
+    if (!product || !uom) return;
+
+    const stockOnHand = parserToNumber(row[3]);
+    const parLevel = parserToNumber(row[16]);
+
+    const futureOrders = futureOrderColumns.reduce(
+      (sum, colIndex) => sum + parserToNumber(row[colIndex]),
+      0
+    );
+
+    const pastConsumption = pastConsumptionColumns.reduce(
+      (sum, colIndex) => sum + parserToNumber(row[colIndex]),
+      0
+    );
+
+    const averageConsumptionPerSailorDay =
+      historicalSailorDays > 0 ? pastConsumption / historicalSailorDays : 0;
+
+    const averageConsumptionPerDay =
+      averageConsumptionPerSailorDay * targetSailors;
+
+    const projectedNeed = averageConsumptionPerDay * targetDays;
+    const consumptionUntilArrival = averageConsumptionPerDay * daysUntilArrival;
+    const availableAtArrival =
+      stockOnHand + futureOrders - consumptionUntilArrival;
+
+    const rawSuggestedOrder = Math.max(projectedNeed - availableAtArrival, 0);
+
+    const isFourteenDayLoad = Math.abs(Number(targetDays || 0) - 14) < 0.01;
+    const parMaxAllowed = parLevel > 0 ? parLevel * 1.1 : 0;
+
+    const parCapApplied = Boolean(
+      isFourteenDayLoad &&
+        parLevel > 0 &&
+        rawSuggestedOrder > parMaxAllowed
+    );
+
+    const suggestedOrder = parCapApplied
+      ? parMaxAllowed
+      : rawSuggestedOrder;
+
+    let parLevelNote = "Par level ignored because B6 is not exactly 14 days.";
+
+    if (isFourteenDayLoad && parLevel > 0 && parCapApplied) {
+      parLevelNote =
+        "Par cap applied: 14-day load cannot exceed par level Q + 10%.";
+    } else if (isFourteenDayLoad && parLevel > 0) {
+      parLevelNote =
+        "Par level considered: calculated order is within par level Q + 10%.";
+    } else if (isFourteenDayLoad && parLevel <= 0) {
+      parLevelNote = "14-day load, but no par level found in column Q.";
+    }
+
+    const hasNoPastConsumption = pastConsumption <= 0;
+    const hasNoStockOnHand = stockOnHand <= 0;
+
+    let alertType = suggestedOrder > 0 ? "order" : "normal";
+    let alertLabel =
+      suggestedOrder > 0 ? "Needs order" : "No order suggested";
+
+    let alertDescription =
+      "Average daily consumption x voyage days, adjusted for stock/future orders until order arrival. " +
+      parLevelNote;
+
+    if (hasNoPastConsumption && hasNoStockOnHand) {
+      alertType = "blue";
+      alertLabel = "No stock and no past consumption";
+      alertDescription =
+        "Blue review: stock on hand is 0 and past consumption is 0.";
+    } else if (hasNoPastConsumption && stockOnHand > 0) {
+      alertType = "red";
+      alertLabel = "Stock on hand but no past consumption";
+      alertDescription =
+        "Red review: item has stock on hand but no past consumption.";
+    }
+
+    parsedRows.push({
+      excelRow,
+      code,
+      product,
+      uom,
+      stockOnHand,
+      parLevel,
+      futureOrders,
+      pastConsumption,
+      rawSuggestedOrder,
+      parMaxAllowed,
+      parCapApplied,
+      parLevelNote,
+      historicalSailorDays,
+      currentPeriodSailorDays,
+      daysUntilArrival,
+      averageConsumptionPerSailorDay,
+      averageConsumptionPerDay,
+      projectedNeed,
+      consumptionUntilArrival,
+      availableAtArrival,
+      suggestedOrder,
+      alertType,
+      alertLabel,
+      alertDescription,
+      orderReason: alertDescription,
+    });
+  });
+
+  const fmlReportRows = parseFmlNotOrderedUnusedReport({
+    workbook,
+    orderRows: parsedRows,
+    currentShipCode: orderShipCode,
+    templateMap,
+  });
+
+  const fmlRunningLowRows = parseFmlRunningLowReport({
+    workbook,
+    orderRows: parsedRows,
+    currentShipCode: orderShipCode,
+    templateMap,
+  });
+
+  return {
+    rows: parsedRows,
+    fmlReportRows,
+    fmlRunningLowRows,
+    meta: {
+      sheetName,
+      shipName: orderShipName,
+      shipCode: orderShipCode,
+      orderDate: formatParserDateCell(rawOrderDate),
+      arrivalDate: formatParserDateCell(rawArrivalDate),
+      targetSailors,
+      targetDays,
+      daysUntilArrival,
+      currentPeriodSailorDays,
+      historicalSailorDays,
+      totalItems: parsedRows.length,
+      itemsNeedingOrder: parsedRows.filter(
+        (item) => Number(item.suggestedOrder || 0) > 0
+      ).length,
+      parCapItems: parsedRows.filter((item) => item.parCapApplied).length,
+      blueReviewItems: parsedRows.filter((item) => item.alertType === "blue")
+        .length,
+      redReviewItems: parsedRows.filter((item) => item.alertType === "red")
+        .length,
+      fmlMissingItems: fmlReportRows.length,
+      fmlRunningLowItems: fmlRunningLowRows.length,
+    },
+  };
+};
