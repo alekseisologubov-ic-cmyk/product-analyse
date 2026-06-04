@@ -20,7 +20,7 @@ export default function EquipmentDepartmentOptions({
 }) {
   const title =
     equipmentDepartment === "restaurant"
-      ? "Rest Options"
+      ? "Restaurant Options"
       : `${activeEquipmentDepartmentLabel} Options`;
 
   const shipDisplayName =
@@ -66,7 +66,7 @@ export default function EquipmentDepartmentOptions({
               <div style={styles.moduleIcon}>🛒</div>
               <strong>Generate Next Order</strong>
               <span>
-                Upload latest order file and calculate suggested next-order
+                Upload the latest order file and calculate suggested next-order
                 quantities
               </span>
             </button>
@@ -97,8 +97,8 @@ export default function EquipmentDepartmentOptions({
 
           <button style={styles.moduleCard} onClick={onOpenMuster}>
             <div style={styles.moduleIcon}>📋</div>
-            <strong>Equipment Muster List</strong>
-            <span>Grouped by sheets and sub categories</span>
+            <strong>Equipment Master List</strong>
+            <span>Grouped by sheet and subcategory</span>
           </button>
 
           <button style={styles.moduleCard} onClick={onOpenInventory}>
