@@ -1170,8 +1170,12 @@ export const parseEquipmentMasterFile = async (input) => {
     throw new Error("No equipment master list file selected.");
   }
 
-  if (equipmentDepartment === "bar") {
+    if (equipmentDepartment === "bar") {
     return parseBarInventoryFile({ file });
+  }
+
+  if (equipmentDepartment === "restaurant") {
+    return parseRestaurantInventoryFile({ file });
   }
 
   if (equipmentDepartment === "restaurant") {
