@@ -9,6 +9,7 @@ import {
   workbookToRows,
   parseTemplateWorkbook,
   parseEquipmentMasterFile,
+  parseNextOrderWorkbook,
 } from "./lib/excelParsers";
 
 import {
