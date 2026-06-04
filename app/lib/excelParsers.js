@@ -372,7 +372,6 @@ const getWorkbookSheetPath = async (zip, sheetNameToFind) => {
     ?.async("text");
 
   if (!workbookXml || !workbookRelsXml) return "";
-
   if (typeof DOMParser === "undefined") return "";
 
   const workbookDoc = new DOMParser().parseFromString(
@@ -815,6 +814,7 @@ export const parseEquipmentMasterFile = async (input) => {
     sourceSheetName: workbook.SheetNames.join(", "),
   };
 };
+
 const parserToNumber = (value) => {
   if (typeof value === "number" && Number.isFinite(value)) return value;
 
@@ -926,6 +926,7 @@ const PARSER_PRODUCT_MATCH_STOP_WORDS = new Set([
 
 const singularizeParserProductToken = (token) => {
   if (!token) return "";
+
   if (token.length > 4 && token.endsWith("IES")) {
     return `${token.slice(0, -3)}Y`;
   }
@@ -1515,10 +1516,7 @@ const getParserDaysBetweenCells = (startValue, endValue) => {
   return Number.isFinite(days) && days > 0 ? days : 0;
 };
 
-export const parseNextOrderWorkbook = (input) => {
-  const workbook = input?.workbook || input;
-  const templateMap = input?.templateMap || {};
-
+export const parseNextOrderWorkbook = ({ workbook, templateMap = {} } = {}) => {
   if (!workbook?.SheetNames?.length) {
     throw new Error("Could not read the next order workbook.");
   }
@@ -1546,6 +1544,7 @@ export const parseNextOrderWorkbook = (input) => {
   const rawArrivalDate = rows[2]?.[1];
   const targetSailors = parserToNumber(rows[4]?.[1]);
   const targetDays = parserToNumber(rows[5]?.[1]);
+
   const daysUntilArrival = getParserDaysBetweenCells(
     rawOrderDate,
     rawArrivalDate
