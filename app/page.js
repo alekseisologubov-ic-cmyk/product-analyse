@@ -14,7 +14,6 @@ import {
   formatMoney,
   getImageUrl,
   isUsableImageValue,
-  getUsableImageValue,
   escapeHtml,
   toNumber,
 } from "./lib/appHelpers";
