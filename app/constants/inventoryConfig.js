@@ -81,6 +81,34 @@ export const BAR_STATIONS = [
   "D17 Storage Locker",
 ];
 
+export const RESTAURANT_STATIONS = [
+  "RD",
+  "PA",
+  "TK",
+  "WAKE",
+  "EV",
+  "GUNBAE",
+  "GALLEY",
+  "SE",
+  "PP",
+  "KT",
+  "MANOR",
+  "DOCK",
+  "LTIC",
+  "LOCKER 2238Z",
+  "LOCKER 4348Z",
+  "LOCKER 4350Z",
+  "LOCKER 4354Z",
+  "LOCKER 5072A",
+  "LOCKER 5082Z",
+  "LOCKER 5106A",
+  "LOCKER 6026P",
+  "LOCKER 6066P",
+  "LOCKER 7012Z",
+  "LOCKER 15276P",
+  "ROCKSTAR SUITE",
+];
+
 export const getInventoryStationsForDepartment = (department) =>
   department === "bar" ? BAR_STATIONS : CULINARY_STATIONS;
 
