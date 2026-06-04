@@ -1178,8 +1178,12 @@ const uploadNextOrderFile = (e) => {
   return CULINARY_STATIONS;
 };
 
-  const getInventoryStationLabel = () =>
-    equipmentDepartment === "bar" ? "bar" : "station";
+  const getInventoryStationLabel = () => {
+  if (equipmentDepartment === "bar") return "bar";
+  if (equipmentDepartment === "restaurant") return "restaurant / locker";
+
+  return "station";
+};
 
   const loadMasterInventoryItems = async (shipOverride) => {
   if (!supabase) {
