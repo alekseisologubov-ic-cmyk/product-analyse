@@ -1772,8 +1772,8 @@ const imageFallback = imageCandidates.find((value) => value !== image) || "";
         data = legacyResult.data;
         sourceText =
           "Legacy shared master list loaded for " +
-          shipOverride +
-          ". Upload again from Muster List to make it shared by department.";
+shipOverride +
+". Upload again from Master List to make it shared by department.";
       }
     }
 
