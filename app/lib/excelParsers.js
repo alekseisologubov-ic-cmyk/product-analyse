@@ -773,6 +773,184 @@ export const parseBarInventoryFile = async (input) => {
   };
 };
 
+const RESTAURANT_PARSER_EXCLUDED_SHEETS = new Set([
+  "MASTER",
+  "NEW PAR LEVELS",
+  "CORE ITEMS",
+  "COPY OF TEMPLATE",
+  "ERP TRANSFERS",
+  "IMAGES",
+  "WAREHOUSE",
+]);
+
+const formatRestaurantParserCode = (value) => {
+  const raw = String(value ?? "").trim();
+
+  if (!raw) return "";
+
+  const numberValue = Number(raw);
+
+  if (Number.isFinite(numberValue) && Math.abs(numberValue) >= 1) {
+    return String(Math.trunc(numberValue));
+  }
+
+  return raw.replace(/\.0+$/, "");
+};
+
+const isRestaurantParserDataSheet = (sheetName) => {
+  const key = cleanParserText(sheetName);
+
+  if (!key) return false;
+  if (RESTAURANT_PARSER_EXCLUDED_SHEETS.has(key)) return false;
+
+  return true;
+};
+
+const findRestaurantParserHeaderIndexes = (rows) => {
+  let headerRowIndex = -1;
+  let headerRow = [];
+
+  rows.slice(0, 12).some((row, index) => {
+    const cleanRow = row.map((cell) => cleanParserText(cell));
+
+    const hasCode = cleanRow.some(
+      (cell) =>
+        cell === "CODE" ||
+        cell === "ERP CODE" ||
+        cell === "PRODUCT CODE" ||
+        cell.includes("CODE")
+    );
+
+    const hasDescription = cleanRow.some(
+      (cell) =>
+        cell === "DESCRIPTION" ||
+        cell === "PRODUCT NAME" ||
+        cell.includes("DESCRIPTION")
+    );
+
+    if (hasCode && hasDescription) {
+      headerRowIndex = index;
+      headerRow = row;
+      return true;
+    }
+
+    return false;
+  });
+
+  const cleanHeaders = headerRow.map((cell) => cleanParserText(cell));
+
+  const findIndex = (patterns, fallback) => {
+    const found = cleanHeaders.findIndex((header) =>
+      patterns.some((pattern) => header === pattern || header.includes(pattern))
+    );
+
+    return found >= 0 ? found : fallback;
+  };
+
+  return {
+    headerRowIndex,
+    codeIndex: findIndex(["CODE", "ERP CODE", "PRODUCT CODE"], 1),
+    nameIndex: findIndex(["DESCRIPTION", "PRODUCT NAME"], 2),
+    imageIndex: findIndex(["IMAGE", "PHOTO", "PICTURE", "LINK"], 3),
+    locationIndex: findIndex(["SPECIFIC LOCATION", "VENUE", "LOCATION"], 4),
+    parIndex: findIndex(["PAR LEVEL"], 5),
+    qtyIndex: findIndex(["QTY", "QUANTITY", "ON HAND", "TOTAL"], -1),
+  };
+};
+
+export const parseRestaurantInventoryFile = async (input) => {
+  const file = getFileFromParserInput(input);
+
+  if (!file) {
+    throw new Error("No Restaurant master list file selected.");
+  }
+
+  const arrayBuffer = await file.arrayBuffer();
+
+  const workbook = XLSX.read(arrayBuffer, {
+    type: "array",
+    cellDates: true,
+  });
+
+  const items = [];
+
+  workbook.SheetNames.forEach((sheetName) => {
+    if (!isRestaurantParserDataSheet(sheetName)) return;
+
+    const worksheet = workbook.Sheets[sheetName];
+    if (!worksheet) return;
+
+    const rows = XLSX.utils.sheet_to_json(worksheet, {
+      header: 1,
+      defval: "",
+    });
+
+    if (!rows.length) return;
+
+    const indexes = findRestaurantParserHeaderIndexes(rows);
+
+    if (indexes.headerRowIndex < 0) return;
+
+    rows.slice(indexes.headerRowIndex + 1).forEach((row, dataIndex) => {
+      const sourceRow = indexes.headerRowIndex + 2 + dataIndex;
+
+      const code = formatRestaurantParserCode(row[indexes.codeIndex]);
+
+      const name = String(row[indexes.nameIndex] || "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!code && !name) return;
+      if (!name) return;
+
+      const cleanName = cleanParserText(name);
+      const cleanCode = cleanParserText(code);
+
+      if (cleanName === "DESCRIPTION") return;
+      if (cleanName === "PRODUCT NAME") return;
+      if (cleanCode === "CODE") return;
+      if (cleanCode === "ERP CODE") return;
+      if (cleanName.includes("#REF")) return;
+
+      const location = String(row[indexes.locationIndex] || "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      const rawImage =
+        indexes.imageIndex >= 0 ? String(row[indexes.imageIndex] || "").trim() : "";
+
+      const image = isParserUsableImageValue(rawImage) ? rawImage : "";
+
+      const parLevel =
+        indexes.parIndex >= 0 ? parserToNumber(row[indexes.parIndex]) : 0;
+
+      const qty =
+        indexes.qtyIndex >= 0 ? parserToNumber(row[indexes.qtyIndex]) : 0;
+
+      items.push({
+        equipmentDepartment: "restaurant",
+        sheetName,
+        stationName: sheetName,
+        category: location || sheetName,
+        code,
+        name,
+        unit: "EA",
+        um: "EA",
+        parLevel,
+        qty,
+        image,
+        imageFallback: "",
+        sourceRow,
+      });
+    });
+  });
+
+  return {
+    workbook,
+    items,
+    sourceSheetName: workbook.SheetNames.filter(isRestaurantParserDataSheet).join(", "),
+  };
+};
 export const parseEquipmentMasterFile = async (input) => {
   const file = getFileFromParserInput(input);
 
