@@ -1473,9 +1473,6 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     }
   };
 
-  const parseMusterWorkbook = (workbook, imageMapsBySheet = {}) => {
-  const items = [];
-
   const parseBarInventoryFile = async (file) => {
     const arrayBuffer = await file.arrayBuffer();
     const workbook = XLSX.read(arrayBuffer, { type: "array" });
