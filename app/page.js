@@ -185,6 +185,48 @@ const getShipDisplayName = (shipCode) => SHIP_DISPLAY_NAMES[shipCode] || shipCod
 const getScheduleShipDisplayName = (shipCode) =>
   shipCode === SCHEDULE_ALL_SHIPS ? "All Ships" : getShipDisplayName(shipCode);
 
+const normalizeShipCode = (value) => {
+  const text = cleanText(value);
+
+  if (!text) return "";
+
+  if (
+    text === "SC" ||
+    text.includes("SCARLET") ||
+    text.includes("SCARLET LADY")
+  ) {
+    return "SC";
+  }
+
+  if (
+    text === "VL" ||
+    text.includes("VALIANT") ||
+    text.includes("VALIANT LADY")
+  ) {
+    return "VL";
+  }
+
+  if (
+    text === "BRL" ||
+    text === "BR" ||
+    text.includes("BRILLIANT") ||
+    text.includes("BRILLIANT LADY")
+  ) {
+    return "BRL";
+  }
+
+  if (
+    text === "RL" ||
+    text === "RES" ||
+    text.includes("RESILIENT") ||
+    text.includes("RESILIENT LADY")
+  ) {
+    return "RL";
+  }
+
+  return "";
+};
+
 const SCHEDULE_ROLES = [
   "Cook",
   "Steward",
