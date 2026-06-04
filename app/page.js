@@ -1055,11 +1055,6 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     }, 900);
   };
 
-  const visibleShips = viewMode === "single" ? [userShip] : SHIPS;
-
-  const buildProductList = (rows) =>
-    [...new Set(rows.slice(1).map((r) => String(r[6] || "").trim()).filter(Boolean))].sort();
-
     const visibleShips = viewMode === "single" ? [userShip] : SHIPS;
 
 const buildProductList = (rows) =>
