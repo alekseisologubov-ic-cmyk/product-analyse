@@ -7268,23 +7268,25 @@ if (module === "allergen") {
         }}
       >
         <AllergenModule
-          key={`${userShip}-${normalizeAppEmail(userEmail)}`}
-          styles={styles}
-          supabase={supabase}
-          userShip={userShip}
-          userEmail={normalizeAppEmail(userEmail)}
-          isAdmin={isAdmin}
-          onBack={() => {
-            if (equipmentDepartment) {
-              setModule("equipment");
-              setEquipmentMode("");
-              return;
-            }
+  key={`${userShip}-${normalizeAppEmail(userEmail)}`}
+  styles={styles}
+  supabase={supabase}
+  userShip={userShip}
+  userEmail={normalizeAppEmail(userEmail)}
+  isAdmin={isAdmin}
+  recipeRows={recipeRows}
+  setRecipeRows={setRecipeRows}
+  onBack={() => {
+    if (equipmentDepartment) {
+      setModule("equipment");
+      setEquipmentMode("");
+      return;
+    }
 
-            setModule("");
-          }}
-          logUsageEvent={logUsageEvent}
-        />
+    setModule("");
+  }}
+  logUsageEvent={logUsageEvent}
+/>
       </AppProvider>
     </Suspense>
   );
