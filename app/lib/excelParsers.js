@@ -751,6 +751,7 @@ export const parseBarInventoryFile = async (input) => {
       return {
         equipmentDepartment: "bar",
         sheetName: oldSheetName,
+        stationName: oldSheetName,
         category: "Bar",
         code,
         name,
@@ -832,6 +833,14 @@ const shouldParseRestaurantSheet = (sheetName, firstSheetName) =>
   sheetName === firstSheetName ||
   isRestaurantVenueSheetName(sheetName, firstSheetName);
 
+const extractFirstUrlFromText = (value) => {
+  const text = String(value || "").trim();
+  if (!text) return "";
+
+  const urlMatch = text.match(/https?:\/\/[^"',\s)]+/i);
+  return urlMatch?.[0] || text;
+};
+
 const getWorksheetCellDisplayValue = (worksheet, rowNumber, colIndex) => {
   if (!worksheet || !rowNumber || typeof colIndex !== "number" || colIndex < 0) {
     return "";
@@ -840,7 +849,9 @@ const getWorksheetCellDisplayValue = (worksheet, rowNumber, colIndex) => {
   const cellAddress = columnNumberToLetters(colIndex) + String(rowNumber);
   const cell = worksheet[cellAddress];
 
-  return String(cell?.l?.Target || cell?.v || cell?.w || "").trim();
+  return extractFirstUrlFromText(
+    cell?.l?.Target || cell?.v || cell?.w || cell?.f || ""
+  );
 };
 
 const findRestaurantHeaderIndexes = (rows, isFirstSheet) => {
@@ -908,7 +919,7 @@ const findRestaurantHeaderIndexes = (rows, isFirstSheet) => {
   return {
     headerRowIndex,
 
-    // Master / first sheet usually: A code, B name, C picture.
+    // First sheet / MASTER usually: A code, B name, C picture.
     // Venue sheets usually: B code, C name, D picture.
     codeIndex: findIndex(
       ["CODE", "ERP CODE", "PRODUCT CODE", "ITEM CODE", "SKU", "APOLLO", "VV CODE"],
@@ -996,6 +1007,7 @@ const parseRestaurantSheetItems = ({
   const parsedItems = [];
 
   const primaryImageIndex = isFirstSheet ? 2 : 3;
+  const stationDisplayName = isVenueSheet ? sheetName : "MASTER";
 
   rows.slice(indexes.headerRowIndex + 1).forEach((row, dataIndex) => {
     const sourceRow = indexes.headerRowIndex + 2 + dataIndex;
@@ -1057,8 +1069,14 @@ const parseRestaurantSheetItems = ({
 
     parsedItems.push({
       equipmentDepartment: "restaurant",
-      sheetName,
-      stationName: isVenueSheet ? sheetName : "",
+
+      // Important:
+      // For the first sheet we expose it as MASTER so it becomes a selectable station/card.
+      // For venue tabs we expose the tab name as the station.
+      sheetName: stationDisplayName,
+      stationName: stationDisplayName,
+      sourceSheetName: sheetName,
+
       category: location || (isVenueSheet ? sheetName : "Restaurant Master"),
       code,
       name: name || code,
@@ -1070,6 +1088,7 @@ const parseRestaurantSheetItems = ({
       imageFallback,
       sourceRow,
       isVenueSheet,
+      isMasterSheet: !isVenueSheet,
     });
   });
 
@@ -1092,8 +1111,8 @@ export const parseRestaurantInventoryFile = async (input) => {
 
   const firstSheetName = workbook.SheetNames[0] || "";
   const masterImageByKey = {};
-  const masterFallbackItems = [];
-  const items = [];
+  const masterItems = [];
+  const venueItems = [];
 
   for (const sheetName of workbook.SheetNames) {
     if (!shouldParseRestaurantSheet(sheetName, firstSheetName)) continue;
@@ -1124,17 +1143,17 @@ export const parseRestaurantInventoryFile = async (input) => {
     });
 
     if (isFirstSheet) {
-      masterFallbackItems.push(...sheetItems);
+      masterItems.push(...sheetItems);
       sheetItems.forEach((item) =>
         addRestaurantMasterImageToLookup(masterImageByKey, item)
       );
       continue;
     }
 
-    items.push(...sheetItems);
+    venueItems.push(...sheetItems);
   }
 
-  const finalItems = items.length ? items : masterFallbackItems;
+  const finalItems = [...masterItems, ...venueItems];
 
   const venueSheetNames = workbook.SheetNames.filter((sheetName) =>
     isRestaurantVenueSheetName(sheetName, firstSheetName)
@@ -1143,11 +1162,15 @@ export const parseRestaurantInventoryFile = async (input) => {
   return {
     workbook,
     items: finalItems,
-    sourceSheetName: venueSheetNames.length
-      ? venueSheetNames.join(", ")
-      : firstSheetName || workbook.SheetNames.join(", "),
+    sourceSheetName: [
+      firstSheetName || "MASTER",
+      ...venueSheetNames,
+    ]
+      .filter(Boolean)
+      .join(", "),
   };
 };
+
 export const parseEquipmentMasterFile = async (input) => {
   const file = getFileFromParserInput(input);
 
@@ -1193,6 +1216,7 @@ export const parseEquipmentMasterFile = async (input) => {
     sourceSheetName: workbook.SheetNames.join(", "),
   };
 };
+
 const parserToNumber = (value) => {
   if (typeof value === "number" && Number.isFinite(value)) return value;
 
