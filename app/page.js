@@ -889,11 +889,6 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
   const buildProductList = (rows) =>
     [...new Set(rows.slice(1).map((r) => String(r[6] || "").trim()).filter(Boolean))].sort();
 
-  const workbookToRows = (workbook) => {
-    const ws = workbook.Sheets[workbook.SheetNames[0]];
-    return XLSX.utils.sheet_to_json(ws, { header: 1 });
-  };
-
   const normalizeOrderCode = (value) => {
     const raw = String(value ?? "").trim();
     if (!raw) return "";
