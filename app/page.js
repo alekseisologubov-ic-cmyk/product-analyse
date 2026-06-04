@@ -4,6 +4,11 @@ import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "rea
 import * as XLSX from "xlsx";
 import JSZip from "jszip";
 import { createClient } from "@supabase/supabase-js";
+import {
+  readExcelFile,
+  workbookToRows,
+  parseTemplateWorkbook,
+} from "./lib/excelParsers";
 
 import {
   downloadInventoryPdfReport,
