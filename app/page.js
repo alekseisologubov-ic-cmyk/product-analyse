@@ -1209,36 +1209,30 @@ const uploadNextOrderFile = (e) => {
   return stationsFromTabs.length ? stationsFromTabs.sort() : ["Restaurant"];
 };
 
+const getRestaurantInventoryStationList = () => {
+  const sourceItems = makeInventoryItems.length ? makeInventoryItems : musterItems;
+
+  return [
+    ...new Set(
+      sourceItems
+        .filter(
+          (item) =>
+            String(item?.equipmentDepartment || "").toLowerCase() ===
+            "restaurant"
+        )
+        .map((item) => item.stationName || item.sheetName || "")
+        .map((station) => String(station || "").replace(/\s+/g, " ").trim())
+        .filter(Boolean)
+        .filter((station) => cleanText(station) !== "MASTER")
+    ),
+  ].sort((a, b) => a.localeCompare(b));
+};
+
 const getActiveInventoryStationList = () => {
-  if (equipmentDepartment === "bar") {
-    return BAR_STATIONS;
-  }
+  if (equipmentDepartment === "bar") return BAR_STATIONS;
 
   if (equipmentDepartment === "restaurant") {
-    const stationsFromMasterList = [
-      ...new Set(
-        (makeInventoryItems || [])
-          .filter(
-            (item) =>
-              item?.equipmentDepartment === "restaurant" ||
-              equipmentDepartment === "restaurant"
-          )
-          .map((item) =>
-            String(item.stationName || item.sheetName || "").trim()
-          )
-          .filter(Boolean)
-      ),
-    ];
-
-    const masterStations = stationsFromMasterList.filter(
-      (station) => cleanText(station) === "MASTER"
-    );
-
-    const venueStations = stationsFromMasterList
-      .filter((station) => cleanText(station) !== "MASTER")
-      .sort((a, b) => a.localeCompare(b));
-
-    return [...masterStations, ...venueStations];
+    return getRestaurantInventoryStationList();
   }
 
   return CULINARY_STATIONS;
