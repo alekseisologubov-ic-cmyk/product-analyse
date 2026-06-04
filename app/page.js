@@ -2338,8 +2338,17 @@ const inventoryRecordMatchesCurrentDepartment = (item) =>
       countedMap[key] = item;
     });
 
-    return makeInventoryItems
-      .map((item) => {
+    const selectedRestaurantStation = cleanText(inventoryStation);
+
+const sourceMasterItems =
+  equipmentDepartment === "restaurant" && selectedRestaurantStation
+    ? makeInventoryItems.filter(
+        (item) => cleanText(item.sheetName) === selectedRestaurantStation
+      )
+    : makeInventoryItems;
+
+return sourceMasterItems
+  .map((item) => {
         const key = getInventoryItemKey(item);
         const counted = countedMap[key];
 
