@@ -5083,7 +5083,10 @@ const getEquipmentFallbackImage = (item) => {
 
     (async () => {
       try {
-        const { workbook, items, sourceSheetName } = await parseEquipmentMasterFile(file);
+        const { workbook, items, sourceSheetName } = await parseEquipmentMasterFile({
+  file,
+  equipmentDepartment,
+});
 
         setMakeInventoryItems(items);
         setMusterItems(items);
