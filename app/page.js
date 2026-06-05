@@ -105,6 +105,7 @@ const supabase =
   supabaseUrl && supabaseAnonKey
     ? createClient(supabaseUrl, supabaseAnonKey)
     : null;
+
 const loadXlsx = async () => {
   const module = await import("xlsx");
   return module.default || module;
