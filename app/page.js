@@ -3492,9 +3492,12 @@ const ws = XLSX.utils.json_to_sheet(rows);
       return;
     }
 
-    const arrayBuffer = await response.arrayBuffer();
+    const [XLSX, arrayBuffer] = await Promise.all([
+  loadXlsx(),
+  response.arrayBuffer(),
+]);
 
-    const workbook = XLSX.read(arrayBuffer, {
+const workbook = XLSX.read(arrayBuffer, {
       type: "array",
       cellDates: true,
     });
