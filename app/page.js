@@ -422,7 +422,9 @@ export default function App() {
   const [consumptionRows, setConsumptionRows] = useState([]);
   const [recipeRows, setRecipeRows] = useState([]);
   const [templateMap, setTemplateMap] = useState({});
-  const [templateStatus, setTemplateStatus] = useState("Loading template...");
+  const [templateStatus, setTemplateStatus] = useState(
+  "Template will load when Product tools open."
+);
   const [products, setProducts] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState("");
   const [selectedRecipe, setSelectedRecipe] = useState(null);
