@@ -3617,8 +3617,12 @@ const workbook = XLSX.read(arrayBuffer, {
       setMessage("Loading permanent Ingredient by Location file...");
     }
 
-    const arrayBuffer = await downloadIngredientByLocationFileFromStorage({ supabase });
-    const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+    const [XLSX, arrayBuffer] = await Promise.all([
+  loadXlsx(),
+  downloadIngredientByLocationFileFromStorage({ supabase }),
+]);
+
+const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
     const rows = workbookToRows(workbook);
 
     setRecipeRows(rows);
