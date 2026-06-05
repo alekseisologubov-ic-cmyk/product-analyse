@@ -3235,7 +3235,7 @@ return sourceMasterItems
     }
   };
 
-  const exportInventoryStatusToExcel = () => {
+  const exportInventoryStatusToExcel = async () => {
     logUsageEvent("export_excel_clicked", { module: "make_inventory", reportMode: "count_status", ship: makeInventoryShip || userShip, station: inventoryStation });
     const ship = makeInventoryShip || userShip;
     const rows = getMyInventoryStatusRows().map((item) => ({
