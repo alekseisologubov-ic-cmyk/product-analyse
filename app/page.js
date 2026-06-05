@@ -5372,7 +5372,7 @@ const ws = XLSX.utils.json_to_sheet(exportRows);
     return rows;
   };
 
-  const exportMainConsumptionCostReportToExcel = () => {
+  const exportMainConsumptionCostReportToExcel = async () => {
     logUsageEvent("export_excel_clicked", {
       module: "product_dashboard",
       reportMode: "main_consumption_cost",
