@@ -3628,6 +3628,28 @@ return sourceMasterItems
     return false;
   }
 };
+  useEffect(() => {
+  if (!loggedIn) return;
+
+  const shouldLoadProductFiles =
+    module === "product" ||
+    productMode === "dashboard" ||
+    productMode === "nextorder";
+
+  if (!shouldLoadProductFiles) return;
+
+  if (!defaultTemplateLoadedRef.current) {
+    defaultTemplateLoadedRef.current = true;
+    loadDefaultTemplate();
+  }
+
+  if (!yearlyRegionalLoadedRef.current) {
+    yearlyRegionalLoadedRef.current = true;
+    loadPermanentYearlyRegionalConsumptionFile();
+  }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [loggedIn, module, productMode]);
     useEffect(() => {
   const shouldLoadIngredientFile =
     module === "product" &&
