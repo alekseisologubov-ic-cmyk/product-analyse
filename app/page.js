@@ -5253,7 +5253,6 @@ const getEquipmentFallbackImage = (item) => {
 
     const XLSX = await loadXlsx();
 
-const ws = XLSX.utils.json_to_sheet(exportRows);
     const ws = XLSX.utils.json_to_sheet(exportRows);
     const wb = XLSX.utils.book_new();
 
