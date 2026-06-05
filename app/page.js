@@ -5510,7 +5510,7 @@ const ws = XLSX.utils.json_to_sheet(exportRows);
     return rows;
   };
 
-  const exportSelectedProductConsumptionReportToExcel = () => {
+  const exportSelectedProductConsumptionReportToExcel = async () => {
     logUsageEvent("export_excel_clicked", {
       module: "product_dashboard",
       reportMode: "consumption_vs_locations_template",
