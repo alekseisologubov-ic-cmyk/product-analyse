@@ -6041,7 +6041,7 @@ const ws = XLSX.utils.json_to_sheet(exportRows);
     );
   };
 
-  const exportFmlLowReportToExcel = () => {
+  const exportFmlLowReportToExcel = async () => {
     const rows = getVisibleFmlLowRows();
 
     if (!rows.length) {
