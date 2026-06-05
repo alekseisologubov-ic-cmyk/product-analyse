@@ -3548,9 +3548,12 @@ const workbook = XLSX.read(arrayBuffer, {
   try {
     setYearlyRegionalMessage("Loading yearly regional consumption file...");
 
-    const arrayBuffer = await file.arrayBuffer();
+    const [XLSX, arrayBuffer] = await Promise.all([
+  loadXlsx(),
+  file.arrayBuffer(),
+]);
 
-    const workbook = XLSX.read(arrayBuffer, {
+const workbook = XLSX.read(arrayBuffer, {
       type: "array",
       cellDates: true,
     });
