@@ -5547,6 +5547,8 @@ const ws = XLSX.utils.json_to_sheet(exportRows);
       }))
     );
 
+    const XLSX = await loadXlsx();
+    
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(totalRows), "Totals");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Venue Ship Usage");
