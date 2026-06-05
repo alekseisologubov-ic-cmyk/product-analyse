@@ -5879,7 +5879,7 @@ const ws = XLSX.utils.json_to_sheet(exportRows);
     );
   };
 
-  const exportFmlMissingReportToExcel = () => {
+  const exportFmlMissingReportToExcel = async () => {
     const rows = getVisibleFmlMissingRows();
 
     if (!rows.length) {
