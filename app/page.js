@@ -533,6 +533,8 @@ const [inventoryCountSheetTemplateName, setInventoryCountSheetTemplateName] = us
     const realtimeRefreshTimersRef = useRef({});
   const printBusyRef = useRef(false);
   const saveBusyRef = useRef(false);
+  const defaultTemplateLoadedRef = useRef(false);
+const yearlyRegionalLoadedRef = useRef(false);
 
   const browserHistoryReadyRef = useRef(false);
   const browserHistoryRestoringRef = useRef(false);
