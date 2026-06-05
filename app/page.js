@@ -6657,7 +6657,7 @@ const yearlyRegionalConsumptionReportRows = useMemo(() => {
   yearlyRegionalReportSort,
 ]);
 
-const exportYearlyRegionalConsumptionReportToExcel = () => {
+const exportYearlyRegionalConsumptionReportToExcel = async () => {
   if (!yearlyRegionalConsumptionReportRows.length) {
     window.alert("No yearly regional consumption rows to export.");
     return;
