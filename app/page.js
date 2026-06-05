@@ -5218,7 +5218,7 @@ const getEquipmentFallbackImage = (item) => {
     refreshProductMissingReport();
   };
 
-  const exportTopNotInUseByLocationReportToExcel = () => {
+  const exportTopNotInUseByLocationReportToExcel = async () => {
     logUsageEvent("export_excel_clicked", { module: "product_dashboard", reportMode: "top_not_in_use_by_location", ship: userShip, viewMode });
     if (productMissingReportLoading) {
       alert("Report is still preparing. Please wait a moment.");
