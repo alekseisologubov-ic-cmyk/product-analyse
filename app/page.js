@@ -5410,6 +5410,8 @@ const ws = XLSX.utils.json_to_sheet(exportRows);
   MatchedRegionalProductCode: item.regionalMatchedProductCode || "",
   MatchedRegionalProductName: item.regionalMatchedProductName || "",
 }));
+    
+    const XLSX = await loadXlsx();
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), "Product Summary");
