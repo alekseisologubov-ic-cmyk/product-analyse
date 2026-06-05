@@ -5706,7 +5706,7 @@ const ws = XLSX.utils.json_to_sheet(exportRows);
     return respectSearch ? filterNextOrderRows(rows) : rows;
   };
 
-  const exportNextOrderToExcel = () => {
+  const exportNextOrderToExcel = async () => {
     logUsageEvent("export_excel_clicked", { module: "generate_next_order", ship: nextOrderMeta?.shipName || userShip, search: nextOrderSearch, filter: nextOrderFilter });
     if (nextOrderLoading) {
       alert("Next order is still generating. Please wait a moment.");
