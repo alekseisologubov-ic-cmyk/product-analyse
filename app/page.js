@@ -6709,6 +6709,8 @@ const exportYearlyRegionalConsumptionReportToExcel = async () => {
     return row;
   });
 
+  const XLSX = await loadXlsx();
+  
   const worksheet = XLSX.utils.json_to_sheet(exportRows);
   const workbook = XLSX.utils.book_new();
 
