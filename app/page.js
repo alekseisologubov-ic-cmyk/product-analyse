@@ -978,8 +978,10 @@ const uploadNextOrderFile = (e) => {
 };
 
   const loadDefaultTemplate = async () => {
-    try {
-      const response = await fetch("/template.xlsx");
+  try {
+    const XLSX = await loadXlsx();
+
+    const response = await fetch("/template.xlsx");
       if (!response.ok) {
         setTemplateStatus("Template file not found.");
         return;
