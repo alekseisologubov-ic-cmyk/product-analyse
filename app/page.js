@@ -3851,12 +3851,16 @@ const uploadEquipmentPictureZipFile = async (event) => {
   }
 
   setPictureLibraryBusy(true);
-  setPictureLibraryMessage("Reading picture ZIP...");
+setPictureLibraryMessage("Reading picture ZIP...");
 
-  try {
-    const arrayBuffer = await file.arrayBuffer();
-    const zip = await JSZip.loadAsync(arrayBuffer);
-    const entries = [];
+try {
+  const [{ default: JSZip }, arrayBuffer] = await Promise.all([
+    import("jszip"),
+    file.arrayBuffer(),
+  ]);
+
+  const zip = await JSZip.loadAsync(arrayBuffer);
+  const entries = [];
 
     zip.forEach((relativePath, zipEntry) => {
       if (zipEntry.dir) return;
