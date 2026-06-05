@@ -5914,6 +5914,8 @@ const ws = XLSX.utils.json_to_sheet(exportRows);
       Reason: item.reason || "",
     }));
 
+    const XLSX = await loadXlsx();
+    
     const ws = XLSX.utils.json_to_sheet(exportRows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "FML Not Ordered Not Used");
