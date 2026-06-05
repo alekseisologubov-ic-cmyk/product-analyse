@@ -4329,7 +4329,9 @@ const getEquipmentFallbackImage = (item) => {
   setPictureLibraryMessage("Loading Drive picture library and matching links to column H...");
 
   try {
-    const response = await fetch("/api/drive-picture-library");
+  const XLSX = await loadXlsx();
+
+  const response = await fetch("/api/drive-picture-library");
     const data = await response.json();
 
     if (!response.ok) {
