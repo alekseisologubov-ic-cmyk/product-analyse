@@ -3706,8 +3706,12 @@ const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
       file,
     });
 
-    const arrayBuffer = await file.arrayBuffer();
-    const workbook = XLSX.read(arrayBuffer, {
+    const [XLSX, arrayBuffer] = await Promise.all([
+  loadXlsx(),
+  file.arrayBuffer(),
+]);
+
+const workbook = XLSX.read(arrayBuffer, {
       type: "array",
       cellDates: true,
     });
