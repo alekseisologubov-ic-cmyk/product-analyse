@@ -5744,6 +5744,8 @@ const ws = XLSX.utils.json_to_sheet(exportRows);
       Reason: item.orderReason || "Average daily consumption x voyage days, adjusted for stock/future orders until order arrival",
     }));
 
+    const XLSX = await loadXlsx();
+
     const ws = XLSX.utils.json_to_sheet(exportRows);
     const wb = XLSX.utils.book_new();
 
