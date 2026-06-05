@@ -2,7 +2,6 @@
 
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
-import JSZip from "jszip";
 import { createClient } from "@supabase/supabase-js";
 import {
   cleanText,
