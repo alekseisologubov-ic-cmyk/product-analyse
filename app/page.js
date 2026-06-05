@@ -466,7 +466,7 @@ const [fmlLowSearch, setFmlLowSearch] = useState("");
 const [yearlyRegionalConsumption, setYearlyRegionalConsumption] = useState(null);
 const [yearlyRegionalFileName, setYearlyRegionalFileName] = useState("");
 const [yearlyRegionalMessage, setYearlyRegionalMessage] = useState(
-  "Upload yearly May 2025 - April 2026 consumption file to enable regional par suggestions."
+  "Yearly regional file will load when Product tools open."
 );
 const [selectedRegionalConsumptionRegion, setSelectedRegionalConsumptionRegion] =
   useState("");
