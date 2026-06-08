@@ -2248,43 +2248,60 @@ const printOrderVsSuggestedReport = () => {
                 )}
 
                 {view === "parReport" ? (
-                  <>
-                    <button
-                      type="button"
-                      style={styles.backButton}
-                      onClick={printParComparisonReport}
-                    >
-                      🖨️ Print Order vs Par
-                    </button>
+  <>
+    <button
+      type="button"
+      style={styles.backButton}
+      onClick={printParComparisonReport}
+    >
+      🖨️ Print Order vs Par
+    </button>
 
-                    <button
-                      type="button"
-                      style={styles.primaryButton}
-                      onClick={exportParComparisonReport}
-                    >
-                      📥 Export Order vs Par
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      style={styles.backButton}
-                      onClick={printOrderView}
-                    >
-                      🖨️ Print
-                    </button>
+    <button
+      type="button"
+      style={styles.primaryButton}
+      onClick={exportParComparisonReport}
+    >
+      📥 Export Order vs Par
+    </button>
+  </>
+) : view === "orderVsSuggested" ? (
+  <>
+    <button
+      type="button"
+      style={styles.backButton}
+      onClick={printOrderVsSuggestedReport}
+    >
+      🖨️ Print Order vs Suggested
+    </button>
 
-                    <button
-                      type="button"
-                      style={styles.primaryButton}
-                      onClick={exportOrderView}
-                    >
-                      📥 Export Excel
-                    </button>
-                  </>
-                )}
-              </div>
+    <button
+      type="button"
+      style={styles.primaryButton}
+      onClick={exportOrderVsSuggestedReport}
+    >
+      📥 Export Order vs Suggested
+    </button>
+  </>
+) : (
+  <>
+    <button
+      type="button"
+      style={styles.backButton}
+      onClick={printOrderView}
+    >
+      🖨️ Print
+    </button>
+
+    <button
+      type="button"
+      style={styles.primaryButton}
+      onClick={exportOrderView}
+    >
+      📥 Export Excel
+    </button>
+  </>
+)}
 
               {visibleOrderRows.length === 0 && (
                 <p style={styles.emptyText}>
