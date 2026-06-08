@@ -2035,16 +2035,27 @@ const printOrderVsSuggestedReport = () => {
           </div>
 
           <div style={styles.headerActions}>
-            <button
-              type="button"
-              style={{
-                ...styles.viewModeButton,
-                ...(view === "order" ? styles.viewModeButtonActive : {}),
-              }}
-              onClick={() => setView("order")}
-            >
-              Suggested Order
-            </button>
+  <button
+    type="button"
+    style={{
+      ...styles.viewModeButton,
+      ...(view === "orderVsSuggested" ? styles.viewModeButtonActive : {}),
+    }}
+    onClick={() => setView("orderVsSuggested")}
+  >
+    Order vs Suggested
+  </button>
+
+  <button
+    type="button"
+    style={{
+      ...styles.viewModeButton,
+      ...(view === "order" ? styles.viewModeButtonActive : {}),
+    }}
+    onClick={() => setView("order")}
+  >
+    Suggested Order
+  </button>
 
             <button
               type="button"
