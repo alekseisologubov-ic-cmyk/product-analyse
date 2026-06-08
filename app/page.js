@@ -7713,16 +7713,28 @@ isAdmin={isAdmin}
         });
       }}
       onOpenMuster={() => {
-        setEquipmentMode("muster");
+  setEquipmentMode("muster");
 
-        logUsageEvent("equipment_option_opened", {
-          module: `equipment_${equipmentDepartment}_muster`,
-          equipmentDepartment,
-          ship: userShip,
-        });
-      }}
+  logUsageEvent("equipment_option_opened", {
+    module: `equipment_${equipmentDepartment}_muster`,
+    equipmentDepartment,
+    ship: userShip,
+  });
+}}
 
-      onOpenInventory={() => {
+onOpenBreakageReport={() => {
+  setModule("breakage");
+  setEquipmentMode("");
+  setProductMode("");
+
+  logUsageEvent("equipment_option_opened", {
+    module: `equipment_${equipmentDepartment}_breakage_report`,
+    equipmentDepartment,
+    ship: userShip,
+  });
+}}
+
+onOpenInventory={() => {
         setEquipmentMode("inventory");
 
         logUsageEvent("equipment_option_opened", {
