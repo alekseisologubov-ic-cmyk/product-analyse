@@ -2114,203 +2114,208 @@ const printOrderVsSuggestedReport = () => {
   view === "consumption" ||
   view === "parReport") &&
   orderRows.length > 0 && (
-            <>
-              <div style={styles.infoBox}>
-                <div>
-                  📦 Items loaded: <strong>{orderMeta.totalItems || 0}</strong>
-                </div>
-                <div>
-                  🔵 Suggested order items:{" "}
-                  <strong>{orderMeta.itemsNeedingOrder || 0}</strong>
-                </div>
-                <div>
-                  ✅ Covered items: <strong>{orderMeta.coveredItems || 0}</strong>
-                </div>
-                <div>
-                  ⚠️ Review items: <strong>{orderMeta.reviewItems || 0}</strong>
-                </div>
-                <div>
-                  🚨 Short before arrival:{" "}
-                  <strong>{orderMeta.preArrivalShortageItems || 0}</strong>
-                </div>
-                {orderMeta.isFreshProduceOrder && (
-                  <>
-                    <div>
-                      🥬 Quick-spoil produce:{" "}
-                      <strong>{orderMeta.fastSpoilageItems || 0}</strong>
-                    </div>
-                    <div>
-                      🥔 Long-hold produce:{" "}
-                      <strong>{orderMeta.longHoldProduceItems || 0}</strong>
-                    </div>
-                  </>
-                )}
-                <div>
-                  📋 FML rows found: <strong>{fmlRows.length}</strong>
-                </div>
-              </div>
+    <>
+      <div style={styles.infoBox}>
+        <div>
+          📦 Items loaded: <strong>{orderMeta.totalItems || 0}</strong>
+        </div>
 
-              <input
-                placeholder="Search product, code, UOM or status..."
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                style={{ ...styles.searchInput, marginTop: 14 }}
-              />
+        <div>
+          🔵 Suggested order items:{" "}
+          <strong>{orderMeta.itemsNeedingOrder || 0}</strong>
+        </div>
 
-              <div style={styles.viewModeBox}>
-                <button
-                  type="button"
-                  style={{
-                    ...styles.viewModeButton,
-                    ...(filter === "all" ? styles.viewModeButtonActive : {}),
-                  }}
-                  onClick={() => setFilter("all")}
-                >
-                  All ({filterCounts.all})
-                </button>
+        <div>
+          ✅ Covered items: <strong>{orderMeta.coveredItems || 0}</strong>
+        </div>
 
-                <button
-                  type="button"
-                  style={{
-                    ...styles.viewModeButton,
-                    ...(filter === "needsOrder"
-                      ? styles.viewModeButtonActive
-                      : {}),
-                  }}
-                  onClick={() => setFilter("needsOrder")}
-                >
-                  Needs Order ({filterCounts.needsOrder})
-                </button>
+        <div>
+          ⚠️ Review items: <strong>{orderMeta.reviewItems || 0}</strong>
+        </div>
 
-                <button
-                  type="button"
-                  style={{
-                    ...styles.viewModeButton,
-                    ...(filter === "covered" ? styles.viewModeButtonActive : {}),
-                  }}
-                  onClick={() => setFilter("covered")}
-                >
-                  Covered ({filterCounts.covered})
-                </button>
+        <div>
+          🚨 Short before arrival:{" "}
+          <strong>{orderMeta.preArrivalShortageItems || 0}</strong>
+        </div>
 
-                <button
-                  type="button"
-                  style={{
-                    ...styles.viewModeButton,
-                    ...(filter === "review" ? styles.viewModeButtonActive : {}),
-                  }}
-                  onClick={() => setFilter("review")}
-                >
-                  Review ({filterCounts.review})
-                </button>
+        {orderMeta.isFreshProduceOrder && (
+          <>
+            <div>
+              🥬 Quick-spoil produce:{" "}
+              <strong>{orderMeta.fastSpoilageItems || 0}</strong>
+            </div>
 
-                <button
-                  type="button"
-                  style={{
-                    ...styles.viewModeButton,
-                    ...(filter === "shortBeforeArrival"
-                      ? styles.viewModeButtonActive
-                      : {}),
-                  }}
-                  onClick={() => setFilter("shortBeforeArrival")}
-                >
-                  Short Before Arrival ({filterCounts.shortBeforeArrival})
-                </button>
+            <div>
+              🥔 Long-hold produce:{" "}
+              <strong>{orderMeta.longHoldProduceItems || 0}</strong>
+            </div>
+          </>
+        )}
 
-                {orderMeta.isFreshProduceOrder && (
-                  <>
-                    <button
-                      type="button"
-                      style={{
-                        ...styles.viewModeButton,
-                        ...(filter === "fastSpoilage"
-                          ? styles.viewModeButtonActive
-                          : {}),
-                      }}
-                      onClick={() => setFilter("fastSpoilage")}
-                    >
-                      Quick Spoil ({filterCounts.fastSpoilage})
-                    </button>
+        <div>
+          📋 FML rows found: <strong>{fmlRows.length}</strong>
+        </div>
+      </div>
 
-                    <button
-                      type="button"
-                      style={{
-                        ...styles.viewModeButton,
-                        ...(filter === "longHoldProduce"
-                          ? styles.viewModeButtonActive
-                          : {}),
-                      }}
-                      onClick={() => setFilter("longHoldProduce")}
-                    >
-                      Long Hold ({filterCounts.longHoldProduce})
-                    </button>
-                  </>
-                )}
+      <input
+        placeholder="Search product, code, UOM or status..."
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        style={{ ...styles.searchInput, marginTop: 14 }}
+      />
 
-                {view === "parReport" ? (
-  <>
-    <button
-      type="button"
-      style={styles.backButton}
-      onClick={printParComparisonReport}
-    >
-      🖨️ Print Order vs Par
-    </button>
+      <div style={styles.viewModeBox}>
+        <button
+          type="button"
+          style={{
+            ...styles.viewModeButton,
+            ...(filter === "all" ? styles.viewModeButtonActive : {}),
+          }}
+          onClick={() => setFilter("all")}
+        >
+          All ({filterCounts.all})
+        </button>
 
-    <button
-      type="button"
-      style={styles.primaryButton}
-      onClick={exportParComparisonReport}
-    >
-      📥 Export Order vs Par
-    </button>
-  </>
-) : view === "orderVsSuggested" ? (
-  <>
-    <button
-      type="button"
-      style={styles.backButton}
-      onClick={printOrderVsSuggestedReport}
-    >
-      🖨️ Print Order vs Suggested
-    </button>
+        <button
+          type="button"
+          style={{
+            ...styles.viewModeButton,
+            ...(filter === "needsOrder" ? styles.viewModeButtonActive : {}),
+          }}
+          onClick={() => setFilter("needsOrder")}
+        >
+          Needs Order ({filterCounts.needsOrder})
+        </button>
 
-    <button
-      type="button"
-      style={styles.primaryButton}
-      onClick={exportOrderVsSuggestedReport}
-    >
-      📥 Export Order vs Suggested
-    </button>
-  </>
-) : (
-  <>
-    <button
-      type="button"
-      style={styles.backButton}
-      onClick={printOrderView}
-    >
-      🖨️ Print
-    </button>
+        <button
+          type="button"
+          style={{
+            ...styles.viewModeButton,
+            ...(filter === "covered" ? styles.viewModeButtonActive : {}),
+          }}
+          onClick={() => setFilter("covered")}
+        >
+          Covered ({filterCounts.covered})
+        </button>
 
-    <button
-      type="button"
-      style={styles.primaryButton}
-      onClick={exportOrderView}
-    >
-      📥 Export Excel
-    </button>
-  </>
-)}
+        <button
+          type="button"
+          style={{
+            ...styles.viewModeButton,
+            ...(filter === "review" ? styles.viewModeButtonActive : {}),
+          }}
+          onClick={() => setFilter("review")}
+        >
+          Review ({filterCounts.review})
+        </button>
 
-              {visibleOrderRows.length === 0 && (
-                <p style={styles.emptyText}>
-                  No products match this search/filter.
-                </p>
-              )}
-            </>
-          )}
+        <button
+          type="button"
+          style={{
+            ...styles.viewModeButton,
+            ...(filter === "shortBeforeArrival"
+              ? styles.viewModeButtonActive
+              : {}),
+          }}
+          onClick={() => setFilter("shortBeforeArrival")}
+        >
+          Short Before Arrival ({filterCounts.shortBeforeArrival})
+        </button>
 
+        {orderMeta.isFreshProduceOrder && (
+          <>
+            <button
+              type="button"
+              style={{
+                ...styles.viewModeButton,
+                ...(filter === "fastSpoilage"
+                  ? styles.viewModeButtonActive
+                  : {}),
+              }}
+              onClick={() => setFilter("fastSpoilage")}
+            >
+              Quick Spoil ({filterCounts.fastSpoilage})
+            </button>
+
+            <button
+              type="button"
+              style={{
+                ...styles.viewModeButton,
+                ...(filter === "longHoldProduce"
+                  ? styles.viewModeButtonActive
+                  : {}),
+              }}
+              onClick={() => setFilter("longHoldProduce")}
+            >
+              Long Hold ({filterCounts.longHoldProduce})
+            </button>
+          </>
+        )}
+
+        {view === "parReport" ? (
+          <>
+            <button
+              type="button"
+              style={styles.backButton}
+              onClick={printParComparisonReport}
+            >
+              🖨️ Print Order vs Par
+            </button>
+
+            <button
+              type="button"
+              style={styles.primaryButton}
+              onClick={exportParComparisonReport}
+            >
+              📥 Export Order vs Par
+            </button>
+          </>
+        ) : view === "orderVsSuggested" ? (
+          <>
+            <button
+              type="button"
+              style={styles.backButton}
+              onClick={printOrderVsSuggestedReport}
+            >
+              🖨️ Print Order vs Suggested
+            </button>
+
+            <button
+              type="button"
+              style={styles.primaryButton}
+              onClick={exportOrderVsSuggestedReport}
+            >
+              📥 Export Order vs Suggested
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              style={styles.backButton}
+              onClick={printOrderView}
+            >
+              🖨️ Print
+            </button>
+
+            <button
+              type="button"
+              style={styles.primaryButton}
+              onClick={exportOrderView}
+            >
+              📥 Export Excel
+            </button>
+          </>
+        )}
+      </div>
+
+      {visibleOrderRows.length === 0 && (
+        <p style={styles.emptyText}>
+          No products match this search/filter.
+        </p>
+      )}
+    </>
+  )}
               {view === "orderVsSuggested" && orderRows.length > 0 && (
   <div style={localStyles.reportList}>
     <div style={styles.infoBox}>
