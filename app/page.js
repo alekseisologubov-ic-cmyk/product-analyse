@@ -1200,6 +1200,325 @@ const uploadNextOrderFile = (e) => {
     );
   };
 
+  const getBreakageMonthKey = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+
+  return `${year}-${month}`;
+};
+
+const getBreakageMonthLabel = (monthKey = getBreakageMonthKey()) => {
+  const [year, month] = String(monthKey || "").split("-");
+  const date = new Date(Number(year), Number(month) - 1, 1);
+
+  if (Number.isNaN(date.getTime())) return monthKey;
+
+  return date.toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+};
+
+const getBreakageItemKey = (item) =>
+  getInventoryItemKey({
+    ...item,
+    equipmentDepartment:
+      item?.equipmentDepartment || equipmentDepartment || "culinary",
+  });
+
+const normalizeBreakageRecord = (row) => ({
+  id: row.id,
+  ship: row.ship || "",
+  department: row.department || "",
+  station: row.station || "",
+  userName: row.user_name || "",
+  userPosition: row.user_position || "",
+  itemKey: row.item_key || "",
+  code: row.code || "",
+  name: row.item_name || "",
+  category: row.category || "",
+  sheetName: row.sheet_name || "",
+  image: row.image || "",
+  qty: Number(row.qty || 0),
+  monthKey: row.month_key || "",
+  reportedAt: row.reported_at || row.created_at || "",
+  confirmedAt: row.reported_at
+    ? new Date(row.reported_at).toLocaleString()
+    : "",
+  updatedAt: row.updated_at || "",
+});
+
+const loadBreakageRecords = async (shipOverride) => {
+  const ship = shipOverride || makeInventoryShip || userShip;
+  const monthKey = getBreakageMonthKey();
+
+  if (!ship) {
+    setBreakageRows([]);
+    return;
+  }
+
+  if (!supabase) {
+    setBreakageMessage(
+      "Supabase is not connected. Breakage report cannot load."
+    );
+    return;
+  }
+
+  setBreakageMessage("Loading breakage report...");
+
+  const { data, error } = await supabase
+    .from("equipment_breakage_reports")
+    .select("*")
+    .eq("ship", ship)
+    .eq("month_key", monthKey)
+    .order("reported_at", { ascending: false });
+
+  if (error) {
+    setBreakageRows([]);
+    setBreakageMessage(
+      "Could not load breakage report: " + error.message
+    );
+    return;
+  }
+
+  const rows = (data || []).map(normalizeBreakageRecord);
+
+  setBreakageRows(rows);
+  setBreakageMessage(
+    rows.length
+      ? `Breakage report loaded. ${rows.length} record(s) for ${getBreakageMonthLabel(monthKey)}.`
+      : `No breakage records yet for ${getBreakageMonthLabel(monthKey)}.`
+  );
+};
+
+const getCurrentBreakageRows = () => {
+  const ship = makeInventoryShip || userShip;
+  const monthKey = getBreakageMonthKey();
+
+  return breakageRows.filter(
+    (row) => row.ship === ship && row.monthKey === monthKey
+  );
+};
+
+const getBreakageItemMonthlyCount = (item) => {
+  const itemKey = getBreakageItemKey(item);
+
+  if (!itemKey) return 0;
+
+  return getCurrentBreakageRows()
+    .filter((row) => row.itemKey === itemKey)
+    .reduce((sum, row) => sum + Number(row.qty || 0), 0);
+};
+
+const getVisibleBreakageReportRows = () => {
+  const term = breakageSearch.toLowerCase().trim();
+
+  return getCurrentBreakageRows()
+    .filter((row) => {
+      if (
+        breakageDepartmentFilter !== "all" &&
+        row.department !== breakageDepartmentFilter
+      ) {
+        return false;
+      }
+
+      if (!term) return true;
+
+      return [
+        row.department,
+        row.station,
+        row.code,
+        row.name,
+        row.category,
+        row.sheetName,
+        row.userName,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(term);
+    })
+    .sort(
+      (a, b) =>
+        new Date(b.reportedAt || 0).getTime() -
+        new Date(a.reportedAt || 0).getTime()
+    );
+};
+
+const getBreakageSummaryRows = () => {
+  const grouped = new Map();
+
+  getVisibleBreakageReportRows().forEach((row) => {
+    const key = row.itemKey || cleanText(row.code || row.name);
+
+    if (!key) return;
+
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        itemKey: key,
+        department: row.department,
+        code: row.code || "",
+        name: row.name || "",
+        category: row.category || "",
+        sheetName: row.sheetName || "",
+        image: row.image || "",
+        totalQty: 0,
+        records: 0,
+        stations: new Set(),
+        users: new Set(),
+        lastReportedAt: "",
+      });
+    }
+
+    const item = grouped.get(key);
+
+    item.totalQty += Number(row.qty || 0);
+    item.records += 1;
+
+    if (row.station) item.stations.add(row.station);
+    if (row.userName) item.users.add(row.userName);
+
+    if (
+      !item.lastReportedAt ||
+      new Date(row.reportedAt || 0).getTime() >
+        new Date(item.lastReportedAt || 0).getTime()
+    ) {
+      item.lastReportedAt = row.reportedAt;
+    }
+  });
+
+  return Array.from(grouped.values())
+    .map((item) => ({
+      ...item,
+      stations: Array.from(item.stations).sort(),
+      users: Array.from(item.users).sort(),
+      confirmedAt: item.lastReportedAt
+        ? new Date(item.lastReportedAt).toLocaleString()
+        : "",
+    }))
+    .sort(
+      (a, b) =>
+        Number(b.totalQty || 0) - Number(a.totalQty || 0) ||
+        a.name.localeCompare(b.name)
+    );
+};
+
+const confirmBreakageQty = async () => {
+  if (breakageSaving) return;
+
+  if (!currentBreakageItem) {
+    setBreakageMessage("Select equipment before confirming breakage.");
+    return;
+  }
+
+  if (!supabase) {
+    const text =
+      "Supabase is not connected. Breakage report cannot be saved.";
+    setBreakageMessage(text);
+    window.alert(text);
+    return;
+  }
+
+  const ship = makeInventoryShip || userShip;
+  const userName = getEffectiveInventoryUserName();
+  const qty = Number(breakageQty || 0);
+
+  if (!ship) {
+    const text = "Choose ship before saving breakage.";
+    setBreakageMessage(text);
+    window.alert(text);
+    return;
+  }
+
+  if (!userName) {
+    const text = "Enter reported by name and position before saving breakage.";
+    setBreakageMessage(text);
+    window.alert(text);
+    return;
+  }
+
+  if (String(breakageQty).trim() === "" || Number.isNaN(qty) || qty <= 0) {
+    const text = "Enter a breakage number greater than 0.";
+    setBreakageMessage(text);
+    window.alert(text);
+    return;
+  }
+
+  const itemSnapshot = { ...currentBreakageItem };
+  const itemKey = getBreakageItemKey(itemSnapshot);
+  const monthKey = getBreakageMonthKey();
+  const previousCount = getBreakageItemMonthlyCount(itemSnapshot);
+  const now = new Date().toISOString();
+
+  const payload = {
+    ship,
+    department: equipmentDepartment || "culinary",
+    month_key: monthKey,
+    station: inventoryStation || "",
+    user_name: userName,
+    user_position: inventoryUserPosition || "",
+    item_key: itemKey,
+    code: itemSnapshot.code || "",
+    item_name: itemSnapshot.name || "",
+    category: itemSnapshot.category || "",
+    sheet_name: itemSnapshot.sheetName || "",
+    image: getEquipmentDisplayImage(itemSnapshot) || itemSnapshot.image || "",
+    qty,
+    reported_at: now,
+    updated_at: now,
+  };
+
+  setBreakageSaving(true);
+  setBreakageMessage("Saving breakage report...");
+
+  try {
+    const { data, error } = await supabase
+      .from("equipment_breakage_reports")
+      .insert(payload)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    const savedRecord = normalizeBreakageRecord(data);
+
+    setBreakageRows((prev) => [savedRecord, ...prev]);
+
+    setCurrentBreakageItem(null);
+    setBreakageQty("");
+
+    setBreakageMessage(
+      `Saved breakage: ${itemSnapshot.name} / Added ${formatQty(
+        qty
+      )}. Monthly total is now ${formatQty(previousCount + qty)}.`
+    );
+
+    logUsageEvent("equipment_breakage_saved", {
+      module: "equipment_breakage_report",
+      ship,
+      equipmentDepartment,
+      station: inventoryStation || "",
+      userName,
+      userPosition: inventoryUserPosition,
+      itemName: itemSnapshot.name,
+      code: itemSnapshot.code,
+      category: itemSnapshot.category,
+      qty,
+      previousCount,
+      newMonthlyCount: previousCount + qty,
+      monthKey,
+    });
+  } catch (error) {
+    const text =
+      error?.message || "Could not save breakage report.";
+    setBreakageMessage(text);
+    window.alert(text);
+  } finally {
+    setBreakageSaving(false);
+  }
+};
+
   const getRestaurantStationList = () => {
   const sourceItems = makeInventoryItems.length ? makeInventoryItems : musterItems;
 
