@@ -718,19 +718,20 @@ setBreakageQty("");
   if (module !== "equipment") return;
 
   if (
-  equipmentMode === "muster" ||
-  equipmentMode === "makeinventory" ||
-  equipmentMode === "warehouse"
-) {
-  loadMasterInventoryItems(makeInventoryShip || userShip);
-}
+    equipmentMode === "muster" ||
+    equipmentMode === "makeinventory" ||
+    equipmentMode === "warehouse"
+  ) {
+    loadMasterInventoryItems(makeInventoryShip || userShip);
+  }
 
-if (equipmentMode === "makeinventory" && makeInventoryShip) {
-  loadInventoryRecords(makeInventoryShip);
-  loadInventoryStationStatuses(makeInventoryShip);
-}
+  if (equipmentMode === "makeinventory" && makeInventoryShip) {
+    loadInventoryRecords(makeInventoryShip);
+    loadInventoryStationStatuses(makeInventoryShip);
+  }
+}, [module, equipmentMode, makeInventoryShip, userShip]);
 
-  useEffect(() => {
+useEffect(() => {
     if (!supabase || module !== "equipment" || (equipmentMode !== "makeinventory" && equipmentMode !== "muster" && equipmentMode !== "warehouse")) return;
 
     const channels = [];
