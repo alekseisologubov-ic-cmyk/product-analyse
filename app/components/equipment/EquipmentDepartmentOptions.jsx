@@ -15,6 +15,7 @@ export default function EquipmentDepartmentOptions({
   onOpenAllergen,
   onOpenTraining,
   onOpenMuster,
+  onOpenBreakageReport,
   onOpenInventory,
   onOpenTemperature,
 }) {
