@@ -2311,6 +2311,64 @@ const printOrderVsSuggestedReport = () => {
             </>
           )}
 
+              {view === "orderVsSuggested" && orderRows.length > 0 && (
+  <div style={localStyles.reportList}>
+    <div style={styles.infoBox}>
+      <div>
+        📄 Report: <strong>Order vs Suggested Order</strong>
+      </div>
+
+      <div>
+        🚢 Ship: <strong>{activeShipName}</strong>
+      </div>
+
+      <div>
+        📦 Rows shown: <strong>{visibleOrderRows.length}</strong>
+      </div>
+
+      <div>
+        📘 Order source:{" "}
+        <strong>Ship Order = Excel column Y only</strong>
+      </div>
+
+      <div>
+        ✅ Product order:{" "}
+        <strong>Same order as uploaded Excel file</strong>
+      </div>
+    </div>
+
+    {visibleOrderRows.map((item, index) => (
+      <div
+        key={`order-vs-suggested-${item.excelRow}-${item.code}-${index}`}
+        style={localStyles.reportRow}
+      >
+        <div>
+          <strong>
+            {index + 1}. {item.product}
+          </strong>
+
+          <div style={styles.recipeMeta}>
+            Code: {item.code || "N/A"} • UOM: {item.uom || "N/A"} • Excel row{" "}
+            {item.excelRow}
+          </div>
+        </div>
+
+        <div style={localStyles.metricGrid}>
+          <div style={localStyles.metricBox}>
+            <span>Ship Order</span>
+            <strong>{formatQty(item.onboardOrderedQty)}</strong>
+          </div>
+
+          <div style={localStyles.metricBoxStrong}>
+            <span>Suggested Order</span>
+            <strong>{formatQty(item.suggestedOrder)}</strong>
+          </div>
+        </div>
+      </div>
+    ))}
+  </div>
+)}
+
         {view === "order" && orderRows.length > 0 && (
           <div style={localStyles.orderGrid}>
             {visibleOrderRows.map((item) => (
