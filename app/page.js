@@ -7524,32 +7524,7 @@ const exportYearlyRegionalConsumptionReportToExcel = async () => {
       />
     );
   }
-if (module === "breakage") {
-  return (
-    <Suspense
-      fallback={
-        <main style={styles.page}>
-          <section style={styles.card}>
-            <h2 style={styles.cardTitle}>🧾 Loading Breakage Report...</h2>
-            <p style={styles.emptyText}>
-              Preparing permanent equipment master list and monthly report.
-            </p>
-          </section>
-        </main>
-      }
-    >
-      <BreakageReportModule
-        styles={styles}
-        supabase={supabase}
-        userShip={userShip}
-        userEmail={normalizeAppEmail(userEmail)}
-        getShipDisplayName={getShipDisplayName}
-        logUsageEvent={logUsageEvent}
-        onBack={() => setModule("")}
-      />
-    </Suspense>
-  );
-}
+
 if (module === "breakage") {
   return (
     <Suspense
