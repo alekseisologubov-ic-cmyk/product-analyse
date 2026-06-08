@@ -1654,7 +1654,16 @@ export default function GenerateNextOrder({
     () => parComparisonRows.slice(0, PAR_REPORT_DISPLAY_LIMIT),
     [parComparisonRows]
   );
-
+const getOrderVsSuggestedExportRows = (rows = visibleOrderRows) =>
+  rows.map((item, index) => ({
+    Line: index + 1,
+    ExcelRow: item.excelRow,
+    Code: item.code || "",
+    Product: item.product || "",
+    UOM: item.uom || "",
+    ShipOrderColumnY: Number(item.onboardOrderedQty ?? 0),
+    SuggestedOrder: Number(item.suggestedOrder ?? 0),
+  }));
   const exportOrderView = () => {
     exportRowsToExcel(
       getOrderExportRows(),
