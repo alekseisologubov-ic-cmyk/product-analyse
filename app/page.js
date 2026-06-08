@@ -7947,19 +7947,7 @@ isAdmin={isAdmin}
           ship: userShip,
         });
       }}
-onOpenBreakageReport={() => {
-  setEquipmentMode("breakage");
-  setBreakageSearch("");
-  setBreakageDepartmentFilter("all");
-  setCurrentBreakageItem(null);
-  setBreakageQty("");
 
-  logUsageEvent("equipment_option_opened", {
-    module: "equipment_breakage_report",
-    equipmentDepartment,
-    ship: userShip,
-  });
-}}
       onOpenInventory={() => {
         setEquipmentMode("inventory");
 
