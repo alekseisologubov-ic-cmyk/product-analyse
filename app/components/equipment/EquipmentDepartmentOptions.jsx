@@ -107,15 +107,6 @@ export default function EquipmentDepartmentOptions({
             <span>Inventory in use, warehouse stock and make inventory</span>
           </button>
 
-          <button style={styles.moduleCard} onClick={onOpenBreakageReport}>
-            <div style={styles.moduleIcon}>🧾</div>
-            <strong>Breakage Report</strong>
-            <span>
-              Select equipment from the master list, enter breakage count, and
-              save to the monthly report
-            </span>
-          </button>
-
           {equipmentDepartment === "culinary" && (
             <button style={styles.moduleCard} onClick={onOpenTemperature}>
               <div style={styles.moduleIcon}>🌡️</div>
