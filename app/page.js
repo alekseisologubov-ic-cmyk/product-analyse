@@ -98,6 +98,10 @@ const TrainingModule = lazy(() =>
 const AllergenModule = lazy(() =>
   import("./components/allergen/AllergenModule")
 );
+const BreakageReportModule = lazy(() =>
+  import("./components/equipment/BreakageReportModule")
+);
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
