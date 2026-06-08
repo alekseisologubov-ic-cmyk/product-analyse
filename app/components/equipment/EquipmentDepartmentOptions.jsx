@@ -102,6 +102,14 @@ export default function EquipmentDepartmentOptions({
             <span>Grouped by sheet and subcategory</span>
           </button>
 
+          <button style={styles.moduleCard} onClick={onOpenBreakageReport}>
+            <div style={styles.moduleIcon}>🧾</div>
+            <strong>Breakage Report</strong>
+            <span>
+              Report broken equipment from this department master list
+            </span>
+          </button>
+
           <button style={styles.moduleCard} onClick={onOpenInventory}>
             <div style={styles.moduleIcon}>📦</div>
             <strong>Equipment Inventory</strong>
