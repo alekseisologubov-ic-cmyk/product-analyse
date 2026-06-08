@@ -1680,6 +1680,23 @@ const getOrderVsSuggestedExportRows = (rows = visibleOrderRows) =>
     });
   };
 
+  const exportOrderVsSuggestedReport = () => {
+  exportRowsToExcel(
+    getOrderVsSuggestedExportRows(visibleOrderRows),
+    "Order vs Suggested",
+    `order-vs-suggested-${activeShipCode || userShip || "ship"}.xlsx`
+  );
+};
+
+const printOrderVsSuggestedReport = () => {
+  printSimpleTable({
+    title: "Order vs Suggested Order",
+    subtitle: `${activeShipName} • Same order as uploaded file • ${
+      orderFileName || "No file name"
+    }`,
+    rows: getOrderVsSuggestedExportRows(visibleOrderRows),
+  });
+};
   const exportParComparisonReport = () => {
     exportRowsToExcel(
       getParComparisonExportRows(visibleOrderRows),
