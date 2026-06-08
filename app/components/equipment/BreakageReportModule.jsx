@@ -52,6 +52,8 @@ export default function BreakageReportModule({
   supabase,
   userShip,
   userEmail,
+  equipmentDepartment,
+  activeEquipmentDepartmentLabel,
   getShipDisplayName,
   logUsageEvent,
   onBack,
