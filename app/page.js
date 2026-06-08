@@ -574,11 +574,14 @@ const yearlyRegionalLoadedRef = useRef(false);
 
     // Close detail screens/modals that should not survive a browser-back jump.
     setSelectedProduct("");
-    setSelectedRecipe(null);
-    setSelectedEquipment(null);
-    setCurrentInventoryItem(null);
-    setInventoryQty("");
-    setEditingInventoryId(null);
+    setSelectedProduct("");
+setSelectedRecipe(null);
+setSelectedEquipment(null);
+setCurrentInventoryItem(null);
+setInventoryQty("");
+setEditingInventoryId(null);
+setCurrentBreakageItem(null);
+setBreakageQty("");
   };
     useEffect(() => {
     if (typeof window === "undefined") return;
