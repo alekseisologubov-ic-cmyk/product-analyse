@@ -16,7 +16,6 @@ export default function EquipmentDepartmentOptions({
   onOpenTraining,
   onOpenMuster,
   onOpenInventory,
-  onOpenBreakageReport,
   onOpenTemperature,
 }) {
   const title =
