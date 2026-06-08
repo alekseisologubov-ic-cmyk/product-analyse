@@ -1323,7 +1323,7 @@ export default function GenerateNextOrder({
       setFmlRows(parsed.fmlRows);
       setFmlMissingRows(parsed.fmlMissingRows);
       setFmlRunningLowRows(parsed.fmlRunningLowRows);
-      setView("order");
+      setView("orderVsSuggested");
       setSearch("");
       setFmlSearch("");
       setFilter("all");
