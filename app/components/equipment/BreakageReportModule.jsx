@@ -1,7 +1,12 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { cleanText, formatQty, getImageUrl } from "../../lib/appHelpers";
+import {
+  cleanText,
+  escapeHtml,
+  formatQty,
+  getImageUrl,
+} from "../../lib/appHelpers";
 import {
   EQUIPMENT_PICTURE_BUCKET,
   getMasterInventoryScope,
@@ -9,6 +14,19 @@ import {
 import { makeStorageSafePart } from "../../lib/inventoryImageHelpers";
 
 const SHIPS = ["SC", "VL", "BRL", "RL"];
+const ALL = "ALL";
+
+const REPORT_DEPARTMENTS = [
+  { key: "culinary", label: "Culinary" },
+  { key: "bar", label: "Bar" },
+  { key: "restaurant", label: "Restaurant" },
+];
+
+const getDepartmentLabel = (departmentKey) =>
+  REPORT_DEPARTMENTS.find((department) => department.key === departmentKey)
+    ?.label ||
+  departmentKey ||
+  "Department";
 
 const getMonthKey = (date = new Date()) => {
   const year = date.getFullYear();
@@ -84,8 +102,9 @@ export default function BreakageReportModule({
   logUsageEvent,
   onBack,
 }) {
-  const monthKey = getMonthKey();
-  const monthLabel = getMonthLabel(monthKey);
+  const currentMonthKey = getMonthKey();
+  const currentMonthLabel = getMonthLabel(currentMonthKey);
+
   const departmentKey = equipmentDepartment || "culinary";
   const departmentLabel = activeEquipmentDepartmentLabel || "Equipment";
 
@@ -99,6 +118,14 @@ export default function BreakageReportModule({
 
   const [reportRows, setReportRows] = useState([]);
   const [reportLoading, setReportLoading] = useState(false);
+  const [reportMessage, setReportMessage] = useState("");
+
+  const [reportMonthKey, setReportMonthKey] = useState(currentMonthKey);
+  const [reportShipFilter, setReportShipFilter] = useState(ALL);
+  const [reportDepartmentFilter, setReportDepartmentFilter] =
+    useState(departmentKey);
+  const [reportSearch, setReportSearch] = useState("");
+  const [showReportEntries, setShowReportEntries] = useState(false);
 
   const [search, setSearch] = useState("");
 
@@ -190,28 +217,45 @@ export default function BreakageReportModule({
     }
   };
 
-  const loadReportRows = async () => {
+  const loadReportRows = async (targetMonthKey = reportMonthKey) => {
     if (!supabase) {
       setReportRows([]);
+      setReportMessage("Supabase is not connected. Report cannot load.");
+      return;
+    }
+
+    if (!targetMonthKey) {
+      setReportRows([]);
+      setReportMessage("Choose report month first.");
       return;
     }
 
     setReportLoading(true);
+    setReportMessage(`Generating breakage report for ${getMonthLabel(targetMonthKey)}...`);
 
     try {
       const { data, error } = await supabase
         .from("equipment_breakage_reports")
         .select("*")
-        .eq("department", departmentKey)
-        .eq("month_key", monthKey)
+        .eq("month_key", targetMonthKey)
         .order("reported_at", { ascending: false })
-        .limit(5000);
+        .limit(10000);
 
       if (error) throw error;
 
-      setReportRows((data || []).map(normalizeBreakageRow));
-    } catch {
+      const rows = (data || []).map(normalizeBreakageRow);
+
+      setReportRows(rows);
+      setReportMessage(
+        rows.length
+          ? `Report generated. ${rows.length} record(s) found for ${getMonthLabel(
+              targetMonthKey
+            )}.`
+          : `No breakage records found for ${getMonthLabel(targetMonthKey)}.`
+      );
+    } catch (error) {
       setReportRows([]);
+      setReportMessage(error?.message || "Could not generate breakage report.");
     } finally {
       setReportLoading(false);
     }
@@ -222,8 +266,11 @@ export default function BreakageReportModule({
   }, [userShip]);
 
   useEffect(() => {
+    setReportDepartmentFilter(departmentKey);
+    setReportMonthKey(currentMonthKey);
+
     loadMasterItems();
-    loadReportRows();
+    loadReportRows(currentMonthKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [departmentKey]);
 
@@ -246,6 +293,106 @@ export default function BreakageReportModule({
     );
   }, [masterItems, search]);
 
+  const visibleReportRows = useMemo(() => {
+    const term = reportSearch.toLowerCase().trim();
+
+    return reportRows.filter((row) => {
+      if (reportShipFilter !== ALL && row.ship !== reportShipFilter) {
+        return false;
+      }
+
+      if (
+        reportDepartmentFilter !== ALL &&
+        row.department !== reportDepartmentFilter
+      ) {
+        return false;
+      }
+
+      if (!term) return true;
+
+      return [
+        row.ship,
+        row.department,
+        row.code,
+        row.name,
+        row.category,
+        row.sheetName,
+        row.userName,
+        row.userPosition,
+        row.notes,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(term);
+    });
+  }, [reportRows, reportSearch, reportShipFilter, reportDepartmentFilter]);
+
+  const reportSummaryRows = useMemo(() => {
+    const grouped = new Map();
+
+    visibleReportRows.forEach((row) => {
+      const key = [
+        row.department || "",
+        row.itemKey || cleanText(row.code || row.name),
+      ].join("|");
+
+      if (!key.trim()) return;
+
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          department: row.department || "",
+          itemKey: row.itemKey || "",
+          code: row.code || "",
+          name: row.name || "",
+          category: row.category || "",
+          sheetName: row.sheetName || "",
+          image: row.image || "",
+          totalQty: 0,
+          records: 0,
+          ships: new Set(),
+          users: new Set(),
+          lastReportedAt: "",
+        });
+      }
+
+      const item = grouped.get(key);
+
+      item.totalQty += Number(row.qty || 0);
+      item.records += 1;
+
+      if (row.ship) item.ships.add(row.ship);
+      if (row.userName) item.users.add(row.userName);
+
+      if (
+        !item.lastReportedAt ||
+        new Date(row.reportedAt || 0).getTime() >
+          new Date(item.lastReportedAt || 0).getTime()
+      ) {
+        item.lastReportedAt = row.reportedAt;
+      }
+    });
+
+    return Array.from(grouped.values())
+      .map((item) => ({
+        ...item,
+        ships: Array.from(item.ships).sort(),
+        users: Array.from(item.users).sort(),
+        confirmedAt: item.lastReportedAt
+          ? new Date(item.lastReportedAt).toLocaleString()
+          : "",
+      }))
+      .sort(
+        (a, b) =>
+          Number(b.totalQty || 0) - Number(a.totalQty || 0) ||
+          String(a.name || "").localeCompare(String(b.name || ""))
+      );
+  }, [visibleReportRows]);
+
+  const totalReportQty = visibleReportRows.reduce(
+    (sum, row) => sum + Number(row.qty || 0),
+    0
+  );
+
   const getItemMonthlyCount = (item, ship = entryShip) => {
     const itemKey = item?.itemKey || makeBreakageItemKey(item);
 
@@ -254,7 +401,7 @@ export default function BreakageReportModule({
     return reportRows
       .filter((row) => row.ship === ship)
       .filter((row) => row.department === departmentKey)
-      .filter((row) => row.monthKey === monthKey)
+      .filter((row) => row.monthKey === reportMonthKey)
       .filter((row) => row.itemKey === itemKey)
       .reduce((sum, row) => sum + Number(row.qty || 0), 0);
   };
@@ -264,7 +411,9 @@ export default function BreakageReportModule({
 
     const extension = getFileExtension(file);
     const contentType = file.type || `image/${extension}`;
-    const itemPart = makeStorageSafePart(item?.code || item?.name || "breakage");
+    const itemPart = makeStorageSafePart(
+      item?.code || item?.name || "breakage"
+    );
 
     const path =
       "breakage/" +
@@ -335,7 +484,7 @@ export default function BreakageReportModule({
     const payload = {
       ship: entryShip,
       department: departmentKey,
-      month_key: monthKey,
+      month_key: currentMonthKey,
 
       user_name: effectiveReportedBy,
       user_position: reportedPosition || "",
@@ -367,7 +516,16 @@ export default function BreakageReportModule({
     if (error) throw error;
 
     const savedRow = normalizeBreakageRow(data);
-    setReportRows((current) => [savedRow, ...current]);
+
+    if (reportMonthKey === currentMonthKey) {
+      setReportRows((current) => [savedRow, ...current]);
+    } else {
+      setReportMonthKey(currentMonthKey);
+      setReportRows([savedRow]);
+      setReportMessage(
+        `Switched report month to ${currentMonthLabel} after saving breakage.`
+      );
+    }
 
     if (typeof logUsageEvent === "function") {
       logUsageEvent("equipment_breakage_saved", {
@@ -380,7 +538,7 @@ export default function BreakageReportModule({
         code: item.code || "",
         qty: safeQty,
         hasPhoto: Boolean(photoUrl),
-        monthKey,
+        monthKey: currentMonthKey,
       });
     }
 
@@ -439,7 +597,9 @@ export default function BreakageReportModule({
         equipmentDepartment: departmentKey,
         departmentLabel,
         itemKey: cleanText(
-          `${departmentKey}|EXTRA|${extraCode || "NO-CODE"}|${name}|${Date.now()}`
+          `${departmentKey}|EXTRA|${
+            extraCode || "NO-CODE"
+          }|${name}|${Date.now()}`
         ),
         code: extraCode || "EXTRA",
         name,
@@ -471,6 +631,209 @@ export default function BreakageReportModule({
     } finally {
       setSavingExtra(false);
     }
+  };
+
+  const exportBreakageReportToExcel = async () => {
+    if (!visibleReportRows.length) {
+      window.alert("No breakage records to export for the selected filters.");
+      return;
+    }
+
+    const XLSXModule = await import("xlsx");
+    const XLSX = XLSXModule.default || XLSXModule;
+
+    const summaryRowsForExcel = reportSummaryRows.map((item, index) => ({
+      Number: index + 1,
+      Month: reportMonthKey,
+      Department: getDepartmentLabel(item.department),
+      Code: item.code || "",
+      Name: item.name || "",
+      Category: item.category || "",
+      Sheet: item.sheetName || "",
+      TotalBrokenQty: Number(item.totalQty || 0),
+      Records: Number(item.records || 0),
+      Ships: item.ships.join(", "),
+      Users: item.users.join(", "),
+      LastReported: item.confirmedAt || "",
+    }));
+
+    const detailRowsForExcel = visibleReportRows.map((row, index) => ({
+      Number: index + 1,
+      Month: row.monthKey,
+      Ship: getShipName(row.ship),
+      Department: getDepartmentLabel(row.department),
+      Code: row.code || "",
+      Name: row.name || "",
+      Category: row.category || "",
+      Sheet: row.sheetName || "",
+      BrokenQty: Number(row.qty || 0),
+      ReportedBy: row.userName || "",
+      Position: row.userPosition || "",
+      Notes: row.notes || "",
+      ReportPhoto: row.reportPhoto || "",
+      ItemImage: row.image || "",
+      ReportedAt: row.confirmedAt || "",
+    }));
+
+    const workbook = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet(summaryRowsForExcel),
+      "Summary"
+    );
+
+    XLSX.utils.book_append_sheet(
+      workbook,
+      XLSX.utils.json_to_sheet(detailRowsForExcel),
+      "Entries"
+    );
+
+    const departmentPart =
+      reportDepartmentFilter === ALL ? "all-departments" : reportDepartmentFilter;
+
+    const shipPart =
+      reportShipFilter === ALL ? "all-ships" : reportShipFilter.toLowerCase();
+
+    XLSX.writeFile(
+      workbook,
+      `breakage-report-${reportMonthKey}-${departmentPart}-${shipPart}.xlsx`
+    );
+  };
+
+  const printBreakageReport = () => {
+    if (!visibleReportRows.length) {
+      window.alert("No breakage records to print for the selected filters.");
+      return;
+    }
+
+    const reportTitle =
+      "Breakage Report - " +
+      getMonthLabel(reportMonthKey) +
+      " - " +
+      (reportDepartmentFilter === ALL
+        ? "All Departments"
+        : getDepartmentLabel(reportDepartmentFilter)) +
+      " - " +
+      (reportShipFilter === ALL ? "All Ships" : getShipName(reportShipFilter));
+
+    const html = `
+      <html>
+        <head>
+          <title>${escapeHtml(reportTitle)}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; color: #111; }
+            h1 { margin-bottom: 4px; }
+            h2 { margin-top: 26px; }
+            .meta { margin: 2px 0; }
+            table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 12px; }
+            th, td { border: 1px solid #ccc; padding: 6px; text-align: left; vertical-align: top; }
+            th { background: #f2f2f2; }
+            .bad { color: #b00020; font-weight: bold; }
+            tr { break-inside: avoid; }
+          </style>
+        </head>
+        <body>
+          <h1>${escapeHtml(reportTitle)}</h1>
+          <div class="meta"><strong>Generated:</strong> ${escapeHtml(
+            new Date().toLocaleString()
+          )}</div>
+          <div class="meta"><strong>Records:</strong> ${escapeHtml(
+            String(visibleReportRows.length)
+          )}</div>
+          <div class="meta"><strong>Total broken quantity:</strong> ${escapeHtml(
+            formatQty(totalReportQty)
+          )}</div>
+
+          <h2>Summary</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Department</th>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Category</th>
+                <th>Sheet</th>
+                <th>Total Broken</th>
+                <th>Ships</th>
+                <th>Records</th>
+                <th>Users</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${reportSummaryRows
+                .map(
+                  (item, index) => `
+                    <tr>
+                      <td>${index + 1}</td>
+                      <td>${escapeHtml(getDepartmentLabel(item.department))}</td>
+                      <td>${escapeHtml(item.code || "")}</td>
+                      <td>${escapeHtml(item.name || "")}</td>
+                      <td>${escapeHtml(item.category || "")}</td>
+                      <td>${escapeHtml(item.sheetName || "")}</td>
+                      <td class="bad">${escapeHtml(formatQty(item.totalQty))}</td>
+                      <td>${escapeHtml(item.ships.join(", "))}</td>
+                      <td>${escapeHtml(String(item.records || 0))}</td>
+                      <td>${escapeHtml(item.users.join(", "))}</td>
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
+
+          <h2>Entries</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Ship</th>
+                <th>Department</th>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Broken Qty</th>
+                <th>Reported By</th>
+                <th>Notes</th>
+                <th>Reported At</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${visibleReportRows
+                .map(
+                  (row, index) => `
+                    <tr>
+                      <td>${index + 1}</td>
+                      <td>${escapeHtml(getShipName(row.ship))}</td>
+                      <td>${escapeHtml(getDepartmentLabel(row.department))}</td>
+                      <td>${escapeHtml(row.code || "")}</td>
+                      <td>${escapeHtml(row.name || "")}</td>
+                      <td class="bad">${escapeHtml(formatQty(row.qty))}</td>
+                      <td>${escapeHtml(row.userName || "")}</td>
+                      <td>${escapeHtml(row.notes || "")}</td>
+                      <td>${escapeHtml(row.confirmedAt || "")}</td>
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open("", "_blank");
+
+    if (!printWindow) {
+      window.alert("Print window was blocked. Allow popups and try again.");
+      return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
   };
 
   return (
@@ -532,13 +895,13 @@ export default function BreakageReportModule({
             style={styles.backButton}
             onClick={() => {
               loadMasterItems();
-              loadReportRows();
+              loadReportRows(reportMonthKey);
             }}
             disabled={masterLoading || reportLoading}
           >
             {masterLoading || reportLoading
               ? "Refreshing..."
-              : "🔄 Refresh Master List"}
+              : "🔄 Refresh Master List / Report"}
           </button>
 
           {message && <p style={styles.message}>{message}</p>}
@@ -557,7 +920,7 @@ export default function BreakageReportModule({
               📋 Master list items: <strong>{masterItems.length}</strong>
             </div>
             <div>
-              📅 Report month: <strong>{monthLabel}</strong>
+              📅 Current save month: <strong>{currentMonthLabel}</strong>
             </div>
           </div>
         </div>
@@ -635,7 +998,9 @@ export default function BreakageReportModule({
       </section>
 
       <section style={styles.card}>
-        <h2 style={styles.productTitle}>📋 {departmentLabel} Equipment Master List</h2>
+        <h2 style={styles.productTitle}>
+          📋 {departmentLabel} Equipment Master List
+        </h2>
 
         <label style={styles.label}>Search equipment</label>
         <input
@@ -711,7 +1076,8 @@ export default function BreakageReportModule({
 
                 {entryShip && itemCount > 0 && (
                   <div style={styles.statusWarning}>
-                    This month broken: {formatQty(itemCount)}
+                    {getMonthLabel(reportMonthKey)} broken:{" "}
+                    {formatQty(itemCount)}
                   </div>
                 )}
               </button>
@@ -816,7 +1182,7 @@ export default function BreakageReportModule({
                 {entryShip && (
                   <div style={styles.infoBox}>
                     <div>
-                      This month broken count:{" "}
+                      {getMonthLabel(reportMonthKey)} broken count:{" "}
                       <strong>
                         {formatQty(getItemMonthlyCount(currentItem, entryShip))}
                       </strong>
@@ -895,6 +1261,274 @@ export default function BreakageReportModule({
           </div>
         </div>
       )}
+
+      <section style={styles.card}>
+        <div
+          style={{
+            ...styles.header,
+            boxShadow: "none",
+            padding: 0,
+            marginBottom: 18,
+          }}
+        >
+          <div>
+            <h2 style={styles.productTitle}>📄 Monthly Breakage Report</h2>
+            <p style={{ ...styles.emptyText, margin: 0 }}>
+              Generate report by month. View full breakage, one ship, one
+              department, or combined filters.
+            </p>
+          </div>
+
+          <div style={styles.headerActions}>
+            <button
+              type="button"
+              style={styles.backButton}
+              onClick={printBreakageReport}
+              disabled={reportLoading}
+            >
+              🖨️ Print
+            </button>
+
+            <button
+              type="button"
+              style={styles.primaryButton}
+              onClick={exportBreakageReportToExcel}
+              disabled={reportLoading}
+            >
+              📥 Export Excel
+            </button>
+          </div>
+        </div>
+
+        <section style={styles.grid}>
+          <div>
+            <label style={styles.label}>Report month</label>
+            <input
+              type="month"
+              value={reportMonthKey}
+              onChange={(event) => setReportMonthKey(event.target.value)}
+              style={styles.searchInput}
+            />
+          </div>
+
+          <div>
+            <label style={styles.label}>Ship filter</label>
+            <select
+              value={reportShipFilter}
+              onChange={(event) => setReportShipFilter(event.target.value)}
+              style={styles.select}
+            >
+              <option value={ALL}>All Ships</option>
+              {SHIPS.map((ship) => (
+                <option key={ship} value={ship}>
+                  {getShipName(ship)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={styles.label}>Department filter</label>
+            <select
+              value={reportDepartmentFilter}
+              onChange={(event) =>
+                setReportDepartmentFilter(event.target.value)
+              }
+              style={styles.select}
+            >
+              <option value={ALL}>All Departments</option>
+              {REPORT_DEPARTMENTS.map((department) => (
+                <option key={department.key} value={department.key}>
+                  {department.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={styles.label}>Search report</label>
+            <input
+              value={reportSearch}
+              onChange={(event) => setReportSearch(event.target.value)}
+              placeholder="Search code, name, user, notes..."
+              style={styles.searchInput}
+            />
+          </div>
+        </section>
+
+        <div style={styles.headerActions}>
+          <button
+            type="button"
+            style={styles.primaryButton}
+            onClick={() => loadReportRows(reportMonthKey)}
+            disabled={reportLoading}
+          >
+            {reportLoading ? "Generating..." : "Generate Report"}
+          </button>
+
+          <button
+            type="button"
+            style={styles.backButton}
+            onClick={() => {
+              setReportMonthKey(currentMonthKey);
+              setReportShipFilter(ALL);
+              setReportDepartmentFilter(departmentKey);
+              setReportSearch("");
+              loadReportRows(currentMonthKey);
+            }}
+            disabled={reportLoading}
+          >
+            Reset to Current Month / Department
+          </button>
+
+          <button
+            type="button"
+            style={styles.backButton}
+            onClick={() => setShowReportEntries((value) => !value)}
+          >
+            {showReportEntries ? "Hide Entries" : "Show Entries"}
+          </button>
+        </div>
+
+        {reportMessage && <p style={styles.message}>{reportMessage}</p>}
+
+        <div style={styles.infoBox}>
+          <div>
+            📅 Month: <strong>{getMonthLabel(reportMonthKey)}</strong>
+          </div>
+          <div>
+            🚢 Ship filter:{" "}
+            <strong>
+              {reportShipFilter === ALL
+                ? "All Ships"
+                : getShipName(reportShipFilter)}
+            </strong>
+          </div>
+          <div>
+            🧭 Department filter:{" "}
+            <strong>
+              {reportDepartmentFilter === ALL
+                ? "All Departments"
+                : getDepartmentLabel(reportDepartmentFilter)}
+            </strong>
+          </div>
+          <div>
+            🧾 Records shown: <strong>{visibleReportRows.length}</strong>
+          </div>
+          <div>
+            📦 Summary items: <strong>{reportSummaryRows.length}</strong>
+          </div>
+          <div>
+            🔢 Total broken quantity:{" "}
+            <strong>{formatQty(totalReportQty)}</strong>
+          </div>
+        </div>
+
+        {visibleReportRows.length === 0 && (
+          <p style={styles.emptyText}>
+            No breakage records match the selected report filters.
+          </p>
+        )}
+
+        {reportSummaryRows.length > 0 && (
+          <>
+            <h3 style={styles.sectionTitle}>📊 Summary</h3>
+
+            <div style={styles.equipmentGrid}>
+              {reportSummaryRows.map((item) => (
+                <div
+                  key={`${item.department}-${item.itemKey || item.code || item.name}`}
+                  style={styles.equipmentCard}
+                >
+                  {item.image && (
+                    <img
+                      src={getImageUrl(item.image, "w360")}
+                      alt={item.name}
+                      style={styles.equipmentImage}
+                      onError={(event) => {
+                        event.currentTarget.style.display = "none";
+                      }}
+                    />
+                  )}
+
+                  <div style={styles.recipeName}>{item.name}</div>
+                  <div style={styles.recipeMeta}>
+                    Department: {getDepartmentLabel(item.department)}
+                  </div>
+                  <div style={styles.recipeMeta}>
+                    Code: {item.code || "N/A"}
+                  </div>
+                  <div style={styles.recipeMeta}>
+                    Sheet: {item.sheetName || "N/A"}
+                  </div>
+                  <div style={styles.recipeMeta}>
+                    Category: {item.category || "N/A"}
+                  </div>
+                  <div style={styles.statusBad}>
+                    Total Broken: {formatQty(item.totalQty)}
+                  </div>
+                  <div style={styles.recipeMeta}>
+                    Ships: {item.ships.join(", ") || "N/A"}
+                  </div>
+                  <div style={styles.recipeMeta}>Records: {item.records}</div>
+                  <div style={styles.recipeMeta}>
+                    Users: {item.users.join(", ") || "N/A"}
+                  </div>
+                  <div style={styles.recipeMeta}>
+                    Last Reported: {item.confirmedAt || "N/A"}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {showReportEntries && visibleReportRows.length > 0 && (
+          <>
+            <h3 style={styles.sectionTitle}>🧾 Entries</h3>
+
+            <div style={styles.equipmentGrid}>
+              {visibleReportRows.map((row) => (
+                <div key={row.id} style={styles.equipmentCard}>
+                  {row.reportPhoto || row.image ? (
+                    <img
+                      src={getImageUrl(row.reportPhoto || row.image, "w360")}
+                      alt={row.name}
+                      style={styles.equipmentImage}
+                      onError={(event) => {
+                        event.currentTarget.style.display = "none";
+                      }}
+                    />
+                  ) : null}
+
+                  <div style={styles.recipeName}>{row.name}</div>
+                  <div style={styles.recipeMeta}>
+                    Ship: {getShipName(row.ship)}
+                  </div>
+                  <div style={styles.recipeMeta}>
+                    Department: {getDepartmentLabel(row.department)}
+                  </div>
+                  <div style={styles.recipeMeta}>
+                    Code: {row.code || "N/A"}
+                  </div>
+                  <div style={styles.statusBad}>
+                    Broken Qty: {formatQty(row.qty)}
+                  </div>
+                  <div style={styles.recipeMeta}>
+                    Reported by: {row.userName || "N/A"}
+                  </div>
+                  <div style={styles.recipeMeta}>
+                    Reported at: {row.confirmedAt || "N/A"}
+                  </div>
+                  {row.notes && (
+                    <div style={styles.statusNeutral}>Notes: {row.notes}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </section>
     </main>
   );
 }
