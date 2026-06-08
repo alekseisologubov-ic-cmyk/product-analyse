@@ -8018,10 +8018,6 @@ if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "inven
     />
   );
 }
-
-// ✅ PASTE FULL STEP 7 BLOCK HERE
-
-if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "makeinventory") {
   if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "makeinventory") {
     const filteredMakeInventoryItems = getFilteredMakeInventoryItems();
     const myReportRows = getMyInventoryRows();
