@@ -7412,6 +7412,27 @@ const exportYearlyRegionalConsumptionReportToExcel = async () => {
       <span>Usage, inventory status, logs, and admin tools</span>
     </button>
   )}
+    <button
+  style={styles.moduleCard}
+  onClick={() => {
+    setModule("breakage");
+    setEquipmentDepartment("");
+    setEquipmentMode("");
+    setProductMode("");
+
+    logUsageEvent("module_opened", {
+      module: "breakage_report",
+      ship: userShip,
+    });
+  }}
+>
+  <div style={styles.moduleIcon}>🧾</div>
+  <strong>Breakage Report</strong>
+  <span>
+    Report broken equipment from the permanent master list and review by ship or
+    department
+  </span>
+</button>
 
   <button
     style={styles.moduleCard}
