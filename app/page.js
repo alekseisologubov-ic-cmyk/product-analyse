@@ -7764,44 +7764,6 @@ isAdmin={isAdmin}
     />
   );
 }
-  if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "inventory") {
-  return (
-    <EquipmentInventoryOptions
-      styles={styles}
-      userShip={userShip}
-      activeEquipmentDepartmentLabel={activeEquipmentDepartmentLabel}
-      getShipDisplayName={getShipDisplayName}
-      onBack={() => setEquipmentMode("")}
-      onOpenInUse={() => {
-        setEquipmentMode("inuse");
-
-        logUsageEvent("equipment_inventory_option_opened", {
-          module: "inventory_in_use",
-          equipmentDepartment,
-          ship: userShip,
-        });
-      }}
-      onOpenWarehouse={() => {
-        setEquipmentMode("warehouse");
-
-        logUsageEvent("equipment_inventory_option_opened", {
-          module: "inventory_warehouse",
-          equipmentDepartment,
-          ship: userShip,
-        });
-      }}
-      onOpenMakeInventory={() => {
-        setEquipmentMode("makeinventory");
-
-        logUsageEvent("equipment_inventory_option_opened", {
-          module: "make_inventory",
-          equipmentDepartment,
-          ship: userShip,
-        });
-      }}
-    />
-  );
-}
 
 if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "inventory") {
   return (
