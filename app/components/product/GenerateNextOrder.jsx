@@ -1259,12 +1259,21 @@ export default function GenerateNextOrder({
 
   const [selectedInfoItem, setSelectedInfoItem] = useState(null);
   const [selectedRecipeUsageItem, setSelectedRecipeUsageItem] = useState(null);
+  const [selectedProductKeys, setSelectedProductKeys] = useState(() => new Set());
 
   const activeShipCode =
     orderMeta.shipCode || normalizeShipCode(userShip) || userShip || "";
 
   const activeShipName =
     orderMeta.shipDisplayName || getShipDisplayName(activeShipCode);
+
+  const getSelectableItemKey = (item) =>
+    String(
+      item?.itemKey ||
+        `${item?.excelRow || "row"}|${item?.code || "no-code"}|${
+          item?.product || item?.name || "item"
+        }`
+    );
 
   const regionalRegionOptions = useMemo(
     () => yearlyRegionalConsumption?.regionOptions || [],
@@ -1310,6 +1319,7 @@ export default function GenerateNextOrder({
       setSearch("");
       setFmlSearch("");
       setFilter("all");
+      setSelectedProductKeys(new Set());
 
       setMessage(
         "Order file loaded. " +
@@ -1511,6 +1521,53 @@ export default function GenerateNextOrder({
     [orderRows]
   );
 
+  const selectedProductRows = useMemo(() => {
+    if (!selectedProductKeys.size) return [];
+
+    return orderRows.filter((item) =>
+      selectedProductKeys.has(getSelectableItemKey(item))
+    );
+  }, [orderRows, selectedProductKeys]);
+
+  const isProductSelected = (item) =>
+    selectedProductKeys.has(getSelectableItemKey(item));
+
+  const toggleProductSelection = (item) => {
+    const key = getSelectableItemKey(item);
+
+    if (!key) return;
+
+    setSelectedProductKeys((current) => {
+      const next = new Set(current);
+
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+
+      return next;
+    });
+  };
+
+  const selectVisibleProducts = () => {
+    if (!visibleOrderRows.length) return;
+
+    setSelectedProductKeys((current) => {
+      const next = new Set(current);
+
+      visibleOrderRows.forEach((item) => {
+        next.add(getSelectableItemKey(item));
+      });
+
+      return next;
+    });
+  };
+
+  const clearSelectedProducts = () => {
+    setSelectedProductKeys(new Set());
+  };
+
   const getOrderVsSuggestedExportRows = (rows = visibleOrderRows) =>
     rows.map((item, index) => ({
       Line: index + 1,
@@ -1652,6 +1709,42 @@ export default function GenerateNextOrder({
         orderFileName || "No file name"
       }`,
       rows: getOrderVsSuggestedExportRows(visibleOrderRows),
+    });
+  };
+
+  const getSelectedProductsExportRows = () =>
+    view === "orderVsSuggested"
+      ? getOrderVsSuggestedExportRows(selectedProductRows)
+      : getOrderExportRows(selectedProductRows);
+
+  const exportSelectedProductsReport = () => {
+    if (!selectedProductRows.length) {
+      window.alert("Select one or more products first.");
+      return;
+    }
+
+    exportRowsToExcel(
+      getSelectedProductsExportRows(),
+      view === "orderVsSuggested" ? "Selected Order vs Suggested" : "Selected Products",
+      `selected-product-report-${activeShipCode || userShip || "ship"}.xlsx`
+    );
+  };
+
+  const printSelectedProductsReport = () => {
+    if (!selectedProductRows.length) {
+      window.alert("Select one or more products first.");
+      return;
+    }
+
+    printSimpleTable({
+      title:
+        view === "orderVsSuggested"
+          ? "Selected Order vs Suggested Report"
+          : "Selected Product Report",
+      subtitle: `${activeShipName} • ${selectedProductRows.length} selected product(s) • ${
+        orderFileName || "No file name"
+      }`,
+      rows: getSelectedProductsExportRows(),
     });
   };
 
@@ -2276,6 +2369,55 @@ export default function GenerateNextOrder({
                 )}
               </div>
 
+              <div style={localStyles.selectionToolbar}>
+                <div>
+                  ✅ Selected products: <strong>{selectedProductRows.length}</strong>
+                  {selectedProductRows.length > 0 && (
+                    <span style={styles.recipeMeta}>
+                      {" "}• selection stays while you search/filter
+                    </span>
+                  )}
+                </div>
+
+                <div style={styles.headerActions}>
+                  <button
+                    type="button"
+                    style={styles.backButton}
+                    onClick={selectVisibleProducts}
+                    disabled={!visibleOrderRows.length}
+                  >
+                    Select Visible
+                  </button>
+
+                  <button
+                    type="button"
+                    style={styles.backButton}
+                    onClick={clearSelectedProducts}
+                    disabled={!selectedProductRows.length}
+                  >
+                    Clear Selected
+                  </button>
+
+                  <button
+                    type="button"
+                    style={styles.primaryButton}
+                    onClick={exportSelectedProductsReport}
+                    disabled={!selectedProductRows.length}
+                  >
+                    📥 Selected Excel
+                  </button>
+
+                  <button
+                    type="button"
+                    style={styles.primaryButton}
+                    onClick={printSelectedProductsReport}
+                    disabled={!selectedProductRows.length}
+                  >
+                    🖨️ Selected PDF
+                  </button>
+                </div>
+              </div>
+
               {visibleOrderRows.length === 0 && (
                 <p style={styles.emptyText}>
                   No products match this search/filter.
@@ -2304,36 +2446,76 @@ export default function GenerateNextOrder({
                 ✅ Product order: {" "}
                 <strong>Same order as uploaded Excel file</strong>
               </div>
+              <div>
+                🖱️ Select products: {" "}
+                <strong>Click the row or use Add to Selected Report</strong>
+              </div>
             </div>
 
-            {visibleOrderRows.map((item, index) => (
-              <div
-                key={`order-vs-suggested-${item.excelRow}-${item.code}-${index}`}
-                style={localStyles.reportRow}
-              >
-                <div>
-                  <strong>
-                    {index + 1}. {item.product}
-                  </strong>
-                  <div style={styles.recipeMeta}>
-                    Code: {item.code || "N/A"} • UOM: {item.uom || "N/A"} • Excel row {" "}
-                    {item.excelRow}
+            {visibleOrderRows.map((item, index) => {
+              const selected = isProductSelected(item);
+
+              return (
+                <div
+                  key={`order-vs-suggested-${item.excelRow}-${item.code}-${index}`}
+                  style={{
+                    ...localStyles.reportRow,
+                    ...(selected ? localStyles.selectedProductCard : {}),
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => toggleProductSelection(item)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      toggleProductSelection(item);
+                    }
+                  }}
+                >
+                  <div style={localStyles.orderVsSuggestedHeader}>
+                    <div>
+                      <strong>
+                        {index + 1}. {item.product}
+                      </strong>
+                      {selected && (
+                        <div style={localStyles.selectedBadge}>Selected</div>
+                      )}
+                      <div style={styles.recipeMeta}>
+                        Code: {item.code || "N/A"} • UOM: {item.uom || "N/A"} • Excel row {" "}
+                        {item.excelRow}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      style={
+                        selected
+                          ? localStyles.selectedActionButton
+                          : localStyles.selectActionButton
+                      }
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleProductSelection(item);
+                      }}
+                    >
+                      {selected ? "✓ Selected" : "+ Add to Selected Report"}
+                    </button>
+                  </div>
+
+                  <div style={localStyles.metricGrid}>
+                    <div style={localStyles.metricBox}>
+                      <span>Ship Order</span>
+                      <strong>{formatQty(item.onboardOrderedQty)}</strong>
+                    </div>
+
+                    <div style={localStyles.metricBoxStrong}>
+                      <span>Suggested Order</span>
+                      <strong>{formatQty(item.suggestedOrder)}</strong>
+                    </div>
                   </div>
                 </div>
-
-                <div style={localStyles.metricGrid}>
-                  <div style={localStyles.metricBox}>
-                    <span>Ship Order</span>
-                    <strong>{formatQty(item.onboardOrderedQty)}</strong>
-                  </div>
-
-                  <div style={localStyles.metricBoxStrong}>
-                    <span>Suggested Order</span>
-                    <strong>{formatQty(item.suggestedOrder)}</strong>
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -2351,11 +2533,16 @@ export default function GenerateNextOrder({
                   ...(item.statusType === "review"
                     ? localStyles.orderCardReview
                     : {}),
+                  ...(isProductSelected(item) ? localStyles.selectedProductCard : {}),
                 }}
+                onClick={() => toggleProductSelection(item)}
               >
                 <div style={localStyles.orderCardHeader}>
                   <div>
                     <div style={localStyles.productName}>{item.product}</div>
+                    {isProductSelected(item) && (
+                      <div style={localStyles.selectedBadge}>Selected</div>
+                    )}
                     <div style={styles.recipeMeta}>
                       Code: {item.code || "N/A"} • UOM: {item.uom || "N/A"} • Row {" "}
                       {item.excelRow}
@@ -2458,7 +2645,10 @@ export default function GenerateNextOrder({
                   <button
                     type="button"
                     style={styles.backButton}
-                    onClick={() => setSelectedInfoItem(item)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setSelectedInfoItem(item);
+                    }}
                   >
                     ℹ️ More Info
                   </button>
@@ -2466,7 +2656,10 @@ export default function GenerateNextOrder({
                   <button
                     type="button"
                     style={styles.backButton}
-                    onClick={() => setSelectedRecipeUsageItem(item)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setSelectedRecipeUsageItem(item);
+                    }}
                   >
                     🍽️ Recipe Usage
                   </button>
@@ -2479,9 +2672,19 @@ export default function GenerateNextOrder({
         {view === "consumption" && orderRows.length > 0 && (
           <div style={localStyles.reportList}>
             {visibleOrderRows.map((item) => (
-              <div key={`consumption-${item.itemKey}`} style={localStyles.reportRow}>
+              <div
+                key={`consumption-${item.itemKey}`}
+                style={{
+                  ...localStyles.reportRow,
+                  ...(isProductSelected(item) ? localStyles.selectedProductCard : {}),
+                }}
+                onClick={() => toggleProductSelection(item)}
+              >
                 <div>
                   <strong>{item.product}</strong>
+                  {isProductSelected(item) && (
+                    <div style={localStyles.selectedBadge}>Selected</div>
+                  )}
                   <div style={styles.recipeMeta}>
                     Code: {item.code || "N/A"} • UOM: {item.uom || "N/A"} • Row {" "}
                     {item.excelRow}
@@ -2510,7 +2713,10 @@ export default function GenerateNextOrder({
                   <button
                     type="button"
                     style={styles.backButton}
-                    onClick={() => setSelectedInfoItem(item)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setSelectedInfoItem(item);
+                    }}
                   >
                     ℹ️ More Info
                   </button>
@@ -2518,7 +2724,10 @@ export default function GenerateNextOrder({
                   <button
                     type="button"
                     style={styles.backButton}
-                    onClick={() => setSelectedRecipeUsageItem(item)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setSelectedRecipeUsageItem(item);
+                    }}
                   >
                     🍽️ Recipe Usage
                   </button>
@@ -2566,14 +2775,25 @@ export default function GenerateNextOrder({
               const difference = Number(
                 row.DifferenceSuggestedVsShipOrder ?? 0
               );
+              const originalItem = visibleOrderRows[index];
+              const selected = originalItem ? isProductSelected(originalItem) : false;
 
               return (
                 <div
                   key={`par-${row.ExcelRow}-${row.Code}-${index}`}
-                  style={localStyles.parRow}
+                  style={{
+                    ...localStyles.parRow,
+                    ...(selected ? localStyles.selectedProductCard : {}),
+                  }}
+                  onClick={() => {
+                    if (originalItem) toggleProductSelection(originalItem);
+                  }}
                 >
                   <div>
                     <strong>{row.Product}</strong>
+                    {selected && (
+                      <div style={localStyles.selectedBadge}>Selected</div>
+                    )}
 
                     <div style={styles.recipeMeta}>
                       Code: {row.Code || "N/A"} • UOM: {row.UOM || "N/A"} • Row {" "}
@@ -2789,7 +3009,10 @@ export default function GenerateNextOrder({
                     <button
                       type="button"
                       style={localStyles.fmlRecipeButton}
-                      onClick={() => setSelectedRecipeUsageItem(item)}
+                      onClick={(event) => {
+                      event.stopPropagation();
+                      setSelectedRecipeUsageItem(item);
+                    }}
                     >
                       🍽️ Recipe / Details
                     </button>
@@ -3097,6 +3320,7 @@ const localStyles = {
     gap: 6,
     boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
     fontSize: 12,
+    cursor: "pointer",
   },
 
   orderCardNeed: {
@@ -3228,6 +3452,70 @@ const localStyles = {
     background: "#fafafa",
     display: "grid",
     gap: 9,
+    cursor: "pointer",
+  },
+
+  selectedProductCard: {
+    border: "3px solid #111",
+    background: "#fffbe8",
+    boxShadow: "0 8px 22px rgba(0,0,0,0.12)",
+  },
+
+  selectedBadge: {
+    display: "inline-block",
+    marginTop: 6,
+    padding: "4px 8px",
+    borderRadius: 999,
+    background: "#111",
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "bold",
+  },
+
+  orderVsSuggestedHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 10,
+    flexWrap: "wrap",
+  },
+
+  selectActionButton: {
+    border: "1px solid #111",
+    borderRadius: 999,
+    background: "#fff",
+    color: "#111",
+    padding: "8px 11px",
+    cursor: "pointer",
+    fontWeight: "bold",
+    fontSize: 12,
+    whiteSpace: "nowrap",
+  },
+
+  selectedActionButton: {
+    border: "1px solid #111",
+    borderRadius: 999,
+    background: "#111",
+    color: "#fff",
+    padding: "8px 11px",
+    cursor: "pointer",
+    fontWeight: "bold",
+    fontSize: 12,
+    whiteSpace: "nowrap",
+  },
+
+  selectionToolbar: {
+    marginTop: 10,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 14,
+    background: "#f7f7f7",
+    border: "1px solid #ddd",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
   },
 
   reportMetrics: {
@@ -3245,6 +3533,7 @@ const localStyles = {
     background: "#fafafa",
     display: "grid",
     gap: 10,
+    cursor: "pointer",
   },
 
   parMetricGrid: {
