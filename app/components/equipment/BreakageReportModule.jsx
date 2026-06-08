@@ -2,9 +2,11 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { cleanText, formatQty, getImageUrl } from "../../lib/appHelpers";
-import { getMasterInventoryScope } from "../../constants/inventoryConfig";
-
-const ALL = "ALL";
+import {
+  EQUIPMENT_PICTURE_BUCKET,
+  getMasterInventoryScope,
+} from "../../constants/inventoryConfig";
+import { makeStorageSafePart } from "../../lib/inventoryImageHelpers";
 
 const SHIPS = ["SC", "VL", "BRL", "RL"];
 
@@ -14,11 +16,7 @@ const DEPARTMENTS = [
   { key: "restaurant", label: "Restaurant", icon: "🍽️" },
 ];
 
-const DEPARTMENT_LABELS = {
-  culinary: "Culinary",
-  bar: "Bar",
-  restaurant: "Restaurant",
-};
+const ALL_DEPARTMENTS = "ALL";
 
 const getMonthKey = (date = new Date()) => {
   const year = date.getFullYear();
@@ -27,22 +25,10 @@ const getMonthKey = (date = new Date()) => {
   return `${year}-${month}`;
 };
 
-const getMonthLabel = (monthKey = getMonthKey()) => {
-  const [year, month] = String(monthKey || "").split("-");
-  const date = new Date(Number(year), Number(month) - 1, 1);
-
-  if (Number.isNaN(date.getTime())) return monthKey;
-
-  return date.toLocaleDateString(undefined, {
-    month: "long",
-    year: "numeric",
-  });
-};
-
-const makeBreakageItemKey = (item) =>
+const makeItemKey = (item) =>
   cleanText(
     [
-      item?.equipmentDepartment || item?.department || "equipment",
+      item?.equipmentDepartment || "equipment",
       item?.sheetName || "",
       item?.category || "",
       item?.code || "",
@@ -51,26 +37,15 @@ const makeBreakageItemKey = (item) =>
     ].join("|")
   );
 
-const normalizeReportRow = (row) => ({
-  id: row.id,
-  ship: row.ship || "",
-  department: row.department || "",
-  itemKey: row.item_key || "",
-  code: row.code || "",
-  name: row.item_name || "",
-  category: row.category || "",
-  sheetName: row.sheet_name || "",
-  image: row.image || "",
-  qty: Number(row.qty || 0),
-  notes: row.notes || "",
-  userName: row.user_name || "",
-  userPosition: row.user_position || "",
-  monthKey: row.month_key || "",
-  reportedAt: row.reported_at || row.created_at || "",
-  confirmedAt: row.reported_at
-    ? new Date(row.reported_at).toLocaleString()
-    : "",
-});
+const getFileExtension = (file) => {
+  const fileName = String(file?.name || "").toLowerCase();
+
+  if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) return "jpg";
+  if (fileName.endsWith(".webp")) return "webp";
+  if (fileName.endsWith(".gif")) return "gif";
+
+  return "png";
+};
 
 export default function BreakageReportModule({
   styles,
@@ -81,58 +56,37 @@ export default function BreakageReportModule({
   logUsageEvent,
   onBack,
 }) {
-  const monthKey = getMonthKey();
-  const monthLabel = getMonthLabel(monthKey);
-
-  const [masterItems, setMasterItems] = useState([]);
-  const [masterLoading, setMasterLoading] = useState(false);
-  const [masterMessage, setMasterMessage] = useState("");
-
-  const [reportRows, setReportRows] = useState([]);
-  const [reportLoading, setReportLoading] = useState(false);
-  const [reportMessage, setReportMessage] = useState("");
-
   const [entryShip, setEntryShip] = useState(userShip || "");
   const [reportedBy, setReportedBy] = useState("");
   const [reportedPosition, setReportedPosition] = useState("");
 
-  const [equipmentSearch, setEquipmentSearch] = useState("");
-  const [reportSearch, setReportSearch] = useState("");
+  const [masterItems, setMasterItems] = useState([]);
+  const [masterLoading, setMasterLoading] = useState(false);
+  const [message, setMessage] = useState("");
 
-  const [equipmentDepartmentFilter, setEquipmentDepartmentFilter] =
-    useState(ALL);
-  const [reportShipFilter, setReportShipFilter] = useState(ALL);
-  const [reportDepartmentFilter, setReportDepartmentFilter] = useState(ALL);
+  const [search, setSearch] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState(ALL_DEPARTMENTS);
 
   const [currentItem, setCurrentItem] = useState(null);
   const [breakageQty, setBreakageQty] = useState("");
   const [breakageNotes, setBreakageNotes] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [breakagePhotoFile, setBreakagePhotoFile] = useState(null);
+  const [breakagePhotoInputKey, setBreakagePhotoInputKey] = useState(0);
+  const [savingBreakage, setSavingBreakage] = useState(false);
+
+  const [extraDepartment, setExtraDepartment] = useState("culinary");
+  const [extraCode, setExtraCode] = useState("");
+  const [extraName, setExtraName] = useState("");
+  const [extraQty, setExtraQty] = useState("");
+  const [extraNotes, setExtraNotes] = useState("");
+  const [extraPhotoFile, setExtraPhotoFile] = useState(null);
+  const [extraPhotoInputKey, setExtraPhotoInputKey] = useState(0);
+  const [savingExtra, setSavingExtra] = useState(false);
 
   const getShipName =
     typeof getShipDisplayName === "function"
       ? getShipDisplayName
       : (ship) => ship;
-
-  const departmentScopes = useMemo(() => {
-    const scopeMap = {};
-
-    DEPARTMENTS.forEach((department) => {
-      scopeMap[department.key] = getMasterInventoryScope(department.key);
-    });
-
-    return scopeMap;
-  }, []);
-
-  const departmentByScope = useMemo(() => {
-    const result = {};
-
-    Object.entries(departmentScopes).forEach(([department, scope]) => {
-      result[scope] = department;
-    });
-
-    return result;
-  }, [departmentScopes]);
 
   const effectiveReportedBy = [reportedBy.trim(), reportedPosition.trim()]
     .filter(Boolean)
@@ -141,15 +95,17 @@ export default function BreakageReportModule({
   const loadMasterItems = async () => {
     if (!supabase) {
       setMasterItems([]);
-      setMasterMessage("Supabase is not connected. Master list cannot load.");
+      setMessage("Supabase is not connected. Master list cannot load.");
       return;
     }
 
     setMasterLoading(true);
-    setMasterMessage("Loading permanent equipment master list...");
+    setMessage("Loading equipment master list...");
 
     try {
-      const scopes = Object.values(departmentScopes).filter(Boolean);
+      const scopes = DEPARTMENTS.map((department) =>
+        getMasterInventoryScope(department.key)
+      );
 
       const { data, error } = await supabase
         .from("inventory_master_items")
@@ -163,15 +119,25 @@ export default function BreakageReportModule({
 
       if (error) throw error;
 
+      const departmentByScope = {};
+      DEPARTMENTS.forEach((department) => {
+        departmentByScope[getMasterInventoryScope(department.key)] =
+          department.key;
+      });
+
       const rows = (data || [])
         .map((row, index) => {
-          const department =
-            departmentByScope[row.ship] || row.department || "culinary";
+          const equipmentDepartment =
+            departmentByScope[row.ship] || "culinary";
+
+          const departmentConfig = DEPARTMENTS.find(
+            (department) => department.key === equipmentDepartment
+          );
 
           const item = {
             id: row.id || `${row.ship}-${index}`,
-            equipmentDepartment: department,
-            departmentLabel: DEPARTMENT_LABELS[department] || department,
+            equipmentDepartment,
+            departmentLabel: departmentConfig?.label || equipmentDepartment,
             itemKey: row.item_key || "",
             code: row.code || "",
             name: row.item_name || "",
@@ -184,74 +150,22 @@ export default function BreakageReportModule({
 
           return {
             ...item,
-            itemKey: item.itemKey || makeBreakageItemKey(item),
+            itemKey: item.itemKey || makeItemKey(item),
           };
         })
-        .filter((item) => item.name || item.code)
-        .sort((a, b) => {
-          const departmentOrder =
-            DEPARTMENTS.findIndex((item) => item.key === a.equipmentDepartment) -
-            DEPARTMENTS.findIndex((item) => item.key === b.equipmentDepartment);
-
-          if (departmentOrder !== 0) return departmentOrder;
-
-          return (
-            Number(a.sortOrder || 0) - Number(b.sortOrder || 0) ||
-            String(a.name || "").localeCompare(String(b.name || ""))
-          );
-        });
+        .filter((item) => item.name || item.code);
 
       setMasterItems(rows);
-      setMasterMessage(
+      setMessage(
         rows.length
-          ? `Permanent equipment master list loaded. ${rows.length} item(s).`
-          : "No permanent master list found. Upload each department master list once from the existing Equipment Master List page."
+          ? `Equipment master list loaded. ${rows.length} item(s).`
+          : "No equipment master list found. Upload master lists from the existing Equipment Master List page first."
       );
     } catch (error) {
       setMasterItems([]);
-      setMasterMessage(
-        error?.message || "Could not load permanent equipment master list."
-      );
+      setMessage(error?.message || "Could not load equipment master list.");
     } finally {
       setMasterLoading(false);
-    }
-  };
-
-  const loadReportRows = async () => {
-    if (!supabase) {
-      setReportRows([]);
-      setReportMessage("Supabase is not connected. Report cannot load.");
-      return;
-    }
-
-    setReportLoading(true);
-    setReportMessage("Loading monthly breakage report...");
-
-    try {
-      const { data, error } = await supabase
-        .from("equipment_breakage_reports")
-        .select("*")
-        .eq("month_key", monthKey)
-        .order("reported_at", { ascending: false })
-        .limit(5000);
-
-      if (error) throw error;
-
-      const rows = (data || []).map(normalizeReportRow);
-
-      setReportRows(rows);
-      setReportMessage(
-        rows.length
-          ? `Monthly breakage report loaded. ${rows.length} record(s) for ${monthLabel}.`
-          : `No breakage records yet for ${monthLabel}.`
-      );
-    } catch (error) {
-      setReportRows([]);
-      setReportMessage(
-        error?.message || "Could not load monthly breakage report."
-      );
-    } finally {
-      setReportLoading(false);
     }
   };
 
@@ -261,17 +175,16 @@ export default function BreakageReportModule({
 
   useEffect(() => {
     loadMasterItems();
-    loadReportRows();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const visibleMasterItems = useMemo(() => {
-    const term = equipmentSearch.toLowerCase().trim();
+  const visibleItems = useMemo(() => {
+    const term = search.toLowerCase().trim();
 
     return masterItems.filter((item) => {
       if (
-        equipmentDepartmentFilter !== ALL &&
-        item.equipmentDepartment !== equipmentDepartmentFilter
+        departmentFilter !== ALL_DEPARTMENTS &&
+        item.equipmentDepartment !== departmentFilter
       ) {
         return false;
       }
@@ -280,246 +193,222 @@ export default function BreakageReportModule({
 
       return [
         item.departmentLabel,
-        item.sheetName,
-        item.category,
         item.code,
         item.name,
+        item.category,
+        item.sheetName,
       ]
         .join(" ")
         .toLowerCase()
         .includes(term);
     });
-  }, [masterItems, equipmentSearch, equipmentDepartmentFilter]);
+  }, [masterItems, search, departmentFilter]);
 
-  const visibleReportRows = useMemo(() => {
-    const term = reportSearch.toLowerCase().trim();
+  const uploadBreakagePhoto = async ({ file, item, ship }) => {
+    if (!supabase || !file) return "";
 
-    return reportRows.filter((row) => {
-      if (reportShipFilter !== ALL && row.ship !== reportShipFilter) {
-        return false;
-      }
+    const extension = getFileExtension(file);
+    const contentType = file.type || `image/${extension}`;
+    const department = item?.equipmentDepartment || extraDepartment || "equipment";
+    const itemPart = makeStorageSafePart(item?.code || item?.name || "breakage");
 
-      if (
-        reportDepartmentFilter !== ALL &&
-        row.department !== reportDepartmentFilter
-      ) {
-        return false;
-      }
+    const path =
+      "breakage/" +
+      makeStorageSafePart(ship || "ship") +
+      "/" +
+      makeStorageSafePart(department) +
+      "/" +
+      Date.now() +
+      "-" +
+      itemPart +
+      "." +
+      extension;
 
-      if (!term) return true;
+    const { error } = await supabase.storage
+      .from(EQUIPMENT_PICTURE_BUCKET)
+      .upload(path, file, {
+        contentType,
+        upsert: true,
+        cacheControl: "31536000",
+      });
 
-      return [
-        row.ship,
-        row.department,
-        row.code,
-        row.name,
-        row.category,
-        row.sheetName,
-        row.userName,
-        row.notes,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(term);
-    });
-  }, [reportRows, reportSearch, reportShipFilter, reportDepartmentFilter]);
+    if (error) throw error;
 
-  const summaryRows = useMemo(() => {
-    const grouped = new Map();
+    const { data } = supabase.storage
+      .from(EQUIPMENT_PICTURE_BUCKET)
+      .getPublicUrl(path);
 
-    visibleReportRows.forEach((row) => {
-      const key = `${row.ship}|${row.department}|${row.itemKey}`;
-
-      if (!grouped.has(key)) {
-        grouped.set(key, {
-          ship: row.ship,
-          department: row.department,
-          itemKey: row.itemKey,
-          code: row.code || "",
-          name: row.name || "",
-          category: row.category || "",
-          sheetName: row.sheetName || "",
-          image: row.image || "",
-          totalQty: 0,
-          records: 0,
-          users: new Set(),
-          lastReportedAt: "",
-        });
-      }
-
-      const item = grouped.get(key);
-
-      item.totalQty += Number(row.qty || 0);
-      item.records += 1;
-
-      if (row.userName) item.users.add(row.userName);
-
-      if (
-        !item.lastReportedAt ||
-        new Date(row.reportedAt || 0).getTime() >
-          new Date(item.lastReportedAt || 0).getTime()
-      ) {
-        item.lastReportedAt = row.reportedAt;
-      }
-    });
-
-    return Array.from(grouped.values())
-      .map((item) => ({
-        ...item,
-        users: Array.from(item.users).sort(),
-        confirmedAt: item.lastReportedAt
-          ? new Date(item.lastReportedAt).toLocaleString()
-          : "",
-      }))
-      .sort(
-        (a, b) =>
-          Number(b.totalQty || 0) - Number(a.totalQty || 0) ||
-          String(a.name || "").localeCompare(String(b.name || ""))
-      );
-  }, [visibleReportRows]);
-
-  const getItemMonthlyCount = (item, shipFilter = entryShip) => {
-    const itemKey = item?.itemKey || makeBreakageItemKey(item);
-
-    return reportRows
-      .filter((row) => row.monthKey === monthKey)
-      .filter((row) => row.itemKey === itemKey)
-      .filter((row) => row.department === item.equipmentDepartment)
-      .filter((row) => shipFilter === ALL || row.ship === shipFilter)
-      .reduce((sum, row) => sum + Number(row.qty || 0), 0);
+    return data?.publicUrl || "";
   };
 
-  const openBreakagePopup = (item) => {
-    if (!entryShip) {
-      setReportMessage("Choose ship before reporting broken equipment.");
-      return;
-    }
-
-    setCurrentItem(item);
-    setBreakageQty("");
-    setBreakageNotes("");
-  };
-
-  const confirmBreakage = async () => {
-    if (saving) return;
-
+  const validateBaseFields = () => {
     if (!supabase) {
       window.alert("Supabase is not connected. Breakage cannot be saved.");
-      return;
-    }
-
-    if (!currentItem) {
-      setReportMessage("Select equipment before confirming breakage.");
-      return;
+      return false;
     }
 
     if (!entryShip) {
-      window.alert("Choose ship before confirming breakage.");
-      return;
+      window.alert("Choose ship before saving breakage.");
+      return false;
     }
 
     if (!reportedBy.trim()) {
-      window.alert("Enter reported by name before confirming breakage.");
-      return;
+      window.alert("Enter reported by name before saving breakage.");
+      return false;
     }
 
-    const qty = Number(breakageQty || 0);
+    return true;
+  };
 
-    if (String(breakageQty).trim() === "" || Number.isNaN(qty) || qty <= 0) {
-      window.alert("Enter a breakage number greater than 0.");
-      return;
+  const saveBreakageRecord = async ({ item, qty, notes, photoFile }) => {
+    const safeQty = Number(qty || 0);
+
+    if (String(qty).trim() === "" || Number.isNaN(safeQty) || safeQty <= 0) {
+      window.alert("Enter broken quantity greater than 0.");
+      return false;
     }
 
-    const previousCount = getItemMonthlyCount(currentItem, entryShip);
+    const photoUrl = photoFile
+      ? await uploadBreakagePhoto({
+          file: photoFile,
+          item,
+          ship: entryShip,
+        })
+      : "";
+
     const now = new Date().toISOString();
 
     const payload = {
       ship: entryShip,
-      department: currentItem.equipmentDepartment,
-      month_key: monthKey,
+      department: item.equipmentDepartment || "culinary",
+      month_key: getMonthKey(),
 
       user_name: effectiveReportedBy,
       user_position: reportedPosition || "",
 
-      item_key: currentItem.itemKey || makeBreakageItemKey(currentItem),
-      code: currentItem.code || "",
-      item_name: currentItem.name || "",
-      category: currentItem.category || "",
-      sheet_name: currentItem.sheetName || "",
-      image: currentItem.image || "",
+      item_key: item.itemKey || makeItemKey(item),
+      code: item.code || "",
+      item_name: item.name || "",
+      category: item.category || "",
+      sheet_name: item.sheetName || "",
+      image: item.image || "",
 
-      qty,
-      notes: breakageNotes || "",
+      qty: safeQty,
+      notes: notes || "",
+      report_photo: photoUrl,
 
       reported_at: now,
       updated_at: now,
     };
 
-    setSaving(true);
-    setReportMessage("Saving breakage report...");
+    const { error } = await supabase
+      .from("equipment_breakage_reports")
+      .insert(payload);
+
+    if (error) throw error;
+
+    if (typeof logUsageEvent === "function") {
+      logUsageEvent("equipment_breakage_saved", {
+        module: "breakage_report",
+        ship: entryShip,
+        department: item.equipmentDepartment || "",
+        userEmail,
+        userName: effectiveReportedBy,
+        itemName: item.name || "",
+        code: item.code || "",
+        qty: safeQty,
+      });
+    }
+
+    return true;
+  };
+
+  const confirmMasterItemBreakage = async () => {
+    if (savingBreakage) return;
+    if (!currentItem) return;
+    if (!validateBaseFields()) return;
+
+    setSavingBreakage(true);
+    setMessage("Saving breakage...");
 
     try {
-      const { data, error } = await supabase
-        .from("equipment_breakage_reports")
-        .insert(payload)
-        .select("*")
-        .single();
+      const saved = await saveBreakageRecord({
+        item: currentItem,
+        qty: breakageQty,
+        notes: breakageNotes,
+        photoFile: breakagePhotoFile,
+      });
 
-      if (error) throw error;
+      if (!saved) return;
 
-      const savedRow = normalizeReportRow(data);
-
-      setReportRows((current) => [savedRow, ...current]);
       setCurrentItem(null);
       setBreakageQty("");
       setBreakageNotes("");
+      setBreakagePhotoFile(null);
+      setBreakagePhotoInputKey((value) => value + 1);
 
-      setReportMessage(
-        `Saved: ${currentItem.name} / Added ${formatQty(
-          qty
-        )}. ${entryShip} monthly total is now ${formatQty(previousCount + qty)}.`
-      );
-
-      if (typeof logUsageEvent === "function") {
-        logUsageEvent("equipment_breakage_saved", {
-          module: "breakage_report",
-          ship: entryShip,
-          department: currentItem.equipmentDepartment,
-          userEmail,
-          userName: effectiveReportedBy,
-          itemName: currentItem.name,
-          code: currentItem.code,
-          qty,
-          previousCount,
-          newMonthlyCount: previousCount + qty,
-          monthKey,
-        });
-      }
+      setMessage(`Saved breakage: ${currentItem.name}.`);
     } catch (error) {
-      const text = error?.message || "Could not save breakage report.";
-      setReportMessage(text);
+      const text = error?.message || "Could not save breakage.";
+      setMessage(text);
       window.alert(text);
     } finally {
-      setSaving(false);
+      setSavingBreakage(false);
     }
   };
 
-  const totalBreakageQty = visibleReportRows.reduce(
-    (sum, row) => sum + Number(row.qty || 0),
-    0
-  );
+  const saveExtraBrokenItem = async () => {
+    if (savingExtra) return;
+    if (!validateBaseFields()) return;
 
-  const currentItemShipCount = currentItem
-    ? getItemMonthlyCount(currentItem, entryShip)
-    : 0;
+    const name = String(extraName || "").replace(/\s+/g, " ").trim();
 
-  const currentItemAllShipsCount = currentItem
-    ? getItemMonthlyCount(currentItem, ALL)
-    : 0;
+    if (!name) {
+      window.alert("Enter item name.");
+      return;
+    }
 
-  const insertedQty = Number(breakageQty || 0);
-  const nextShipCount =
-    currentItemShipCount + (Number.isFinite(insertedQty) ? insertedQty : 0);
+    setSavingExtra(true);
+    setMessage("Saving broken item not in master list...");
+
+    try {
+      const item = {
+        equipmentDepartment: extraDepartment,
+        itemKey: cleanText(
+          `${extraDepartment}|EXTRA|${extraCode || "NO-CODE"}|${name}|${Date.now()}`
+        ),
+        code: extraCode || "EXTRA",
+        name,
+        category: "Extra item - not in master list",
+        sheetName: "Extra Item",
+        image: "",
+      };
+
+      const saved = await saveBreakageRecord({
+        item,
+        qty: extraQty,
+        notes: extraNotes,
+        photoFile: extraPhotoFile,
+      });
+
+      if (!saved) return;
+
+      setExtraCode("");
+      setExtraName("");
+      setExtraQty("");
+      setExtraNotes("");
+      setExtraPhotoFile(null);
+      setExtraPhotoInputKey((value) => value + 1);
+
+      setMessage(`Saved broken item not in master list: ${name}.`);
+    } catch (error) {
+      const text = error?.message || "Could not save broken extra item.";
+      setMessage(text);
+      window.alert(text);
+    } finally {
+      setSavingExtra(false);
+    }
+  };
 
   return (
     <main style={styles.page}>
@@ -541,7 +430,7 @@ export default function BreakageReportModule({
 
       <section style={styles.grid}>
         <div style={styles.card}>
-          <h2 style={styles.cardTitle}>🧾 Report Broken Equipment</h2>
+          <h2 style={styles.cardTitle}>🧾 Report Breakage</h2>
 
           <label style={styles.label}>Ship</label>
           <select
@@ -573,199 +462,199 @@ export default function BreakageReportModule({
             style={styles.searchInput}
           />
 
-          <div style={styles.headerActions}>
-            <button
-              type="button"
-              style={styles.backButton}
-              onClick={loadMasterItems}
-              disabled={masterLoading}
-            >
-              {masterLoading ? "Loading..." : "🔄 Refresh Master List"}
-            </button>
+          <button
+            type="button"
+            style={styles.backButton}
+            onClick={loadMasterItems}
+            disabled={masterLoading}
+          >
+            {masterLoading ? "Loading..." : "🔄 Refresh Equipment Master List"}
+          </button>
 
-            <button
-              type="button"
-              style={styles.backButton}
-              onClick={loadReportRows}
-              disabled={reportLoading}
-            >
-              {reportLoading ? "Loading..." : "🔄 Refresh Report"}
-            </button>
-          </div>
+          {message && <p style={styles.message}>{message}</p>}
 
           <div style={styles.infoBox}>
             <div>
-              📅 Active report month: <strong>{monthLabel}</strong>
+              🚢 Ship: <strong>{entryShip || "Not selected"}</strong>
             </div>
             <div>
-              📋 Permanent master items:{" "}
-              <strong>{masterItems.length}</strong>
+              👤 User: <strong>{effectiveReportedBy || "Not selected"}</strong>
             </div>
             <div>
-              🧾 Report records shown:{" "}
-              <strong>{visibleReportRows.length}</strong>
-            </div>
-            <div>
-              🔢 Total broken quantity shown:{" "}
-              <strong>{formatQty(totalBreakageQty)}</strong>
-            </div>
-            <div>
-              This block loads independently from Inventory and only uses the
-              permanent master list.
+              📋 Master list items: <strong>{masterItems.length}</strong>
             </div>
           </div>
-
-          {masterMessage && <p style={styles.message}>{masterMessage}</p>}
-          {reportMessage && <p style={styles.message}>{reportMessage}</p>}
         </div>
 
         <div style={styles.card}>
-          <h2 style={styles.cardTitle}>🔎 Filters</h2>
+          <h2 style={styles.cardTitle}>➕ Item Not In Master List</h2>
 
-          <label style={styles.label}>Master list department</label>
+          <label style={styles.label}>Department</label>
           <select
-            value={equipmentDepartmentFilter}
+            value={extraDepartment}
+            onChange={(event) => setExtraDepartment(event.target.value)}
+            style={styles.select}
+          >
+            {DEPARTMENTS.map((department) => (
+              <option key={department.key} value={department.key}>
+                {department.label}
+              </option>
+            ))}
+          </select>
+
+          <label style={styles.label}>Code optional</label>
+          <input
+            value={extraCode}
+            onChange={(event) => setExtraCode(event.target.value)}
+            placeholder="Enter code..."
+            style={styles.searchInput}
+          />
+
+          <label style={styles.label}>Item name</label>
+          <input
+            value={extraName}
+            onChange={(event) => setExtraName(event.target.value)}
+            placeholder="Enter item name..."
+            style={styles.searchInput}
+          />
+
+          <label style={styles.label}>Broken quantity</label>
+          <input
+            type="number"
+            min="1"
+            step="1"
+            value={extraQty}
+            onChange={(event) => setExtraQty(event.target.value)}
+            placeholder="Enter broken quantity..."
+            style={styles.searchInput}
+          />
+
+          <label style={styles.label}>Notes optional</label>
+          <input
+            value={extraNotes}
+            onChange={(event) => setExtraNotes(event.target.value)}
+            placeholder="Example: cracked, chipped, broken..."
+            style={styles.searchInput}
+          />
+
+          <label style={styles.label}>Take / upload picture</label>
+          <input
+            key={extraPhotoInputKey}
+            type="file"
+            accept="image/*"
+            capture="environment"
             onChange={(event) =>
-              setEquipmentDepartmentFilter(event.target.value)
+              setExtraPhotoFile(event.target.files?.[0] || null)
             }
-            style={styles.select}
-          >
-            <option value={ALL}>All Departments</option>
-            {DEPARTMENTS.map((department) => (
-              <option key={department.key} value={department.key}>
-                {department.label}
-              </option>
-            ))}
-          </select>
-
-          <label style={styles.label}>Search equipment master list</label>
-          <input
-            value={equipmentSearch}
-            onChange={(event) => setEquipmentSearch(event.target.value)}
-            placeholder="Search equipment, code, category, sheet..."
-            style={styles.searchInput}
+            style={styles.fileInput}
           />
 
-          <label style={styles.label}>Report ship filter</label>
-          <select
-            value={reportShipFilter}
-            onChange={(event) => setReportShipFilter(event.target.value)}
-            style={styles.select}
-          >
-            <option value={ALL}>All Ships</option>
-            {SHIPS.map((ship) => (
-              <option key={ship} value={ship}>
-                {getShipName(ship)}
-              </option>
-            ))}
-          </select>
+          {extraPhotoFile && (
+            <div style={styles.statusNeutral}>
+              Picture selected: {extraPhotoFile.name}
+            </div>
+          )}
 
-          <label style={styles.label}>Report department filter</label>
-          <select
-            value={reportDepartmentFilter}
-            onChange={(event) => setReportDepartmentFilter(event.target.value)}
-            style={styles.select}
+          <button
+            type="button"
+            style={styles.primaryButton}
+            onClick={saveExtraBrokenItem}
+            disabled={savingExtra}
           >
-            <option value={ALL}>All Departments</option>
-            {DEPARTMENTS.map((department) => (
-              <option key={department.key} value={department.key}>
-                {department.label}
-              </option>
-            ))}
-          </select>
-
-          <label style={styles.label}>Search report</label>
-          <input
-            value={reportSearch}
-            onChange={(event) => setReportSearch(event.target.value)}
-            placeholder="Search report records..."
-            style={styles.searchInput}
-          />
+            {savingExtra ? "Saving..." : "Save Broken Item"}
+          </button>
         </div>
       </section>
 
       <section style={styles.card}>
         <h2 style={styles.productTitle}>📋 Equipment Master List</h2>
 
-        {masterItems.length === 0 && (
-          <p style={styles.emptyText}>
-            No permanent master list loaded yet. Upload each department master
-            list once from the existing Equipment Master List page.
-          </p>
-        )}
+        <div style={styles.grid}>
+          <div>
+            <label style={styles.label}>Department filter</label>
+            <select
+              value={departmentFilter}
+              onChange={(event) => setDepartmentFilter(event.target.value)}
+              style={styles.select}
+            >
+              <option value={ALL_DEPARTMENTS}>All Departments</option>
+              {DEPARTMENTS.map((department) => (
+                <option key={department.key} value={department.key}>
+                  {department.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
-        {masterItems.length > 0 && visibleMasterItems.length === 0 && (
+          <div>
+            <label style={styles.label}>Search equipment</label>
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search code, name, category, sheet..."
+              style={styles.searchInput}
+            />
+          </div>
+        </div>
+
+        {visibleItems.length === 0 && (
           <p style={styles.emptyText}>
-            No equipment matches the selected filter.
+            No equipment found. Upload the department master list first from
+            Equipment Master List.
           </p>
         )}
 
         <div style={styles.equipmentGrid}>
-          {visibleMasterItems.map((item) => {
-            const shipCount = entryShip
-              ? getItemMonthlyCount(item, entryShip)
-              : 0;
+          {visibleItems.map((item) => (
+            <button
+              key={`${item.equipmentDepartment}-${item.itemKey}-${item.id}`}
+              type="button"
+              style={styles.inventoryItemCard}
+              onClick={() => {
+                setCurrentItem(item);
+                setBreakageQty("");
+                setBreakageNotes("");
+                setBreakagePhotoFile(null);
+                setBreakagePhotoInputKey((value) => value + 1);
+              }}
+            >
+              {item.image ? (
+                <div style={styles.inventoryImageFrame}>
+                  <img
+                    src={getImageUrl(item.image, "w360")}
+                    alt={item.name}
+                    loading="lazy"
+                    decoding="async"
+                    style={styles.inventoryCardImage}
+                    onError={(event) => {
+                      event.currentTarget.style.display = "none";
+                      const fallback = event.currentTarget.nextElementSibling;
+                      if (fallback) fallback.style.display = "flex";
+                    }}
+                  />
 
-            const allShipsCount = getItemMonthlyCount(item, ALL);
-
-            return (
-              <button
-                key={`${item.equipmentDepartment}-${item.itemKey}-${item.id}`}
-                type="button"
-                style={{
-                  ...styles.inventoryItemCard,
-                  ...(allShipsCount > 0 ? styles.zeroCountCard : {}),
-                }}
-                onClick={() => openBreakagePopup(item)}
-              >
-                {item.image ? (
-                  <div style={styles.inventoryImageFrame}>
-                    <img
-                      src={getImageUrl(item.image, "w360")}
-                      alt={item.name}
-                      loading="lazy"
-                      decoding="async"
-                      style={styles.inventoryCardImage}
-                      onError={(event) => {
-                        event.currentTarget.style.display = "none";
-                        const fallback = event.currentTarget.nextElementSibling;
-                        if (fallback) fallback.style.display = "flex";
-                      }}
-                    />
-
-                    <div
-                      style={{
-                        ...styles.inventoryNoImage,
-                        display: "none",
-                      }}
-                    >
-                      No image
-                    </div>
+                  <div
+                    style={{
+                      ...styles.inventoryNoImage,
+                      display: "none",
+                    }}
+                  >
+                    No image
                   </div>
-                ) : (
-                  <div style={styles.inventoryNoImage}>No image</div>
-                )}
-
-                <div style={styles.recipeName}>{item.name}</div>
-                <div style={styles.recipeMeta}>
-                  Department: {item.departmentLabel}
                 </div>
-                <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
-                <div style={styles.recipeMeta}>Category: {item.category}</div>
+              ) : (
+                <div style={styles.inventoryNoImage}>No image</div>
+              )}
 
-                <div style={styles.statusNeutral}>
-                  {entryShip || "Ship"} this month: {formatQty(shipCount)}
-                </div>
-
-                <div
-                  style={allShipsCount > 0 ? styles.statusWarning : styles.statusNeutral}
-                >
-                  All ships this month: {formatQty(allShipsCount)}
-                </div>
-              </button>
-            );
-          })}
+              <div style={styles.recipeName}>{item.name}</div>
+              <div style={styles.recipeMeta}>
+                Department: {item.departmentLabel}
+              </div>
+              <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
+              <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
+              <div style={styles.recipeMeta}>Category: {item.category}</div>
+            </button>
+          ))}
         </div>
       </section>
 
@@ -776,6 +665,7 @@ export default function BreakageReportModule({
             setCurrentItem(null);
             setBreakageQty("");
             setBreakageNotes("");
+            setBreakagePhotoFile(null);
           }}
         >
           <div
@@ -789,6 +679,7 @@ export default function BreakageReportModule({
                 setCurrentItem(null);
                 setBreakageQty("");
                 setBreakageNotes("");
+                setBreakagePhotoFile(null);
               }}
             >
               ✕
@@ -848,9 +739,7 @@ export default function BreakageReportModule({
                   <strong>Ship:</strong> {entryShip || "Not selected"}
                 </p>
                 <p>
-                  <strong>Department:</strong>{" "}
-                  {DEPARTMENT_LABELS[currentItem.equipmentDepartment] ||
-                    currentItem.equipmentDepartment}
+                  <strong>Department:</strong> {currentItem.departmentLabel}
                 </p>
                 <p>
                   <strong>Code:</strong> {currentItem.code || "N/A"}
@@ -862,24 +751,6 @@ export default function BreakageReportModule({
                   <strong>Category:</strong> {currentItem.category || "N/A"}
                 </p>
 
-                <div style={styles.infoBox}>
-                  <div>
-                    📅 Month: <strong>{monthLabel}</strong>
-                  </div>
-                  <div>
-                    Current count for {entryShip}:{" "}
-                    <strong>{formatQty(currentItemShipCount)}</strong>
-                  </div>
-                  <div>
-                    Current count all ships:{" "}
-                    <strong>{formatQty(currentItemAllShipsCount)}</strong>
-                  </div>
-                  <div>
-                    New {entryShip} total after confirm:{" "}
-                    <strong>{formatQty(nextShipCount)}</strong>
-                  </div>
-                </div>
-
                 <label style={styles.label}>Broken quantity</label>
                 <input
                   autoFocus
@@ -889,8 +760,8 @@ export default function BreakageReportModule({
                   value={breakageQty}
                   onChange={(event) => setBreakageQty(event.target.value)}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" && !saving) {
-                      confirmBreakage();
+                    if (event.key === "Enter" && !savingBreakage) {
+                      confirmMasterItemBreakage();
                     }
                   }}
                   placeholder="Enter broken quantity..."
@@ -901,9 +772,27 @@ export default function BreakageReportModule({
                 <input
                   value={breakageNotes}
                   onChange={(event) => setBreakageNotes(event.target.value)}
-                  placeholder="Example: chipped, cracked, dropped, missing..."
+                  placeholder="Example: cracked, chipped, dropped..."
                   style={styles.searchInput}
                 />
+
+                <label style={styles.label}>Take / upload picture</label>
+                <input
+                  key={breakagePhotoInputKey}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(event) =>
+                    setBreakagePhotoFile(event.target.files?.[0] || null)
+                  }
+                  style={styles.fileInput}
+                />
+
+                {breakagePhotoFile && (
+                  <div style={styles.statusNeutral}>
+                    Picture selected: {breakagePhotoFile.name}
+                  </div>
+                )}
 
                 <div style={styles.headerActions}>
                   <button
@@ -913,6 +802,7 @@ export default function BreakageReportModule({
                       setCurrentItem(null);
                       setBreakageQty("");
                       setBreakageNotes("");
+                      setBreakagePhotoFile(null);
                     }}
                   >
                     Cancel
@@ -921,10 +811,10 @@ export default function BreakageReportModule({
                   <button
                     type="button"
                     style={styles.primaryButton}
-                    onClick={confirmBreakage}
-                    disabled={saving}
+                    onClick={confirmMasterItemBreakage}
+                    disabled={savingBreakage}
                   >
-                    {saving ? "Saving..." : "Confirm Breakage"}
+                    {savingBreakage ? "Saving..." : "Confirm Breakage"}
                   </button>
                 </div>
               </div>
@@ -932,147 +822,6 @@ export default function BreakageReportModule({
           </div>
         </div>
       )}
-
-      <section style={styles.card}>
-        <div
-          style={{
-            ...styles.header,
-            boxShadow: "none",
-            padding: 0,
-            marginBottom: 18,
-          }}
-        >
-          <div>
-            <h2 style={styles.productTitle}>📄 Monthly Breakage Report</h2>
-            <p style={{ ...styles.emptyText, margin: 0 }}>
-              Current month report with filters for all ships, specific ship,
-              all departments, or one department.
-            </p>
-          </div>
-        </div>
-
-        <div style={styles.infoBox}>
-          <div>
-            📅 Month: <strong>{monthLabel}</strong>
-          </div>
-          <div>
-            🚢 Ship filter:{" "}
-            <strong>
-              {reportShipFilter === ALL
-                ? "All Ships"
-                : getShipName(reportShipFilter)}
-            </strong>
-          </div>
-          <div>
-            🧭 Department filter:{" "}
-            <strong>
-              {reportDepartmentFilter === ALL
-                ? "All Departments"
-                : DEPARTMENT_LABELS[reportDepartmentFilter]}
-            </strong>
-          </div>
-          <div>
-            🧾 Records: <strong>{visibleReportRows.length}</strong>
-          </div>
-          <div>
-            📦 Summary equipment items: <strong>{summaryRows.length}</strong>
-          </div>
-          <div>
-            🔢 Total broken quantity:{" "}
-            <strong>{formatQty(totalBreakageQty)}</strong>
-          </div>
-        </div>
-
-        {summaryRows.length === 0 && (
-          <p style={styles.emptyText}>
-            No breakage records match the selected filters.
-          </p>
-        )}
-
-        {summaryRows.length > 0 && (
-          <>
-            <h3 style={styles.sectionTitle}>📊 Summary</h3>
-
-            <div style={styles.equipmentGrid}>
-              {summaryRows.map((item) => (
-                <div
-                  key={`${item.ship}-${item.department}-${item.itemKey}`}
-                  style={styles.equipmentCard}
-                >
-                  {item.image && (
-                    <img
-                      src={getImageUrl(item.image, "w360")}
-                      alt={item.name}
-                      style={styles.equipmentImage}
-                      onError={(event) => {
-                        event.currentTarget.style.display = "none";
-                      }}
-                    />
-                  )}
-
-                  <div style={styles.recipeName}>{item.name}</div>
-                  <div style={styles.recipeMeta}>
-                    Ship: {getShipName(item.ship)}
-                  </div>
-                  <div style={styles.recipeMeta}>
-                    Department:{" "}
-                    {DEPARTMENT_LABELS[item.department] || item.department}
-                  </div>
-                  <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                  <div style={styles.recipeMeta}>Category: {item.category}</div>
-                  <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
-                  <div style={styles.statusBad}>
-                    Total Broken: {formatQty(item.totalQty)}
-                  </div>
-                  <div style={styles.recipeMeta}>Records: {item.records}</div>
-                  <div style={styles.recipeMeta}>
-                    Users: {item.users.join(", ") || "N/A"}
-                  </div>
-                  <div style={styles.recipeMeta}>
-                    Last Reported: {item.confirmedAt || "N/A"}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-
-        {visibleReportRows.length > 0 && (
-          <>
-            <h3 style={styles.sectionTitle}>🧾 Entries</h3>
-
-            <div style={styles.equipmentGrid}>
-              {visibleReportRows.map((row) => (
-                <div key={row.id} style={styles.equipmentCard}>
-                  <div style={styles.recipeName}>{row.name}</div>
-                  <div style={styles.recipeMeta}>
-                    Ship: {getShipName(row.ship)}
-                  </div>
-                  <div style={styles.recipeMeta}>
-                    Department:{" "}
-                    {DEPARTMENT_LABELS[row.department] || row.department}
-                  </div>
-                  <div style={styles.recipeMeta}>Code: {row.code || "N/A"}</div>
-                  <div style={styles.recipeMeta}>Category: {row.category}</div>
-                  <div style={styles.recipeMeta}>Sheet: {row.sheetName}</div>
-                  <div style={styles.statusBad}>
-                    Added Broken Qty: {formatQty(row.qty)}
-                  </div>
-                  <div style={styles.recipeMeta}>
-                    Reported by: {row.userName || "N/A"}
-                  </div>
-                  <div style={styles.recipeMeta}>
-                    Confirmed: {row.confirmedAt || "N/A"}
-                  </div>
-                  {row.notes && (
-                    <div style={styles.statusNeutral}>Notes: {row.notes}</div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </section>
     </main>
   );
 }
