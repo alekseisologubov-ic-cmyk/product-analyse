@@ -490,6 +490,13 @@ const [module, setModule] = useState("");
   const [musterItems, setMusterItems] = useState([]);
   const [musterMessage, setMusterMessage] = useState("");
   const [selectedEquipment, setSelectedEquipment] = useState(null);
+  const [breakageRows, setBreakageRows] = useState([]);
+const [breakageSearch, setBreakageSearch] = useState("");
+const [breakageMessage, setBreakageMessage] = useState("");
+const [currentBreakageItem, setCurrentBreakageItem] = useState(null);
+const [breakageQty, setBreakageQty] = useState("");
+const [breakageSaving, setBreakageSaving] = useState(false);
+const [breakageDepartmentFilter, setBreakageDepartmentFilter] = useState("all");
 
   const [warehouseRows, setWarehouseRows] = useState([]);
   const [warehouseSearch, setWarehouseSearch] = useState("");
