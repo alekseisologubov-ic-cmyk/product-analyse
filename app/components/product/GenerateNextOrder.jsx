@@ -14,7 +14,7 @@ const ORDER_BUFFER_MULTIPLIER = 1 + ORDER_BUFFER_PERCENT / 100;
 const PAR_REPORT_DAYS = 7;
 const PAR_REPORT_DISPLAY_LIMIT = 500;
 
-// Excel column Y = current onboard ordered quantity.
+// Excel column Y = current onboard / ship ordered quantity.
 // A = 0, B = 1, C = 2, ... Y = 24.
 const ONBOARD_ORDERED_QTY_COLUMN_INDEX = 24;
 
@@ -108,8 +108,6 @@ const toNumber = (value) => {
 };
 
 const formatQty = (value) => Number(value || 0).toFixed(2);
-
-const formatMoney = (value) => "$" + Number(value || 0).toFixed(2);
 
 const excelDateToDate = (value) => {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
@@ -473,11 +471,9 @@ const printSimpleTable = ({ title, subtitle, rows }) => {
           tr { break-inside: avoid; }
         </style>
       </head>
-
       <body>
         <h1>${escapeHtml(title)}</h1>
         <div class="subtitle">${escapeHtml(subtitle || "")}</div>
-
         <table>
           <thead>
             <tr>
@@ -748,8 +744,8 @@ const parseNextOrderWorkbook = (workbook, sourceFileName = "") => {
   const voyageDays = toNumber(rows[5]?.[1]);
   const daysUntilArrival = getDaysBetweenCells(rawOrderDate, rawArrivalDate);
 
-  const futureOrderColumns = [5, 6, 7, 8, 9, 10, 11, 12, 13]; // F:N
-  const pastConsumptionColumns = [34, 35, 36, 37, 38, 39]; // AI:AN
+  const futureOrderColumns = [5, 6, 7, 8, 9, 10, 11, 12, 13];
+  const pastConsumptionColumns = [34, 35, 36, 37, 38, 39];
 
   const historicalSailorDays = pastConsumptionColumns.reduce(
     (sum, colIndex) =>
@@ -772,13 +768,8 @@ const parseNextOrderWorkbook = (workbook, sourceFileName = "") => {
 
     const stockOnHand = toNumber(row[3]);
     const parLevel = toNumber(row[16]);
-
-    // Column Y only.
-    // This is used for Order vs Par report comparison.
-    // Do not replace this with F:N future orders.
     const onboardOrderedQty = toNumber(row[ONBOARD_ORDERED_QTY_COLUMN_INDEX]);
 
-    // F:N future orders remain used for estimated arrival coverage in main logic.
     const futureOrders = futureOrderColumns.reduce(
       (sum, colIndex) => sum + toNumber(row[colIndex]),
       0
@@ -805,9 +796,6 @@ const parseNextOrderWorkbook = (workbook, sourceFileName = "") => {
       stockOnHand + futureOrders - consumptionUntilArrival;
 
     const preArrivalShortage = Math.max(-estimatedQtyAtArrival, 0);
-
-    // If arrival estimate is negative, we highlight the shortage,
-    // but we do NOT add the negative amount to the next order.
     const usableQtyAtArrivalForOrder = Math.max(estimatedQtyAtArrival, 0);
 
     const voyageNeed = averageConsumptionPerDay * voyageDays;
@@ -827,9 +815,6 @@ const parseNextOrderWorkbook = (workbook, sourceFileName = "") => {
         : normalSuggestedOrder;
 
     const currentUsageSuggestedPar = targetQtyForVoyage;
-
-    // This is for the Order vs Par report only.
-    // It does not change the main order calculation.
     const currentUsageSuggestedPar7Days =
       averageConsumptionPerDay * PAR_REPORT_DAYS * ORDER_BUFFER_MULTIPLIER;
 
@@ -894,10 +879,12 @@ const parseNextOrderWorkbook = (workbook, sourceFileName = "") => {
     orderRows: parsedRows,
   });
 
+  const sortedRows = parsedRows.sort(
+    (a, b) => Number(a.excelRow || 0) - Number(b.excelRow || 0)
+  );
+
   return {
-    rows: parsedRows.sort(
-      (a, b) => Number(a.excelRow || 0) - Number(b.excelRow || 0)
-    ),
+    rows: sortedRows,
     fmlRows,
     fmlMissingRows,
     fmlRunningLowRows,
@@ -913,22 +900,22 @@ const parseNextOrderWorkbook = (workbook, sourceFileName = "") => {
       voyageDays,
       daysUntilArrival,
       historicalSailorDays,
-      totalItems: parsedRows.length,
-      itemsNeedingOrder: parsedRows.filter((item) => item.suggestedOrder > 0)
+      totalItems: sortedRows.length,
+      itemsNeedingOrder: sortedRows.filter((item) => item.suggestedOrder > 0)
         .length,
-      coveredItems: parsedRows.filter(
+      coveredItems: sortedRows.filter(
         (item) => item.suggestedOrder <= 0 && item.averageConsumptionPerDay > 0
       ).length,
-      reviewItems: parsedRows.filter(
+      reviewItems: sortedRows.filter(
         (item) => item.averageConsumptionPerDay <= 0
       ).length,
-      preArrivalShortageItems: parsedRows.filter(
+      preArrivalShortageItems: sortedRows.filter(
         (item) => item.preArrivalShortage > 0
       ).length,
-      fastSpoilageItems: parsedRows.filter(
+      fastSpoilageItems: sortedRows.filter(
         (item) => item.produceRuleType === "fast"
       ).length,
-      longHoldProduceItems: parsedRows.filter(
+      longHoldProduceItems: sortedRows.filter(
         (item) => item.produceRuleType === "long"
       ).length,
       fmlRows: fmlRows.length,
@@ -1114,14 +1101,10 @@ const getRegionalCandidateRowsForItem = (item, regionalLookup) => {
   const itemCode = normalizeCode(item?.code);
   const itemExactNameKey = getExactProductNameKey(item?.product || item?.name);
 
-  // Important:
-  // If item has a code, last-year comparison matches by code only.
-  // No loose name matching is used.
   if (itemCode) {
     return regionalLookup.byCode.get(itemCode) || [];
   }
 
-  // If item has no code, match only exact normalized product description.
   if (itemExactNameKey) {
     return regionalLookup.byExactName.get(itemExactNameKey) || [];
   }
@@ -1528,6 +1511,17 @@ export default function GenerateNextOrder({
     [orderRows]
   );
 
+  const getOrderVsSuggestedExportRows = (rows = visibleOrderRows) =>
+    rows.map((item, index) => ({
+      Line: index + 1,
+      ExcelRow: item.excelRow,
+      Code: item.code || "",
+      Product: item.product || "",
+      UOM: item.uom || "",
+      ShipOrderColumnY: Number(item.onboardOrderedQty ?? 0),
+      SuggestedOrder: Number(item.suggestedOrder ?? 0),
+    }));
+
   const getOrderExportRows = (rows = visibleOrderRows) =>
     rows.map((item, index) => ({
       Line: index + 1,
@@ -1536,7 +1530,7 @@ export default function GenerateNextOrder({
       Product: item.product,
       UOM: item.uom,
       StockOnHand: Number(item.stockOnHand || 0),
-      OnboardOrderedQtyColumnY: Number(item.onboardOrderedQty ?? 0),
+      ShipOrderColumnY: Number(item.onboardOrderedQty ?? 0),
       FutureOrdersFtoNUsedForArrivalCoverage: Number(item.futureOrders || 0),
       PastConsumption: Number(item.pastConsumption || 0),
       AverageConsumptionPerDay: Number(item.averageConsumptionPerDay || 0),
@@ -1587,10 +1581,6 @@ export default function GenerateNextOrder({
             })
           : allRegionsStats;
 
-      // IMPORTANT:
-      // This is column Y only.
-      // Do not use futureOrders here.
-      // Do not use || futureOrders as fallback, because blank/zero column Y must stay 0.
       const onboardOrderedQty = Number(item.onboardOrderedQty ?? 0);
       const suggestedOrderQty = Number(item.suggestedOrder ?? 0);
 
@@ -1600,37 +1590,29 @@ export default function GenerateNextOrder({
         Code: item.code || "",
         Product: item.product,
         UOM: item.uom,
-
-        OnboardOrderedQtyColumnY: onboardOrderedQty,
+        ShipOrderColumnY: onboardOrderedQty,
         SuggestedOrderQty: suggestedOrderQty,
-        DifferenceSuggestedVsOnboardOrdered:
-          suggestedOrderQty - onboardOrderedQty,
-
+        DifferenceSuggestedVsShipOrder: suggestedOrderQty - onboardOrderedQty,
         CurrentParLevelQ: Number(item.parLevel ?? 0),
         CurrentUsageAvgPerDay: Number(item.averageConsumptionPerDay ?? 0),
         SuggestedParCurrentUsage7Days: Number(
           item.currentUsageSuggestedPar7Days ?? 0
         ),
-
         YearlyAllRegionsAvgPerDay: Number(allRegionsStats.avgDailyQty ?? 0),
         YearlyAllRegionsSuggestedPar7Days: Number(
           allRegionsStats.suggestedPar ?? 0
         ),
-
         SelectedMarket:
           selectedRegionalConsumptionRegion &&
           selectedRegionalConsumptionRegion !== YEARLY_REGION_ALL
             ? selectedRegionalConsumptionRegion
             : "All regions",
-
         YearlySelectedMarketAvgPerDay: Number(
           selectedMarketStats.avgDailyQty ?? 0
         ),
-
         YearlySelectedMarketSuggestedPar7Days: Number(
           selectedMarketStats.suggestedPar ?? 0
         ),
-
         PreArrivalShortageHighlightedOnly: Number(item.preArrivalShortage ?? 0),
         EstimatedQtyAtArrival: Number(item.estimatedQtyAtArrival ?? 0),
         FreshProduceRule: item.produceRuleLabel || "",
@@ -1654,16 +1636,25 @@ export default function GenerateNextOrder({
     () => parComparisonRows.slice(0, PAR_REPORT_DISPLAY_LIMIT),
     [parComparisonRows]
   );
-const getOrderVsSuggestedExportRows = (rows = visibleOrderRows) =>
-  rows.map((item, index) => ({
-    Line: index + 1,
-    ExcelRow: item.excelRow,
-    Code: item.code || "",
-    Product: item.product || "",
-    UOM: item.uom || "",
-    ShipOrderColumnY: Number(item.onboardOrderedQty ?? 0),
-    SuggestedOrder: Number(item.suggestedOrder ?? 0),
-  }));
+
+  const exportOrderVsSuggestedReport = () => {
+    exportRowsToExcel(
+      getOrderVsSuggestedExportRows(visibleOrderRows),
+      "Order vs Suggested",
+      `order-vs-suggested-${activeShipCode || userShip || "ship"}.xlsx`
+    );
+  };
+
+  const printOrderVsSuggestedReport = () => {
+    printSimpleTable({
+      title: "Order vs Suggested Order",
+      subtitle: `${activeShipName} • Same order as uploaded file • ${
+        orderFileName || "No file name"
+      }`,
+      rows: getOrderVsSuggestedExportRows(visibleOrderRows),
+    });
+  };
+
   const exportOrderView = () => {
     exportRowsToExcel(
       getOrderExportRows(),
@@ -1680,23 +1671,6 @@ const getOrderVsSuggestedExportRows = (rows = visibleOrderRows) =>
     });
   };
 
-  const exportOrderVsSuggestedReport = () => {
-  exportRowsToExcel(
-    getOrderVsSuggestedExportRows(visibleOrderRows),
-    "Order vs Suggested",
-    `order-vs-suggested-${activeShipCode || userShip || "ship"}.xlsx`
-  );
-};
-
-const printOrderVsSuggestedReport = () => {
-  printSimpleTable({
-    title: "Order vs Suggested Order",
-    subtitle: `${activeShipName} • Same order as uploaded file • ${
-      orderFileName || "No file name"
-    }`,
-    rows: getOrderVsSuggestedExportRows(visibleOrderRows),
-  });
-};
   const exportParComparisonReport = () => {
     exportRowsToExcel(
       getParComparisonExportRows(visibleOrderRows),
@@ -1847,7 +1821,7 @@ const printOrderVsSuggestedReport = () => {
             Average/day: <strong>{formatRegionalQty(stats.avgDailyQty)}</strong>
           </div>
           <div>
-            Suggested par for {formatQty(stats.parDays)} day(s) + 25%:{" "}
+            Suggested par for {formatQty(stats.parDays)} day(s) + 25%: {" "}
             <strong>{formatRegionalQty(stats.suggestedPar)}</strong>
           </div>
           <div>
@@ -1901,7 +1875,7 @@ const printOrderVsSuggestedReport = () => {
               📄 File: <strong>{orderFileName || "Not uploaded"}</strong>
             </div>
             <div>
-              🚢 Ship detected:{" "}
+              🚢 Ship detected: {" "}
               <strong>
                 {orderMeta.shipName
                   ? `${orderMeta.shipName} → ${activeShipName}`
@@ -1912,32 +1886,32 @@ const printOrderVsSuggestedReport = () => {
               📅 Order date B2: <strong>{orderMeta.orderDate || "N/A"}</strong>
             </div>
             <div>
-              📅 Arrival date B3:{" "}
+              📅 Arrival date B3: {" "}
               <strong>{orderMeta.arrivalDate || "N/A"}</strong>
             </div>
             <div>
-              ⏱️ Days until arrival:{" "}
+              ⏱️ Days until arrival: {" "}
               <strong>{formatQty(orderMeta.daysUntilArrival || 0)}</strong>
             </div>
             <div>
-              🚢 Voyage days B6:{" "}
+              🚢 Voyage days B6: {" "}
               <strong>{formatQty(orderMeta.voyageDays || 0)}</strong>
             </div>
             <div>
               🧮 Main order buffer: <strong>{ORDER_BUFFER_PERCENT}%</strong>
             </div>
             <div>
-              📦 Column Y ordered qty:{" "}
-              <strong>Used only in Order vs Par comparison</strong>
+              📦 Column Y ship order qty: {" "}
+              <strong>Used in Order vs Suggested and Order vs Par</strong>
             </div>
             <div>
-              🥬 Fresh produce spoilage rules:{" "}
+              🥬 Fresh produce spoilage rules: {" "}
               <strong>
                 {orderMeta.isFreshProduceOrder ? "Applied" : "Not applied"}
               </strong>
             </div>
             <div>
-              📊 Order vs Par report basis:{" "}
+              📊 Order vs Par report basis: {" "}
               <strong>{PAR_REPORT_DAYS} days + {ORDER_BUFFER_PERCENT}%</strong>
             </div>
             {loading && <div>Loading...</div>}
@@ -1951,11 +1925,11 @@ const printOrderVsSuggestedReport = () => {
 
           <div style={styles.infoBox}>
             <div>
-              📄 Yearly regional file:{" "}
+              📄 Yearly regional file: {" "}
               <strong>{yearlyRegionalFileName || "Not loaded"}</strong>
             </div>
             <div>
-              🧭 Selected market:{" "}
+              🧭 Selected market: {" "}
               <strong>
                 {!selectedRegionalConsumptionRegion
                   ? "Not selected"
@@ -1965,7 +1939,7 @@ const printOrderVsSuggestedReport = () => {
               </strong>
             </div>
             <div>
-              🔎 Match rule:{" "}
+              🔎 Match rule: {" "}
               <strong>
                 Code only. If no code, exact product description only.
               </strong>
@@ -2029,33 +2003,33 @@ const printOrderVsSuggestedReport = () => {
           <div>
             <h2 style={styles.productTitle}>🧭 Reports</h2>
             <p style={{ ...styles.emptyText, margin: 0 }}>
-              Suggested order stays simple. Use More Info, Recipe Usage, and
-              Order vs Par for deeper checks.
+              Main report is Order vs Suggested. Products stay in the same order
+              as the uploaded Excel file.
             </p>
           </div>
 
           <div style={styles.headerActions}>
-  <button
-    type="button"
-    style={{
-      ...styles.viewModeButton,
-      ...(view === "orderVsSuggested" ? styles.viewModeButtonActive : {}),
-    }}
-    onClick={() => setView("orderVsSuggested")}
-  >
-    Order vs Suggested
-  </button>
+            <button
+              type="button"
+              style={{
+                ...styles.viewModeButton,
+                ...(view === "orderVsSuggested" ? styles.viewModeButtonActive : {}),
+              }}
+              onClick={() => setView("orderVsSuggested")}
+            >
+              Order vs Suggested
+            </button>
 
-  <button
-    type="button"
-    style={{
-      ...styles.viewModeButton,
-      ...(view === "order" ? styles.viewModeButtonActive : {}),
-    }}
-    onClick={() => setView("order")}
-  >
-    Suggested Order
-  </button>
+            <button
+              type="button"
+              style={{
+                ...styles.viewModeButton,
+                ...(view === "order" ? styles.viewModeButtonActive : {}),
+              }}
+              onClick={() => setView("order")}
+            >
+              Suggested Order
+            </button>
 
             <button
               type="button"
@@ -2110,269 +2084,258 @@ const printOrderVsSuggestedReport = () => {
         )}
 
         {(view === "orderVsSuggested" ||
-  view === "order" ||
-  view === "consumption" ||
-  view === "parReport") &&
-  orderRows.length > 0 && (
-    <>
-      <div style={styles.infoBox}>
-        <div>
-          📦 Items loaded: <strong>{orderMeta.totalItems || 0}</strong>
-        </div>
+          view === "order" ||
+          view === "consumption" ||
+          view === "parReport") &&
+          orderRows.length > 0 && (
+            <>
+              <div style={styles.infoBox}>
+                <div>
+                  📦 Items loaded: <strong>{orderMeta.totalItems || 0}</strong>
+                </div>
+                <div>
+                  🔵 Suggested order items: {" "}
+                  <strong>{orderMeta.itemsNeedingOrder || 0}</strong>
+                </div>
+                <div>
+                  ✅ Covered items: <strong>{orderMeta.coveredItems || 0}</strong>
+                </div>
+                <div>
+                  ⚠️ Review items: <strong>{orderMeta.reviewItems || 0}</strong>
+                </div>
+                <div>
+                  🚨 Short before arrival: {" "}
+                  <strong>{orderMeta.preArrivalShortageItems || 0}</strong>
+                </div>
+                {orderMeta.isFreshProduceOrder && (
+                  <>
+                    <div>
+                      🥬 Quick-spoil produce: {" "}
+                      <strong>{orderMeta.fastSpoilageItems || 0}</strong>
+                    </div>
+                    <div>
+                      🥔 Long-hold produce: {" "}
+                      <strong>{orderMeta.longHoldProduceItems || 0}</strong>
+                    </div>
+                  </>
+                )}
+                <div>
+                  📋 FML rows found: <strong>{fmlRows.length}</strong>
+                </div>
+              </div>
 
-        <div>
-          🔵 Suggested order items:{" "}
-          <strong>{orderMeta.itemsNeedingOrder || 0}</strong>
-        </div>
+              <input
+                placeholder="Search product, code, UOM or status..."
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                style={{ ...styles.searchInput, marginTop: 14 }}
+              />
 
-        <div>
-          ✅ Covered items: <strong>{orderMeta.coveredItems || 0}</strong>
-        </div>
+              <div style={styles.viewModeBox}>
+                <button
+                  type="button"
+                  style={{
+                    ...styles.viewModeButton,
+                    ...(filter === "all" ? styles.viewModeButtonActive : {}),
+                  }}
+                  onClick={() => setFilter("all")}
+                >
+                  All ({filterCounts.all})
+                </button>
 
-        <div>
-          ⚠️ Review items: <strong>{orderMeta.reviewItems || 0}</strong>
-        </div>
+                <button
+                  type="button"
+                  style={{
+                    ...styles.viewModeButton,
+                    ...(filter === "needsOrder" ? styles.viewModeButtonActive : {}),
+                  }}
+                  onClick={() => setFilter("needsOrder")}
+                >
+                  Needs Order ({filterCounts.needsOrder})
+                </button>
 
-        <div>
-          🚨 Short before arrival:{" "}
-          <strong>{orderMeta.preArrivalShortageItems || 0}</strong>
-        </div>
+                <button
+                  type="button"
+                  style={{
+                    ...styles.viewModeButton,
+                    ...(filter === "covered" ? styles.viewModeButtonActive : {}),
+                  }}
+                  onClick={() => setFilter("covered")}
+                >
+                  Covered ({filterCounts.covered})
+                </button>
 
-        {orderMeta.isFreshProduceOrder && (
-          <>
-            <div>
-              🥬 Quick-spoil produce:{" "}
-              <strong>{orderMeta.fastSpoilageItems || 0}</strong>
+                <button
+                  type="button"
+                  style={{
+                    ...styles.viewModeButton,
+                    ...(filter === "review" ? styles.viewModeButtonActive : {}),
+                  }}
+                  onClick={() => setFilter("review")}
+                >
+                  Review ({filterCounts.review})
+                </button>
+
+                <button
+                  type="button"
+                  style={{
+                    ...styles.viewModeButton,
+                    ...(filter === "shortBeforeArrival"
+                      ? styles.viewModeButtonActive
+                      : {}),
+                  }}
+                  onClick={() => setFilter("shortBeforeArrival")}
+                >
+                  Short Before Arrival ({filterCounts.shortBeforeArrival})
+                </button>
+
+                {orderMeta.isFreshProduceOrder && (
+                  <>
+                    <button
+                      type="button"
+                      style={{
+                        ...styles.viewModeButton,
+                        ...(filter === "fastSpoilage"
+                          ? styles.viewModeButtonActive
+                          : {}),
+                      }}
+                      onClick={() => setFilter("fastSpoilage")}
+                    >
+                      Quick Spoil ({filterCounts.fastSpoilage})
+                    </button>
+
+                    <button
+                      type="button"
+                      style={{
+                        ...styles.viewModeButton,
+                        ...(filter === "longHoldProduce"
+                          ? styles.viewModeButtonActive
+                          : {}),
+                      }}
+                      onClick={() => setFilter("longHoldProduce")}
+                    >
+                      Long Hold ({filterCounts.longHoldProduce})
+                    </button>
+                  </>
+                )}
+
+                {view === "parReport" ? (
+                  <>
+                    <button
+                      type="button"
+                      style={styles.backButton}
+                      onClick={printParComparisonReport}
+                    >
+                      🖨️ Print Order vs Par
+                    </button>
+
+                    <button
+                      type="button"
+                      style={styles.primaryButton}
+                      onClick={exportParComparisonReport}
+                    >
+                      📥 Export Order vs Par
+                    </button>
+                  </>
+                ) : view === "orderVsSuggested" ? (
+                  <>
+                    <button
+                      type="button"
+                      style={styles.backButton}
+                      onClick={printOrderVsSuggestedReport}
+                    >
+                      🖨️ Print Order vs Suggested
+                    </button>
+
+                    <button
+                      type="button"
+                      style={styles.primaryButton}
+                      onClick={exportOrderVsSuggestedReport}
+                    >
+                      📥 Export Order vs Suggested
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      style={styles.backButton}
+                      onClick={printOrderView}
+                    >
+                      🖨️ Print
+                    </button>
+
+                    <button
+                      type="button"
+                      style={styles.primaryButton}
+                      onClick={exportOrderView}
+                    >
+                      📥 Export Excel
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {visibleOrderRows.length === 0 && (
+                <p style={styles.emptyText}>
+                  No products match this search/filter.
+                </p>
+              )}
+            </>
+          )}
+
+        {view === "orderVsSuggested" && orderRows.length > 0 && (
+          <div style={localStyles.reportList}>
+            <div style={styles.infoBox}>
+              <div>
+                📄 Report: <strong>Order vs Suggested Order</strong>
+              </div>
+              <div>
+                🚢 Ship: <strong>{activeShipName}</strong>
+              </div>
+              <div>
+                📦 Rows shown: <strong>{visibleOrderRows.length}</strong>
+              </div>
+              <div>
+                📘 Order source: {" "}
+                <strong>Ship Order = Excel column Y only</strong>
+              </div>
+              <div>
+                ✅ Product order: {" "}
+                <strong>Same order as uploaded Excel file</strong>
+              </div>
             </div>
 
-            <div>
-              🥔 Long-hold produce:{" "}
-              <strong>{orderMeta.longHoldProduceItems || 0}</strong>
-            </div>
-          </>
-        )}
+            {visibleOrderRows.map((item, index) => (
+              <div
+                key={`order-vs-suggested-${item.excelRow}-${item.code}-${index}`}
+                style={localStyles.reportRow}
+              >
+                <div>
+                  <strong>
+                    {index + 1}. {item.product}
+                  </strong>
+                  <div style={styles.recipeMeta}>
+                    Code: {item.code || "N/A"} • UOM: {item.uom || "N/A"} • Excel row {" "}
+                    {item.excelRow}
+                  </div>
+                </div>
 
-        <div>
-          📋 FML rows found: <strong>{fmlRows.length}</strong>
-        </div>
-      </div>
+                <div style={localStyles.metricGrid}>
+                  <div style={localStyles.metricBox}>
+                    <span>Ship Order</span>
+                    <strong>{formatQty(item.onboardOrderedQty)}</strong>
+                  </div>
 
-      <input
-        placeholder="Search product, code, UOM or status..."
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-        style={{ ...styles.searchInput, marginTop: 14 }}
-      />
-
-      <div style={styles.viewModeBox}>
-        <button
-          type="button"
-          style={{
-            ...styles.viewModeButton,
-            ...(filter === "all" ? styles.viewModeButtonActive : {}),
-          }}
-          onClick={() => setFilter("all")}
-        >
-          All ({filterCounts.all})
-        </button>
-
-        <button
-          type="button"
-          style={{
-            ...styles.viewModeButton,
-            ...(filter === "needsOrder" ? styles.viewModeButtonActive : {}),
-          }}
-          onClick={() => setFilter("needsOrder")}
-        >
-          Needs Order ({filterCounts.needsOrder})
-        </button>
-
-        <button
-          type="button"
-          style={{
-            ...styles.viewModeButton,
-            ...(filter === "covered" ? styles.viewModeButtonActive : {}),
-          }}
-          onClick={() => setFilter("covered")}
-        >
-          Covered ({filterCounts.covered})
-        </button>
-
-        <button
-          type="button"
-          style={{
-            ...styles.viewModeButton,
-            ...(filter === "review" ? styles.viewModeButtonActive : {}),
-          }}
-          onClick={() => setFilter("review")}
-        >
-          Review ({filterCounts.review})
-        </button>
-
-        <button
-          type="button"
-          style={{
-            ...styles.viewModeButton,
-            ...(filter === "shortBeforeArrival"
-              ? styles.viewModeButtonActive
-              : {}),
-          }}
-          onClick={() => setFilter("shortBeforeArrival")}
-        >
-          Short Before Arrival ({filterCounts.shortBeforeArrival})
-        </button>
-
-        {orderMeta.isFreshProduceOrder && (
-          <>
-            <button
-              type="button"
-              style={{
-                ...styles.viewModeButton,
-                ...(filter === "fastSpoilage"
-                  ? styles.viewModeButtonActive
-                  : {}),
-              }}
-              onClick={() => setFilter("fastSpoilage")}
-            >
-              Quick Spoil ({filterCounts.fastSpoilage})
-            </button>
-
-            <button
-              type="button"
-              style={{
-                ...styles.viewModeButton,
-                ...(filter === "longHoldProduce"
-                  ? styles.viewModeButtonActive
-                  : {}),
-              }}
-              onClick={() => setFilter("longHoldProduce")}
-            >
-              Long Hold ({filterCounts.longHoldProduce})
-            </button>
-          </>
-        )}
-
-        {view === "parReport" ? (
-          <>
-            <button
-              type="button"
-              style={styles.backButton}
-              onClick={printParComparisonReport}
-            >
-              🖨️ Print Order vs Par
-            </button>
-
-            <button
-              type="button"
-              style={styles.primaryButton}
-              onClick={exportParComparisonReport}
-            >
-              📥 Export Order vs Par
-            </button>
-          </>
-        ) : view === "orderVsSuggested" ? (
-          <>
-            <button
-              type="button"
-              style={styles.backButton}
-              onClick={printOrderVsSuggestedReport}
-            >
-              🖨️ Print Order vs Suggested
-            </button>
-
-            <button
-              type="button"
-              style={styles.primaryButton}
-              onClick={exportOrderVsSuggestedReport}
-            >
-              📥 Export Order vs Suggested
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              style={styles.backButton}
-              onClick={printOrderView}
-            >
-              🖨️ Print
-            </button>
-
-            <button
-              type="button"
-              style={styles.primaryButton}
-              onClick={exportOrderView}
-            >
-              📥 Export Excel
-            </button>
-          </>
-        )}
-      </div>
-
-      {visibleOrderRows.length === 0 && (
-        <p style={styles.emptyText}>
-          No products match this search/filter.
-        </p>
-      )}
-    </>
-  )}
-              {view === "orderVsSuggested" && orderRows.length > 0 && (
-  <div style={localStyles.reportList}>
-    <div style={styles.infoBox}>
-      <div>
-        📄 Report: <strong>Order vs Suggested Order</strong>
-      </div>
-
-      <div>
-        🚢 Ship: <strong>{activeShipName}</strong>
-      </div>
-
-      <div>
-        📦 Rows shown: <strong>{visibleOrderRows.length}</strong>
-      </div>
-
-      <div>
-        📘 Order source:{" "}
-        <strong>Ship Order = Excel column Y only</strong>
-      </div>
-
-      <div>
-        ✅ Product order:{" "}
-        <strong>Same order as uploaded Excel file</strong>
-      </div>
-    </div>
-
-    {visibleOrderRows.map((item, index) => (
-      <div
-        key={`order-vs-suggested-${item.excelRow}-${item.code}-${index}`}
-        style={localStyles.reportRow}
-      >
-        <div>
-          <strong>
-            {index + 1}. {item.product}
-          </strong>
-
-          <div style={styles.recipeMeta}>
-            Code: {item.code || "N/A"} • UOM: {item.uom || "N/A"} • Excel row{" "}
-            {item.excelRow}
+                  <div style={localStyles.metricBoxStrong}>
+                    <span>Suggested Order</span>
+                    <strong>{formatQty(item.suggestedOrder)}</strong>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
-
-        <div style={localStyles.metricGrid}>
-          <div style={localStyles.metricBox}>
-            <span>Ship Order</span>
-            <strong>{formatQty(item.onboardOrderedQty)}</strong>
-          </div>
-
-          <div style={localStyles.metricBoxStrong}>
-            <span>Suggested Order</span>
-            <strong>{formatQty(item.suggestedOrder)}</strong>
-          </div>
-        </div>
-      </div>
-    ))}
-  </div>
-)}
+        )}
 
         {view === "order" && orderRows.length > 0 && (
           <div style={localStyles.orderGrid}>
@@ -2394,8 +2357,8 @@ const printOrderVsSuggestedReport = () => {
                   <div>
                     <div style={localStyles.productName}>{item.product}</div>
                     <div style={styles.recipeMeta}>
-                      Code: {item.code || "N/A"} • UOM: {item.uom || "N/A"} •
-                      Row {item.excelRow}
+                      Code: {item.code || "N/A"} • UOM: {item.uom || "N/A"} • Row {" "}
+                      {item.excelRow}
                     </div>
                   </div>
 
@@ -2450,19 +2413,19 @@ const printOrderVsSuggestedReport = () => {
 
                 {Number(item.preArrivalShortage || 0) > 0 && (
                   <div style={localStyles.compactBad}>
-  Short before arrival: {formatQty(item.preArrivalShortage)}.
-  Highlight only, not added to next order.
-</div>
+                    Short before arrival: {formatQty(item.preArrivalShortage)}.
+                    Highlight only, not added to next order.
+                  </div>
                 )}
 
                 {orderMeta.isFreshProduceOrder && item.produceRuleType !== "standard" && (
                   <div
-  style={
-    item.produceRuleType === "fast"
-      ? localStyles.compactWarning
-      : localStyles.compactInfoBox
-  }
->
+                    style={
+                      item.produceRuleType === "fast"
+                        ? localStyles.compactWarning
+                        : localStyles.compactInfoBox
+                    }
+                  >
                     {item.produceRuleLabel}
                     {item.produceOrderFullTarget
                       ? " — order full target quantity."
@@ -2472,11 +2435,11 @@ const printOrderVsSuggestedReport = () => {
 
                 <div style={localStyles.compactInfoBox}>
                   <div>
-                    Voyage need + 25% buffer:{" "}
+                    Voyage need + 25% buffer: {" "}
                     <strong>{formatQty(item.targetQtyForVoyage)}</strong>
                   </div>
                   <div>
-                    Coverage after future order:{" "}
+                    Coverage after future order: {" "}
                     <strong
                       style={{
                         color:
@@ -2520,14 +2483,14 @@ const printOrderVsSuggestedReport = () => {
                 <div>
                   <strong>{item.product}</strong>
                   <div style={styles.recipeMeta}>
-                    Code: {item.code || "N/A"} • UOM: {item.uom || "N/A"} • Row{" "}
+                    Code: {item.code || "N/A"} • UOM: {item.uom || "N/A"} • Row {" "}
                     {item.excelRow}
                   </div>
                 </div>
 
                 <div style={localStyles.reportMetrics}>
                   <span>Stock: {formatQty(item.stockOnHand)}</span>
-                  <span>Ordered Y: {formatQty(item.onboardOrderedQty)}</span>
+                  <span>Ship order Y: {formatQty(item.onboardOrderedQty)}</span>
                   <span>Future F:N: {formatQty(item.futureOrders)}</span>
                   <span>Past: {formatQty(item.pastConsumption)}</span>
                   <span>Avg/day: {formatQty(item.averageConsumptionPerDay)}</span>
@@ -2536,12 +2499,10 @@ const printOrderVsSuggestedReport = () => {
                   <span>Suggested: {formatQty(item.suggestedOrder)}</span>
                   <span>Current par Q: {formatQty(item.parLevel)}</span>
                   <span>
-                    Suggested par voyage:{" "}
-                    {formatQty(item.currentUsageSuggestedPar)}
+                    Suggested par voyage: {formatQty(item.currentUsageSuggestedPar)}
                   </span>
                   <span>
-                    Suggested par 7 days:{" "}
-                    {formatQty(item.currentUsageSuggestedPar7Days)}
+                    Suggested par 7 days: {formatQty(item.currentUsageSuggestedPar7Days)}
                   </span>
                 </div>
 
@@ -2571,26 +2532,23 @@ const printOrderVsSuggestedReport = () => {
           <div style={localStyles.reportList}>
             <div style={styles.infoBox}>
               <div>
-                This report compares: current onboard ordered quantity from
-                column Y, suggested order quantity, current par Q, current usage
-                suggested 7-day par, and last-year 7-day suggested par.
+                This report compares ship order from column Y, suggested order,
+                current par Q, current usage suggested 7-day par, and last-year
+                7-day suggested par.
               </div>
-
               <div>
                 Report par basis: <strong>7 days + {ORDER_BUFFER_PERCENT}%</strong>
               </div>
-
               <div>
-                Last-year match rule:{" "}
+                Last-year match rule: {" "}
                 <strong>
                   code only; if no code, exact normalized product description only.
                 </strong>
               </div>
-
               <div>
                 Main order calculation still uses F:N future orders for arrival
                 coverage. This report compares suggested order only against
-                column Y ordered quantity.
+                column Y ship order quantity.
               </div>
             </div>
 
@@ -2603,10 +2561,10 @@ const printOrderVsSuggestedReport = () => {
             )}
 
             {displayedParComparisonRows.map((row, index) => {
-              const orderedColumnY = Number(row.OnboardOrderedQtyColumnY ?? 0);
+              const orderedColumnY = Number(row.ShipOrderColumnY ?? 0);
               const suggestedOrder = Number(row.SuggestedOrderQty ?? 0);
               const difference = Number(
-                row.DifferenceSuggestedVsOnboardOrdered ?? 0
+                row.DifferenceSuggestedVsShipOrder ?? 0
               );
 
               return (
@@ -2618,7 +2576,7 @@ const printOrderVsSuggestedReport = () => {
                     <strong>{row.Product}</strong>
 
                     <div style={styles.recipeMeta}>
-                      Code: {row.Code || "N/A"} • UOM: {row.UOM || "N/A"} • Row{" "}
+                      Code: {row.Code || "N/A"} • UOM: {row.UOM || "N/A"} • Row {" "}
                       {row.ExcelRow}
                     </div>
 
@@ -2631,7 +2589,7 @@ const printOrderVsSuggestedReport = () => {
 
                   <div style={localStyles.parMetricGrid}>
                     <div style={localStyles.metricBox}>
-                      <span>Ordered col Y</span>
+                      <span>Ship order Y</span>
                       <strong>{formatQty(orderedColumnY)}</strong>
                     </div>
 
@@ -2641,7 +2599,7 @@ const printOrderVsSuggestedReport = () => {
                     </div>
 
                     <div style={localStyles.metricBox}>
-                      <span>Suggested - ordered Y</span>
+                      <span>Suggested - ship order</span>
                       <strong
                         style={{
                           color: difference > 0 ? "#b00020" : "#2e7d32",
@@ -2659,23 +2617,17 @@ const printOrderVsSuggestedReport = () => {
 
                     <div style={localStyles.metricBox}>
                       <span>Current usage par 7d</span>
-                      <strong>
-                        {formatQty(row.SuggestedParCurrentUsage7Days)}
-                      </strong>
+                      <strong>{formatQty(row.SuggestedParCurrentUsage7Days)}</strong>
                     </div>
 
                     <div style={localStyles.metricBox}>
                       <span>Year all regions par 7d</span>
-                      <strong>
-                        {formatQty(row.YearlyAllRegionsSuggestedPar7Days)}
-                      </strong>
+                      <strong>{formatQty(row.YearlyAllRegionsSuggestedPar7Days)}</strong>
                     </div>
 
                     <div style={localStyles.metricBox}>
                       <span>Year market par 7d</span>
-                      <strong>
-                        {formatQty(row.YearlySelectedMarketSuggestedPar7Days)}
-                      </strong>
+                      <strong>{formatQty(row.YearlySelectedMarketSuggestedPar7Days)}</strong>
                     </div>
 
                     <div style={localStyles.metricBox}>
@@ -2782,68 +2734,68 @@ const printOrderVsSuggestedReport = () => {
             )}
 
             <div style={localStyles.fmlCompactGrid}>
-  {(view === "fmlMissing"
-    ? visibleFmlMissingRows
-    : visibleFmlRunningLowRows
-  ).map((item, index) => {
-    const reasonText =
-      view === "fmlMissing"
-        ? item.standardOrderRow
-          ? "No order / no use"
-          : "Not in order sheet"
-        : "Running low";
+              {(view === "fmlMissing"
+                ? visibleFmlMissingRows
+                : visibleFmlRunningLowRows
+              ).map((item, index) => {
+                const reasonText =
+                  view === "fmlMissing"
+                    ? item.standardOrderRow
+                      ? "No order / no use"
+                      : "Not in order sheet"
+                    : "Running low";
 
-    return (
-      <div
-        key={`${view}-${item.code}-${item.product}-${index}`}
-        style={{
-          ...localStyles.fmlCompactCard,
-          ...(view === "fmlMissing"
-            ? localStyles.fmlCompactCardMissing
-            : localStyles.fmlCompactCardLow),
-        }}
-      >
-        <div style={localStyles.fmlTopLine}>FML row {item.excelRow}</div>
+                return (
+                  <div
+                    key={`${view}-${item.code}-${item.product}-${index}`}
+                    style={{
+                      ...localStyles.fmlCompactCard,
+                      ...(view === "fmlMissing"
+                        ? localStyles.fmlCompactCardMissing
+                        : localStyles.fmlCompactCardLow),
+                    }}
+                  >
+                    <div style={localStyles.fmlTopLine}>FML row {item.excelRow}</div>
 
-        <div style={localStyles.fmlName}>
-          {item.product || "Unnamed item"}
-        </div>
+                    <div style={localStyles.fmlName}>
+                      {item.product || "Unnamed item"}
+                    </div>
 
-        <div style={localStyles.fmlMeta}>
-          Code: {item.code || "N/A"} • UOM: {item.uom || "N/A"}
-        </div>
+                    <div style={localStyles.fmlMeta}>
+                      Code: {item.code || "N/A"} • UOM: {item.uom || "N/A"}
+                    </div>
 
-        <div style={localStyles.fmlMiniGrid}>
-          <div style={localStyles.fmlMiniBox}>
-            <span>Future</span>
-            <strong>{formatQty(item.futureOrders)}</strong>
-          </div>
+                    <div style={localStyles.fmlMiniGrid}>
+                      <div style={localStyles.fmlMiniBox}>
+                        <span>Future</span>
+                        <strong>{formatQty(item.futureOrders)}</strong>
+                      </div>
 
-          <div style={localStyles.fmlMiniBox}>
-            <span>Past</span>
-            <strong>{formatQty(item.pastConsumption)}</strong>
-          </div>
+                      <div style={localStyles.fmlMiniBox}>
+                        <span>Past</span>
+                        <strong>{formatQty(item.pastConsumption)}</strong>
+                      </div>
 
-          {view === "fmlLow" && (
-            <div style={localStyles.fmlMiniBoxStrong}>
-              <span>Suggest</span>
-              <strong>{formatQty(item.suggestedOrder)}</strong>
-            </div>
-          )}
-        </div>
+                      {view === "fmlLow" && (
+                        <div style={localStyles.fmlMiniBoxStrong}>
+                          <span>Suggest</span>
+                          <strong>{formatQty(item.suggestedOrder)}</strong>
+                        </div>
+                      )}
+                    </div>
 
-        <div style={localStyles.fmlReason}>{reasonText}</div>
+                    <div style={localStyles.fmlReason}>{reasonText}</div>
 
-        <button
-          type="button"
-          style={localStyles.fmlRecipeButton}
-          onClick={() => setSelectedRecipeUsageItem(item)}
-        >
-          🍽️ Recipe / Details
-        </button>
-      </div>
-    );
-  })}
+                    <button
+                      type="button"
+                      style={localStyles.fmlRecipeButton}
+                      onClick={() => setSelectedRecipeUsageItem(item)}
+                    >
+                      🍽️ Recipe / Details
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </>
         )}
@@ -2869,8 +2821,8 @@ const printOrderVsSuggestedReport = () => {
             <h2 style={styles.productTitle}>ℹ️ {selectedInfoItem.product}</h2>
 
             <p style={styles.emptyText}>
-              Code: {selectedInfoItem.code || "N/A"} • UOM:{" "}
-              {selectedInfoItem.uom || "N/A"} • Excel row{" "}
+              Code: {selectedInfoItem.code || "N/A"} • UOM: {" "}
+              {selectedInfoItem.uom || "N/A"} • Excel row {" "}
               {selectedInfoItem.excelRow}
             </p>
 
@@ -2878,29 +2830,27 @@ const printOrderVsSuggestedReport = () => {
               <div style={styles.infoBox}>
                 <strong>Main calculation</strong>
                 <div>
-                  Stock on hand:{" "}
+                  Stock on hand: {" "}
                   <strong>{formatQty(selectedInfoItem.stockOnHand)}</strong>
                 </div>
                 <div>
-                  Column Y ordered qty:{" "}
+                  Ship order column Y: {" "}
                   <strong>{formatQty(selectedInfoItem.onboardOrderedQty)}</strong>
                 </div>
                 <div>
-                  F:N future orders for arrival coverage:{" "}
+                  F:N future orders for arrival coverage: {" "}
                   <strong>{formatQty(selectedInfoItem.futureOrders)}</strong>
                 </div>
                 <div>
-                  Days until arrival:{" "}
+                  Days until arrival: {" "}
                   <strong>{formatQty(selectedInfoItem.daysUntilArrival)}</strong>
                 </div>
                 <div>
-                  Consumption until arrival:{" "}
-                  <strong>
-                    {formatQty(selectedInfoItem.consumptionUntilArrival)}
-                  </strong>
+                  Consumption until arrival: {" "}
+                  <strong>{formatQty(selectedInfoItem.consumptionUntilArrival)}</strong>
                 </div>
                 <div>
-                  Estimated qty at arrival:{" "}
+                  Estimated qty at arrival: {" "}
                   <strong
                     style={{
                       color:
@@ -2913,7 +2863,7 @@ const printOrderVsSuggestedReport = () => {
                   </strong>
                 </div>
                 <div>
-                  Pre-arrival shortage highlighted only:{" "}
+                  Pre-arrival shortage highlighted only: {" "}
                   <strong>{formatQty(selectedInfoItem.preArrivalShortage)}</strong>
                 </div>
               </div>
@@ -2921,39 +2871,33 @@ const printOrderVsSuggestedReport = () => {
               <div style={styles.infoBox}>
                 <strong>Voyage need</strong>
                 <div>
-                  Current average/day:{" "}
-                  <strong>
-                    {formatQty(selectedInfoItem.averageConsumptionPerDay)}
-                  </strong>
+                  Current average/day: {" "}
+                  <strong>{formatQty(selectedInfoItem.averageConsumptionPerDay)}</strong>
                 </div>
                 <div>
-                  Voyage days:{" "}
-                  <strong>{formatQty(selectedInfoItem.voyageDays)}</strong>
+                  Voyage days: <strong>{formatQty(selectedInfoItem.voyageDays)}</strong>
                 </div>
                 <div>
-                  Voyage need:{" "}
-                  <strong>{formatQty(selectedInfoItem.voyageNeed)}</strong>
+                  Voyage need: <strong>{formatQty(selectedInfoItem.voyageNeed)}</strong>
                 </div>
                 <div>
-                  25% order buffer:{" "}
+                  25% order buffer: {" "}
                   <strong>{formatQty(selectedInfoItem.orderBufferQty)}</strong>
                 </div>
                 <div>
-                  Target qty for voyage:{" "}
-                  <strong>
-                    {formatQty(selectedInfoItem.targetQtyForVoyage)}
-                  </strong>
+                  Target qty for voyage: {" "}
+                  <strong>{formatQty(selectedInfoItem.targetQtyForVoyage)}</strong>
                 </div>
               </div>
 
               <div style={styles.infoBox}>
                 <strong>Order decision</strong>
                 <div>
-                  Suggested additional order:{" "}
+                  Suggested additional order: {" "}
                   <strong>{formatQty(selectedInfoItem.suggestedOrder)}</strong>
                 </div>
                 <div>
-                  Coverage after future order:{" "}
+                  Coverage after future order: {" "}
                   <strong
                     style={{
                       color:
@@ -2975,7 +2919,7 @@ const printOrderVsSuggestedReport = () => {
                 <div>{selectedInfoItem.statusDescription}</div>
                 {selectedInfoItem.produceRuleLabel && (
                   <div>
-                    Fresh produce rule:{" "}
+                    Fresh produce rule: {" "}
                     <strong>{selectedInfoItem.produceRuleLabel}</strong>
                   </div>
                 )}
@@ -2984,24 +2928,20 @@ const printOrderVsSuggestedReport = () => {
               <div style={styles.infoBox}>
                 <strong>Par comparison</strong>
                 <div>
-                  Current file par Q:{" "}
+                  Current file par Q: {" "}
                   <strong>{formatQty(selectedInfoItem.parLevel)}</strong>
                 </div>
                 <div>
-                  Suggested par from current usage for voyage:{" "}
-                  <strong>
-                    {formatQty(selectedInfoItem.currentUsageSuggestedPar)}
-                  </strong>
+                  Suggested par from current usage for voyage: {" "}
+                  <strong>{formatQty(selectedInfoItem.currentUsageSuggestedPar)}</strong>
                 </div>
                 <div>
-                  Suggested par from current usage for 7 days:{" "}
-                  <strong>
-                    {formatQty(selectedInfoItem.currentUsageSuggestedPar7Days)}
-                  </strong>
+                  Suggested par from current usage for 7 days: {" "}
+                  <strong>{formatQty(selectedInfoItem.currentUsageSuggestedPar7Days)}</strong>
                 </div>
                 <div>
-                  Order vs Par compares suggested order against:{" "}
-                  <strong>column Y ordered quantity</strong>
+                  Order vs Par compares suggested order against: {" "}
+                  <strong>column Y ship order quantity</strong>
                 </div>
               </div>
             </section>
@@ -3053,7 +2993,7 @@ const printOrderVsSuggestedReport = () => {
             </button>
 
             <h2 style={styles.productTitle}>
-              🍽️ Recipe Usage:{" "}
+              🍽️ Recipe Usage: {" "}
               {selectedRecipeUsageItem.product || selectedRecipeUsageItem.name}
             </h2>
 
@@ -3062,45 +3002,39 @@ const printOrderVsSuggestedReport = () => {
             </p>
 
             <div style={styles.infoBox}>
-  <div>
-    Recipe rows loaded:{" "}
-    <strong>{Math.max((recipeRows || []).length - 1, 0)}</strong>
-  </div>
-
-  <div>
-    Matches found: <strong>{selectedRecipeUsageRows.length}</strong>
-  </div>
-
-  {selectedRecipeUsageItem.excelRow && (
-    <div>
-      FML row: <strong>{selectedRecipeUsageItem.excelRow}</strong>
-    </div>
-  )}
-
-  {selectedRecipeUsageItem.code && (
-    <div>
-      Code: <strong>{selectedRecipeUsageItem.code}</strong>
-    </div>
-  )}
-
-  {selectedRecipeUsageItem.uom && (
-    <div>
-      UOM: <strong>{selectedRecipeUsageItem.uom}</strong>
-    </div>
-  )}
-
-  {selectedRecipeUsageItem.venueText && (
-    <div>
-      FML venue(s): <strong>{selectedRecipeUsageItem.venueText}</strong>
-    </div>
-  )}
-
-  {selectedRecipeUsageItem.reason && (
-    <div>
-      Reason: <strong>{selectedRecipeUsageItem.reason}</strong>
-    </div>
-  )}
-</div>
+              <div>
+                Recipe rows loaded: {" "}
+                <strong>{Math.max((recipeRows || []).length - 1, 0)}</strong>
+              </div>
+              <div>
+                Matches found: <strong>{selectedRecipeUsageRows.length}</strong>
+              </div>
+              {selectedRecipeUsageItem.excelRow && (
+                <div>
+                  FML row: <strong>{selectedRecipeUsageItem.excelRow}</strong>
+                </div>
+              )}
+              {selectedRecipeUsageItem.code && (
+                <div>
+                  Code: <strong>{selectedRecipeUsageItem.code}</strong>
+                </div>
+              )}
+              {selectedRecipeUsageItem.uom && (
+                <div>
+                  UOM: <strong>{selectedRecipeUsageItem.uom}</strong>
+                </div>
+              )}
+              {selectedRecipeUsageItem.venueText && (
+                <div>
+                  FML venue(s): <strong>{selectedRecipeUsageItem.venueText}</strong>
+                </div>
+              )}
+              {selectedRecipeUsageItem.reason && (
+                <div>
+                  Reason: <strong>{selectedRecipeUsageItem.reason}</strong>
+                </div>
+              )}
+            </div>
 
             {selectedRecipeUsageRows.length === 0 ? (
               <p style={styles.emptyText}>
@@ -3146,7 +3080,7 @@ const printOrderVsSuggestedReport = () => {
   );
 }
 
-  const localStyles = {
+const localStyles = {
   orderGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 165px), 1fr))",
@@ -3353,7 +3287,8 @@ const printOrderVsSuggestedReport = () => {
     display: "grid",
     gap: 4,
   },
-      fmlCompactGrid: {
+
+  fmlCompactGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 150px), 1fr))",
     gap: 8,
