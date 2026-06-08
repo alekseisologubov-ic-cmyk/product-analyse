@@ -2109,10 +2109,11 @@ const printOrderVsSuggestedReport = () => {
           </p>
         )}
 
-        {(view === "order" ||
-          view === "consumption" ||
-          view === "parReport") &&
-          orderRows.length > 0 && (
+        {(view === "orderVsSuggested" ||
+  view === "order" ||
+  view === "consumption" ||
+  view === "parReport") &&
+  orderRows.length > 0 && (
             <>
               <div style={styles.infoBox}>
                 <div>
