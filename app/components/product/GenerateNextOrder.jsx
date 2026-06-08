@@ -1269,7 +1269,7 @@ export default function GenerateNextOrder({
 
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [view, setView] = useState("order");
+  const [view, setView] = useState("orderVsSuggested");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [fmlSearch, setFmlSearch] = useState("");
