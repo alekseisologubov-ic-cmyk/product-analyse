@@ -577,8 +577,6 @@ setSelectedEquipment(null);
 setCurrentInventoryItem(null);
 setInventoryQty("");
 setEditingInventoryId(null);
-setCurrentBreakageItem(null);
-setBreakageQty("");
   };
     useEffect(() => {
     if (typeof window === "undefined") return;
