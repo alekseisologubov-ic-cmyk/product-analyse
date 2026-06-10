@@ -79,6 +79,26 @@ import EquipmentInventoryOptions from "./components/equipment/EquipmentInventory
 import EquipmentMusterModule from "./components/equipment/EquipmentMusterModule";
 import AdminDashboard from "./components/admin/AdminDashboard";
 import { AppProvider } from "./context/AppContext";
+import WelcomeStartScreen from "./components/screens/WelcomeStartScreen";
+import EmailAccessScreen from "./components/screens/EmailAccessScreen";
+import ShipSelectionScreen from "./components/screens/ShipSelectionScreen";
+import ModuleSelectionScreen from "./components/screens/ModuleSelectionScreen";
+import AdminScreen from "./components/screens/AdminScreen";
+import ProductOptionsScreen from "./components/screens/ProductOptionsScreen";
+import GenerateNextOrderScreen from "./components/screens/GenerateNextOrderScreen";
+import TrainingScreen from "./components/screens/TrainingScreen";
+import AllergenScreen from "./components/screens/AllergenScreen";
+import TemperatureScreen from "./components/screens/TemperatureScreen";
+import PeopleScheduleScreen from "./components/screens/PeopleScheduleScreen";
+import EquipmentDepartmentSelectionScreen from "./components/screens/EquipmentDepartmentSelectionScreen";
+import BreakageScreen from "./components/screens/BreakageScreen";
+import EquipmentDepartmentOptionsScreen from "./components/screens/EquipmentDepartmentOptionsScreen";
+import EquipmentInventoryOptionsScreen from "./components/screens/EquipmentInventoryOptionsScreen";
+import MakeInventoryScreen from "./components/screens/MakeInventoryScreen";
+import InventoryInUseScreen from "./components/screens/InventoryInUseScreen";
+import WarehouseInventoryScreen from "./components/screens/WarehouseInventoryScreen";
+import EquipmentMusterScreen from "./components/screens/EquipmentMusterScreen";
+import ProductDashboardScreen from "./components/screens/ProductDashboardScreen";
 
 const loadPeopleScheduleModule = () => import("./components/PeopleScheduleModule");
 const PeopleScheduleModule = lazy(loadPeopleScheduleModule);
@@ -6950,651 +6970,225 @@ const exportYearlyRegionalConsumptionReportToExcel = async () => {
 
   if (!loggedIn && !welcomeStarted) {
     return (
-      <main style={styles.welcomePage}>
-        <style>{`
-          @keyframes vvMarquee {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
-          }
-
-          @keyframes vvGlow {
-            0%, 100% { box-shadow: 0 18px 50px rgba(0,0,0,0.18); }
-            50% { box-shadow: 0 22px 70px rgba(176,0,32,0.28); }
-          }
-        `}</style>
-
-        <section style={styles.welcomeHero}>
-          <div style={styles.welcomeGlowCard}>
-            <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.welcomeLogo} />
-
-            <div style={styles.runningLineWrapper}>
-              <div style={styles.runningLineTrack}>
-                <span style={styles.runningLineText}>Use it • Save Time • Be the Reason Someone Smiles Today • </span>
-                <span style={styles.runningLineText}>Use it • Save Time • Be the Reason Someone Smiles Today • </span>
-                <span style={styles.runningLineText}>Use it • Save Time • Be the Reason Someone Smiles Today • </span>
-                <span style={styles.runningLineText}>Use it • Save Time • Be the Reason Someone Smiles Today • </span>
-              </div>
-            </div>
-
-            <div style={styles.ahoyStartBox}>
-              <button
-                style={styles.ahoyStartButton}
-                onClick={() => {
-                  logUsageEvent("welcome_start_clicked", { module: "welcome" });
-                  setWelcomeStarted(true);
-                }}
-                aria-label="Start"
-              >
-                AHOY
-              </button>
-            </div>
-
-            <p style={styles.welcomeSubtitle}>Press AHOY to START.</p>
-            <div style={styles.welcomeFooterNote}></div>
-          </div>
-        </section>
-      </main>
+      <WelcomeStartScreen
+            styles={styles}
+            logUsageEvent={logUsageEvent}
+            setWelcomeStarted={setWelcomeStarted}
+          />
     );
   }
 
   if (!loggedIn && welcomeStarted && !emailConfirmed) {
     return (
-      <main style={styles.page}>
-        <section style={styles.loginCard}>
-          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.logo} />
-          <h1 style={styles.title}>Email Access Code</h1>
-          <p style={styles.subtitle}>Enter your Virgin Voyages email and access code.</p>
-
-          <label style={styles.label}>✉️ Virgin Voyages email</label>
-          <input
-            type="email"
-            value={userEmail}
-            disabled={otpLoading || emailCodeSent}
-            onChange={(e) => {
-              setUserEmail(e.target.value);
-              setEmailError("");
-              setEmailMessage("");
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !emailCodeSent) sendAccessCode();
-            }}
-            placeholder="name@virginvoyages.com"
-            style={styles.searchInput}
-            autoComplete="email"
+      <EmailAccessScreen
+            styles={styles}
+            dashboardRegionalMatchedCount={dashboardRegionalMatchedCount}
+            emailCodeSent={emailCodeSent}
+            emailError={emailError}
+            emailMessage={emailMessage}
+            emailOtpCode={emailOtpCode}
+            filteredProductCostReportRows={filteredProductCostReportRows}
+            otpLoading={otpLoading}
+            productCostReportRows={productCostReportRows}
+            productCostReportRowsWithRegionalPar={productCostReportRowsWithRegionalPar}
+            rememberEmail={rememberEmail}
+            selectedRegionalConsumptionRegion={selectedRegionalConsumptionRegion}
+            sendAccessCode={sendAccessCode}
+            setEmailCodeSent={setEmailCodeSent}
+            setEmailError={setEmailError}
+            setEmailMessage={setEmailMessage}
+            setEmailOtpCode={setEmailOtpCode}
+            setRememberEmail={setRememberEmail}
+            setUserEmail={setUserEmail}
+            setWelcomeStarted={setWelcomeStarted}
+            userEmail={userEmail}
+            userShip={userShip}
+            verifyAccessCode={verifyAccessCode}
+            viewMode={viewMode}
+            YEARLY_REGION_ALL={YEARLY_REGION_ALL}
           />
-
-          {emailCodeSent && (
-            <>
-              <label style={styles.label}>🔐 Access code</label>
-              <input
-                type="password"
-                inputMode="numeric"
-                value={emailOtpCode}
-                disabled={otpLoading}
-                onChange={(e) => {
-                  setEmailOtpCode(e.target.value);
-                  setEmailError("");
-                  setEmailMessage("");
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") verifyAccessCode();
-                }}
-                placeholder="Enter access code..."
-                style={styles.searchInput}
-                autoComplete="one-time-code"
-              />
-            </>
-          )}
-
-          {emailError && <div style={styles.emailError}>{emailError}</div>}
-          {emailMessage && <div style={{ ...styles.infoBox, color: "#2e7d32", fontWeight: "bold" }}>{emailMessage}</div>}
-
-          <label style={styles.checkboxRow}>
-            <input
-              type="checkbox"
-              checked={rememberEmail}
-              onChange={(e) => setRememberEmail(e.target.checked)}
-            />
-            <span>Remember me on this device</span>
-          </label>
-
-          <div style={styles.infoBox}>
-  <div>
-    📦 Products in report:{" "}
-    <strong>{filteredProductCostReportRows.length}</strong> / {productCostReportRows.length}
-  </div>
-
-  <div>
-    🚢 View: <strong>{viewMode === "single" ? userShip : "All Ships"}</strong>
-  </div>
-
-  <div>
-    🌎 Regional par region:{" "}
-    <strong>
-      {selectedRegionalConsumptionRegion === YEARLY_REGION_ALL
-        ? "All regions"
-        : selectedRegionalConsumptionRegion}
-    </strong>
-  </div>
-
-  <div>
-    📈 Regional matches:{" "}
-    <strong>
-      {dashboardRegionalMatchedCount} / {productCostReportRowsWithRegionalPar.length}
-    </strong>
-  </div>
-
-  <div>
-    📘 Source columns: C Venue, I/L/O/R Quantity, J/M/P/S Total Cost, H/K/N/Q Unit Price.
-  </div>
-</div>
-
-          {!emailCodeSent ? (
-            <button style={styles.primaryButton} onClick={sendAccessCode} disabled={otpLoading}>
-              Continue
-            </button>
-          ) : (
-            <>
-              <button style={styles.primaryButton} onClick={verifyAccessCode} disabled={otpLoading}>
-                Verify Code
-              </button>
-              <button
-                style={styles.backButton}
-                onClick={() => {
-                  setEmailCodeSent(false);
-                  setEmailOtpCode("");
-                  setEmailError("");
-                  setEmailMessage("");
-                }}
-                disabled={otpLoading}
-              >
-                Change Email
-              </button>
-            </>
-          )}
-
-          <button
-            style={styles.backButton}
-            onClick={() => {
-              setWelcomeStarted(false);
-              setEmailError("");
-              setEmailMessage("");
-              setEmailOtpCode("");
-              setEmailCodeSent(false);
-            }}
-            disabled={otpLoading}
-          >
-            ← Back to AHOY
-          </button>
-        </section>
-      </main>
     );
   }
 
   if (!loggedIn && welcomeStarted && emailConfirmed) {
     return (
-      <main style={styles.page}>
-        <section style={styles.loginCard}>
-          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.logo} />
-          <h1 style={styles.title}>Choose Your Ship</h1>
-          <p style={styles.subtitle}>Select your vessel to start the dashboard.</p>
-
-          <div style={styles.infoBox}>
-            <div>👤 Signed in as: <strong>{normalizeAppEmail(userEmail)}</strong></div>
-            <button type="button" style={styles.inlineLinkButton} onClick={resetUserEmail}>Use different email</button>
-          </div>
-
-          <label style={styles.label}>🚢 Select your ship</label>
-          <select value={userShip} onChange={(e) => setUserShip(e.target.value)} style={styles.select}>
-            <option value="">Choose ship</option>
-            {SHIPS.map((ship) => (
-  <option key={ship} value={ship}>
-    {getShipDisplayName(ship)}
-  </option>
-))}
-          </select>
-
-          <button
-            style={styles.primaryButton}
-            onClick={() => {
-              if (!userShip) return;
-              logUsageEvent("ship_selected", { ship: userShip, module: "welcome", userEmail: normalizeAppEmail(userEmail) });
-              setLoggedIn(true);
-            }}
-          >
-            Continue
-          </button>
-
-          <button style={styles.backButton} onClick={() => setWelcomeStarted(false)}>
-            ← Back to Start
-          </button>
-        </section>
-      </main>
+      <ShipSelectionScreen
+            styles={styles}
+            getShipDisplayName={getShipDisplayName}
+            logUsageEvent={logUsageEvent}
+            normalizeAppEmail={normalizeAppEmail}
+            resetUserEmail={resetUserEmail}
+            setLoggedIn={setLoggedIn}
+            setUserShip={setUserShip}
+            setWelcomeStarted={setWelcomeStarted}
+            SHIPS={SHIPS}
+            userEmail={userEmail}
+            userShip={userShip}
+          />
     );
   }
 
   if (!module) {
     return (
-      <main style={styles.page}>
-        <header style={styles.header}>
-          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
-          <div style={styles.shipBadge}>🚢 {getShipDisplayName(userShip)}</div>
-        </header>
-
-        <section style={styles.card}>
-          <h2 style={styles.cardTitle}>🧭 Select Module</h2>
-
-          <div style={styles.moduleGrid}>
-  {isAdmin && (
-    <button
-      style={styles.moduleCard}
-      onClick={() => {
-        setModule("admin");
-        logUsageEvent("module_opened", {
-          module: "admin_dashboard",
-          ship: userShip,
-        });
-      }}
-    >
-      <div style={styles.moduleIcon}>🛡️</div>
-      <strong>Admin Dashboard</strong>
-      <span>Usage, inventory status, logs, and admin tools</span>
-    </button>
-  )}
-
-  <button
-    style={styles.moduleCard}
-    onClick={() => {
-      setModule("equipment");
-      setEquipmentDepartment("culinary");
-      setEquipmentMode("");
-      setProductMode("");
-      logUsageEvent("department_opened", {
-        module: "department_culinary",
-        equipmentDepartment: "culinary",
-        ship: userShip,
-      });
-    }}
-  >
-    <div style={styles.moduleIcon}>👨‍🍳</div>
-    <strong>Culinary</strong>
-    <span>Product dashboard, next order, inventory, master list and temperature checks</span>
-  </button>
-
-  <button
-    style={styles.moduleCard}
-    onClick={() => {
-      setModule("equipment");
-      setEquipmentDepartment("bar");
-      setEquipmentMode("");
-      setProductMode("");
-      logUsageEvent("department_opened", {
-        module: "department_bar",
-        equipmentDepartment: "bar",
-        ship: userShip,
-      });
-    }}
-  >
-    <div style={styles.moduleIcon}>🍸</div>
-    <strong>Bar</strong>
-    <span>Generate next order, inventory and master list for Bar equipment</span>
-  </button>
-
-  <button
-    style={styles.moduleCard}
-    onClick={() => {
-      setModule("equipment");
-      setEquipmentDepartment("restaurant");
-      setEquipmentMode("");
-      setProductMode("");
-      logUsageEvent("department_opened", {
-        module: "department_restaurant",
-        equipmentDepartment: "restaurant",
-        ship: userShip,
-      });
-    }}
-  >
-    <div style={styles.moduleIcon}>🍽️</div>
-    <strong>Restaurant</strong>
-   <span>Inventory and master list for Restaurant equipment</span>
-  </button>
-</div>
-        </section>
-      </main>
+      <ModuleSelectionScreen
+            styles={styles}
+            getShipDisplayName={getShipDisplayName}
+            isAdmin={isAdmin}
+            logUsageEvent={logUsageEvent}
+            setEquipmentDepartment={setEquipmentDepartment}
+            setEquipmentMode={setEquipmentMode}
+            setModule={setModule}
+            setProductMode={setProductMode}
+            userShip={userShip}
+          />
     );
   }
 
   if (module === "admin") {
-    if (!isAdmin) {
-      return (
-        <main style={styles.page}>
-          <header style={styles.header}>
-            <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
-            <div style={styles.headerActions}>
-              <button style={styles.backButton} onClick={() => setModule("")}>
-                ← Modules
-              </button>
-              <div style={styles.shipBadge}>🚢 {getShipDisplayName(userShip)}</div>
-            </div>
-          </header>
-
-          <section style={styles.card}>
-            <h2 style={styles.cardTitle}>Access denied</h2>
-            <p style={styles.emptyText}>
-              This dashboard is available only for admin users.
-            </p>
-          </section>
-        </main>
-      );
-    }
-
     return (
-      <AdminDashboard
-        styles={styles}
-        supabase={supabase}
-        userEmail={normalizedUserEmail}
-        userShip={userShip}
-        onBack={() => setModule("")}
-      />
+      <AdminScreen
+            styles={styles}
+            AdminDashboard={AdminDashboard}
+            getShipDisplayName={getShipDisplayName}
+            isAdmin={isAdmin}
+            normalizedUserEmail={normalizedUserEmail}
+            setModule={setModule}
+            supabase={supabase}
+            userShip={userShip}
+          />
     );
   }
 
   if (module === "product" && !productMode) {
     return (
-      <main style={styles.page}>
-        <header style={styles.header}>
-          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
-          <div style={styles.headerActions}>
-            <button style={styles.backButton} onClick={() => setModule("")}>← Modules</button>
-            <div style={styles.shipBadge}>🚢 {getShipDisplayName(userShip)}</div>
-          </div>
-        </header>
-
-        <section style={styles.card}>
-          <h2 style={styles.cardTitle}>📦 Product Options</h2>
-          <p style={styles.emptyText}>Choose whether you want to review products or generate the next order.</p>
-
-          <div style={styles.moduleGrid}>
-            <button
-              style={styles.moduleCard}
-              onClick={() => {
-                setProductMode("dashboard");
-                setProductReportView("main");
-                logUsageEvent("product_option_opened", { module: "product_dashboard", ship: userShip });
-              }}
-            >
-              <div style={styles.moduleIcon}>📊</div>
-              <strong>Product Dashboard</strong>
-              <span>Use the existing product dashboard with consumption, recipes, templates, allergens and reports.</span>
-            </button>
-
-            <button
-              style={styles.moduleCard}
-              onClick={() => {
-                setProductMode("nextorder");
-                setNextOrderRows([]);
-                setFmlMissingRows([]);
-        setFmlLowRows([]);
-                setNextOrderSearch("");
-                setFmlMissingSearch("");
-        setFmlLowSearch("");
-                setNextOrderFilter("all");
-                setNextOrderView("order");
-                setNextOrderMessage("");
-                logUsageEvent("product_option_opened", { module: "generate_next_order", ship: userShip });
-              }}
-            >
-              <div style={styles.moduleIcon}>🛒</div>
-              <strong>Generate Next Order</strong>
-              <span>Use the attached ERP template, upload the latest order workbook, and calculate suggested next-order quantities.</span>
-            </button>
-          </div>
-        </section>
-      </main>
+      <ProductOptionsScreen
+            styles={styles}
+            getShipDisplayName={getShipDisplayName}
+            logUsageEvent={logUsageEvent}
+            setFmlLowRows={setFmlLowRows}
+            setFmlLowSearch={setFmlLowSearch}
+            setFmlMissingRows={setFmlMissingRows}
+            setFmlMissingSearch={setFmlMissingSearch}
+            setModule={setModule}
+            setNextOrderFilter={setNextOrderFilter}
+            setNextOrderMessage={setNextOrderMessage}
+            setNextOrderRows={setNextOrderRows}
+            setNextOrderSearch={setNextOrderSearch}
+            setNextOrderView={setNextOrderView}
+            setProductMode={setProductMode}
+            setProductReportView={setProductReportView}
+            userShip={userShip}
+          />
     );
   }
 
   if (module === "product" && productMode === "nextorder") {
     return (
-      <Suspense
-        fallback={
-          <main style={styles.page}>
-            <section style={styles.card}>
-              <h2 style={styles.cardTitle}>🛒 Loading Generate Next Order...</h2>
-              <p style={styles.emptyText}>Preparing order tools.</p>
-            </section>
-          </main>
-        }
-      >
-        <GenerateNextOrder
-  styles={styles}
-  userShip={userShip}
-  onBack={() => {
-    if (equipmentDepartment) {
-      setModule("equipment");
-      setEquipmentMode("");
-      setProductMode("");
-      return;
-    }
-
-    setProductMode("");
-  }}
-  logUsageEvent={logUsageEvent}
-  yearlyRegionalConsumption={yearlyRegionalConsumption}
-  setYearlyRegionalConsumption={setYearlyRegionalConsumption}
-  yearlyRegionalFileName={yearlyRegionalFileName}
-  setYearlyRegionalFileName={setYearlyRegionalFileName}
-  selectedRegionalConsumptionRegion={selectedRegionalConsumptionRegion}
-  setSelectedRegionalConsumptionRegion={setSelectedRegionalConsumptionRegion}
-  regionalParBufferPercent={regionalParBufferPercent}
-  setRegionalParBufferPercent={setRegionalParBufferPercent}
-  recipeRows={recipeRows}
-/>
-      </Suspense>
+      <GenerateNextOrderScreen
+            styles={styles}
+            Suspense={Suspense}
+            equipmentDepartment={equipmentDepartment}
+            GenerateNextOrder={GenerateNextOrder}
+            logUsageEvent={logUsageEvent}
+            recipeRows={recipeRows}
+            regionalParBufferPercent={regionalParBufferPercent}
+            selectedRegionalConsumptionRegion={selectedRegionalConsumptionRegion}
+            setEquipmentMode={setEquipmentMode}
+            setModule={setModule}
+            setProductMode={setProductMode}
+            setRegionalParBufferPercent={setRegionalParBufferPercent}
+            setSelectedRegionalConsumptionRegion={setSelectedRegionalConsumptionRegion}
+            setYearlyRegionalConsumption={setYearlyRegionalConsumption}
+            setYearlyRegionalFileName={setYearlyRegionalFileName}
+            userShip={userShip}
+            yearlyRegionalConsumption={yearlyRegionalConsumption}
+            yearlyRegionalFileName={yearlyRegionalFileName}
+          />
     );
   }
 
   if (module === "training") {
     return (
-      <Suspense
-        fallback={
-          <main style={styles.page}>
-            <section style={styles.card}>
-              <h2 style={styles.cardTitle}>🎓 Loading Training Module...</h2>
-              <p style={styles.emptyText}>Preparing station training tracker.</p>
-            </section>
-          </main>
-        }
-      >
-        <AppProvider
-  value={{
-    supabase,
-    userShip,
-    userEmail: normalizeAppEmail(userEmail),
-    isAdmin,
-    logUsageEvent,
-  }}
->
-  <TrainingModule
-    styles={styles}
-    onBack={() => {
-      if (equipmentDepartment) {
-        setModule("equipment");
-        setEquipmentMode("");
-        return;
-      }
-
-      setModule("");
-    }}
-  />
-</AppProvider>
-      </Suspense>
+      <TrainingScreen
+            styles={styles}
+            Suspense={Suspense}
+            AppProvider={AppProvider}
+            equipmentDepartment={equipmentDepartment}
+            isAdmin={isAdmin}
+            logUsageEvent={logUsageEvent}
+            normalizeAppEmail={normalizeAppEmail}
+            setEquipmentMode={setEquipmentMode}
+            setModule={setModule}
+            supabase={supabase}
+            TrainingModule={TrainingModule}
+            userEmail={userEmail}
+            userShip={userShip}
+          />
     );
   }
 if (module === "allergen") {
-  return (
-    <Suspense
-      fallback={
-        <main style={styles.page}>
-          <section style={styles.card}>
-            <h2 style={styles.cardTitle}>🧬 Loading Allergen Module...</h2>
-            <p style={styles.emptyText}>Preparing recipe allergen matrix.</p>
-          </section>
-        </main>
-      }
-    >
-      <AppProvider
-        value={{
-          supabase,
-          userShip,
-          userEmail: normalizeAppEmail(userEmail),
-          isAdmin,
-          logUsageEvent,
-        }}
-      >
-        <AllergenModule
-  key={`${userShip}-${normalizeAppEmail(userEmail)}`}
-  styles={styles}
-  supabase={supabase}
-  userShip={userShip}
-  userEmail={normalizeAppEmail(userEmail)}
-  isAdmin={isAdmin}
-  recipeRows={recipeRows}
-  setRecipeRows={setRecipeRows}
-  onBack={() => {
-    if (equipmentDepartment) {
-      setModule("equipment");
-      setEquipmentMode("");
-      return;
-    }
-
-    setModule("");
-  }}
-  logUsageEvent={logUsageEvent}
-/>
-      </AppProvider>
-    </Suspense>
-  );
-}
+    return (
+      <AllergenScreen
+            styles={styles}
+            Suspense={Suspense}
+            AppProvider={AppProvider}
+            AllergenModule={AllergenModule}
+            equipmentDepartment={equipmentDepartment}
+            isAdmin={isAdmin}
+            logUsageEvent={logUsageEvent}
+            normalizeAppEmail={normalizeAppEmail}
+            recipeRows={recipeRows}
+            setEquipmentMode={setEquipmentMode}
+            setModule={setModule}
+            setRecipeRows={setRecipeRows}
+            supabase={supabase}
+            userEmail={userEmail}
+            userShip={userShip}
+          />
+    );
+  }
   if (module === "temperature") {
     return (
-      <Suspense
-        fallback={
-          <main style={styles.page}>
-            <section style={styles.card}>
-              <h2 style={styles.cardTitle}>🌡️ Loading Take Temperature...</h2>
-              <p style={styles.emptyText}>Preparing temperature photo tools.</p>
-            </section>
-          </main>
-        }
-      >
-        <TemperatureCheckModule
-          styles={styles}
-          supabase={supabase}
-          userShip={userShip}
-          userEmail={normalizeAppEmail(userEmail)}
-isAdmin={isAdmin}
-          onBack={() => {
-  if (equipmentDepartment) {
-    setModule("equipment");
-    setEquipmentMode("");
-    return;
-  }
-
-  setModule("");
-}}
-          logUsageEvent={logUsageEvent}
-        />
-      </Suspense>
+      <TemperatureScreen
+            styles={styles}
+            Suspense={Suspense}
+            equipmentDepartment={equipmentDepartment}
+            isAdmin={isAdmin}
+            logUsageEvent={logUsageEvent}
+            normalizeAppEmail={normalizeAppEmail}
+            setEquipmentMode={setEquipmentMode}
+            setModule={setModule}
+            supabase={supabase}
+            TemperatureCheckModule={TemperatureCheckModule}
+            userEmail={userEmail}
+            userShip={userShip}
+          />
     );
   }
   if (module === "people") {
     return (
-      <Suspense
-        fallback={
-          <main style={styles.page}>
-            <header style={styles.header}>
-              <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
-              <div style={styles.headerActions}>
-                <button style={styles.backButton} onClick={() => setModule("")}>← Modules</button>
-                <div style={styles.shipBadge}>🚢 Loading</div>
-              </div>
-            </header>
-
-            <section style={styles.card}>
-              <h2 style={styles.cardTitle}>👥 Loading People & Schedule...</h2>
-              <p style={styles.emptyText}>Preparing the rotation planner only when needed.</p>
-            </section>
-          </main>
-        }
-      >
-        <PeopleScheduleModule
-          userShip={userShip}
-          onBack={() => setModule("")}
-          styles={styles}
-          logUsageEvent={logUsageEvent}
-        />
-      </Suspense>
+      <PeopleScheduleScreen
+            styles={styles}
+            Suspense={Suspense}
+            logUsageEvent={logUsageEvent}
+            PeopleScheduleModule={PeopleScheduleModule}
+            setModule={setModule}
+            userShip={userShip}
+          />
     );
   }
 
   if (module === "equipment" && !equipmentDepartment) {
     return (
-      <main style={styles.page}>
-        <header style={styles.header}>
-          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
-          <div style={styles.headerActions}>
-            <button style={styles.backButton} onClick={() => setModule("")}>← Modules</button>
-            <div style={styles.shipBadge}>🚢 {getShipDisplayName(userShip)}</div>
-          </div>
-        </header>
-
-        <section style={styles.card}>
-          <h2 style={styles.cardTitle}>🍽️ Equipment Department</h2>
-          <p style={styles.emptyText}>Choose which operation area you want to work with.</p>
-
-          <div style={styles.moduleGrid}>
-            <button
-              style={styles.moduleCard}
-              onClick={() => {
-                setEquipmentDepartment("culinary");
-                setEquipmentMode("");
-                logUsageEvent("equipment_department_opened", { module: "equipment_culinary", ship: userShip });
-              }}
-            >
-              <div style={styles.moduleIcon}>👨‍🍳</div>
-              <strong>Culinary</strong>
-              <span>Current equipment tools: master list, inventory in use, warehouse and make inventory.</span>
-            </button>
-
-            <button
-              style={styles.moduleCard}
-              onClick={() => {
-                setEquipmentDepartment("bar");
-                setEquipmentMode("");
-                logUsageEvent("equipment_department_opened", { module: "equipment_bar", ship: userShip });
-              }}
-            >
-              <div style={styles.moduleIcon}>🍸</div>
-              <strong>Bar</strong>
-              <span>Master list and inventory tools for Bar equipment.</span>
-            </button>
-
-            <button
-              style={styles.moduleCard}
-              onClick={() => {
-                setEquipmentDepartment("restaurant");
-                setEquipmentMode("");
-                logUsageEvent("equipment_department_opened", { module: "equipment_restaurant", ship: userShip });
-              }}
-            >
-              <div style={styles.moduleIcon}>🍽️</div>
-              <strong>Restaurant</strong>
-              <span>Master list and inventory tools for Restaurant equipment.</span>
-            </button>
-          </div>
-        </section>
-      </main>
+      <EquipmentDepartmentSelectionScreen
+            styles={styles}
+            getShipDisplayName={getShipDisplayName}
+            logUsageEvent={logUsageEvent}
+            setEquipmentDepartment={setEquipmentDepartment}
+            setEquipmentMode={setEquipmentMode}
+            setModule={setModule}
+            userShip={userShip}
+          />
     );
   }
 
@@ -7618,2283 +7212,328 @@ isAdmin={isAdmin}
   const activeEquipmentDepartmentIcon = activeEquipmentDepartment?.icon || "🍽️";
   const hasEquipmentDepartment = Boolean(activeEquipmentDepartment);
 if (module === "breakage" && hasEquipmentDepartment) {
-  return (
-    <Suspense
-      fallback={
-        <main style={styles.page}>
-          <section style={styles.card}>
-            <h2 style={styles.cardTitle}>🧾 Loading Breakage Report...</h2>
-            <p style={styles.emptyText}>
-              Preparing {activeEquipmentDepartmentLabel} equipment master list.
-            </p>
-          </section>
-        </main>
-      }
-    >
-      <BreakageReportModule
-        styles={styles}
-        supabase={supabase}
-        userShip={userShip}
-        userEmail={normalizeAppEmail(userEmail)}
-        equipmentDepartment={equipmentDepartment}
-        activeEquipmentDepartmentLabel={activeEquipmentDepartmentLabel}
-        getShipDisplayName={getShipDisplayName}
-        logUsageEvent={logUsageEvent}
-        onBack={() => {
-          setModule("equipment");
-          setEquipmentMode("");
-        }}
-      />
-    </Suspense>
-  );
-}
+    return (
+      <BreakageScreen
+            styles={styles}
+            Suspense={Suspense}
+            activeEquipmentDepartmentLabel={activeEquipmentDepartmentLabel}
+            BreakageReportModule={BreakageReportModule}
+            equipmentDepartment={equipmentDepartment}
+            getShipDisplayName={getShipDisplayName}
+            logUsageEvent={logUsageEvent}
+            normalizeAppEmail={normalizeAppEmail}
+            setEquipmentMode={setEquipmentMode}
+            setModule={setModule}
+            supabase={supabase}
+            userEmail={userEmail}
+            userShip={userShip}
+          />
+    );
+  }
 
   if (module === "equipment" && hasEquipmentDepartment && !equipmentMode) {
-  return (
-    <EquipmentDepartmentOptions
-      styles={styles}
-      userShip={userShip}
-      equipmentDepartment={equipmentDepartment}
-      activeEquipmentDepartmentLabel={activeEquipmentDepartmentLabel}
-      activeEquipmentDepartmentIcon={activeEquipmentDepartmentIcon}
-      getShipDisplayName={getShipDisplayName}
-      onBackToModules={() => {
-        setModule("");
-        setEquipmentDepartment("");
-        setEquipmentMode("");
-        setProductMode("");
-      }}
-      onOpenProductDashboard={() => {
-        setModule("product");
-        setProductMode("dashboard");
-
-        logUsageEvent("culinary_option_opened", {
-          module: "product_dashboard",
-          equipmentDepartment,
-          ship: userShip,
-        });
-      }}
-      onOpenNextOrder={() => {
-        setModule("product");
-        setProductMode("nextorder");
-        setNextOrderRows([]);
-        setFmlMissingRows([]);
-        setFmlLowRows([]);
-        setNextOrderSearch("");
-        setFmlMissingSearch("");
-        setFmlLowSearch("");
-        setNextOrderFilter("all");
-        setNextOrderView("order");
-        setNextOrderMessage("");
-
-        logUsageEvent("department_option_opened", {
-          module: "generate_next_order",
-          equipmentDepartment,
-          ship: userShip,
-        });
-      }}
-            onOpenAllergen={() => {
-        setSelectedProduct("");
-        setSelectedRecipe(null);
-        setSearch("");
-        setProductCostReportSearch("");
-        setProductReportView("main");
-
-        setModule("allergen");
-
-        logUsageEvent("module_opened", {
-          module: "allergen",
-          equipmentDepartment,
-          ship: userShip,
-        });
-      }}
-      onOpenTraining={() => {
-        setModule("training");
-
-        logUsageEvent("module_opened", {
-          module: "training",
-          equipmentDepartment,
-          ship: userShip,
-        });
-      }}
-      onOpenMuster={() => {
-  setEquipmentMode("muster");
-
-  logUsageEvent("equipment_option_opened", {
-    module: `equipment_${equipmentDepartment}_muster`,
-    equipmentDepartment,
-    ship: userShip,
-  });
-}}
-
-onOpenBreakageReport={() => {
-  setModule("breakage");
-  setEquipmentMode("");
-  setProductMode("");
-
-  logUsageEvent("equipment_option_opened", {
-    module: `equipment_${equipmentDepartment}_breakage_report`,
-    equipmentDepartment,
-    ship: userShip,
-  });
-}}
-
-onOpenInventory={() => {
-        setEquipmentMode("inventory");
-
-        logUsageEvent("equipment_option_opened", {
-          module: `equipment_${equipmentDepartment}_inventory`,
-          equipmentDepartment,
-          ship: userShip,
-        });
-      }}
-      onOpenTemperature={() => {
-        setModule("temperature");
-
-        logUsageEvent("module_opened", {
-          module: "temperature_check",
-          equipmentDepartment,
-          ship: userShip,
-        });
-      }}
-    />
-  );
-}
+    return (
+      <EquipmentDepartmentOptionsScreen
+            styles={styles}
+            activeEquipmentDepartmentIcon={activeEquipmentDepartmentIcon}
+            activeEquipmentDepartmentLabel={activeEquipmentDepartmentLabel}
+            equipmentDepartment={equipmentDepartment}
+            EquipmentDepartmentOptions={EquipmentDepartmentOptions}
+            getShipDisplayName={getShipDisplayName}
+            logUsageEvent={logUsageEvent}
+            setEquipmentDepartment={setEquipmentDepartment}
+            setEquipmentMode={setEquipmentMode}
+            setFmlLowRows={setFmlLowRows}
+            setFmlLowSearch={setFmlLowSearch}
+            setFmlMissingRows={setFmlMissingRows}
+            setFmlMissingSearch={setFmlMissingSearch}
+            setModule={setModule}
+            setNextOrderFilter={setNextOrderFilter}
+            setNextOrderMessage={setNextOrderMessage}
+            setNextOrderRows={setNextOrderRows}
+            setNextOrderSearch={setNextOrderSearch}
+            setNextOrderView={setNextOrderView}
+            setProductCostReportSearch={setProductCostReportSearch}
+            setProductMode={setProductMode}
+            setProductReportView={setProductReportView}
+            setSearch={setSearch}
+            setSelectedProduct={setSelectedProduct}
+            setSelectedRecipe={setSelectedRecipe}
+            userShip={userShip}
+          />
+    );
+  }
 
 if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "inventory") {
-  return (
-    <EquipmentInventoryOptions
-      styles={styles}
-      userShip={userShip}
-      activeEquipmentDepartmentLabel={activeEquipmentDepartmentLabel}
-      getShipDisplayName={getShipDisplayName}
-      onBack={() => setEquipmentMode("")}
-      onOpenInUse={() => {
-        setEquipmentMode("inuse");
-
-        logUsageEvent("equipment_inventory_option_opened", {
-          module: "inventory_in_use",
-          equipmentDepartment,
-          ship: userShip,
-        });
-      }}
-      onOpenWarehouse={() => {
-        setEquipmentMode("warehouse");
-
-        logUsageEvent("equipment_inventory_option_opened", {
-          module: "inventory_warehouse",
-          equipmentDepartment,
-          ship: userShip,
-        });
-      }}
-      onOpenMakeInventory={() => {
-        setEquipmentMode("makeinventory");
-
-        logUsageEvent("equipment_inventory_option_opened", {
-          module: "make_inventory",
-          equipmentDepartment,
-          ship: userShip,
-        });
-      }}
-    />
-  );
-}
-  if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "makeinventory") {
-    const filteredMakeInventoryItems = getFilteredMakeInventoryItems();
-    const myReportRows = getMyInventoryRows();
-    const summaryReportRows = getShipSummaryRows();
-        const stationProgressRows = getInventoryStationProgressRows();
-    const currentStationProgress = getCurrentStationProgress();
-    const allStationsSubmitted = getAllInventoryStationsSubmitted();
-    const startedStations = stationProgressRows.filter((item) => item.status === "started").length;
-    const submittedStations = stationProgressRows.filter((item) => item.status === "submitted").length;
-    const currentStationSubmitted = currentStationProgress?.status === "submitted";
-    const visibleReportRows = getVisibleInventoryReportRows();
-    const summaryStationOptions = getSummaryStationOptions();
-    const activeInventoryStations = getActiveInventoryStationList();
-    const inventoryStationLabel = getInventoryStationLabel();
-    const selectedSummaryStationLabel =
-      summaryStationFilter === "ALL"
-        ? equipmentDepartment === "bar"
-          ? "All Bars"
-          : "All Stations"
-        : summaryStationFilter;
-    const inventoryStatusRows = getMyInventoryStatusRows();
-    const statusCountedItems = inventoryStatusRows.filter((item) => item.status === "Counted");
-    const statusPendingItems = inventoryStatusRows.filter((item) => item.status !== "Counted");
-    const userName = getEffectiveInventoryUserName();
-    const inventoryReady = Boolean(makeInventoryShip && inventoryStation && userName && supabase);
-    const countedKeysForMe = new Set(myReportRows.map((item) => item.itemKey || cleanText(item.code || item.name)));
-        const countedRecordByKey = new Map(
-      myReportRows.map((item) => [
-        item.itemKey || cleanText(item.code || item.name),
-        item,
-      ])
-    );
-    const currentInventoryDisplayImage = currentInventoryItem
-  ? getEquipmentDisplayImage(currentInventoryItem)
-  : "";
-
-const currentInventoryFallbackImage = currentInventoryItem
-  ? getEquipmentFallbackImage(currentInventoryItem)
-  : "";
-
-const currentInventoryOpenImage =
-  currentInventoryDisplayImage || currentInventoryFallbackImage || "";
-
-        const selectInventoryItemForCounting = (item) => {
-      const itemKey = getInventoryItemKey(item);
-      const countedRecord = countedRecordByKey.get(itemKey);
-
-      if (!inventoryReady) {
-        setMakeInventoryMessage("Choose ship, station and user before counting.");
-        return;
-      }
-
-      if (currentStationSubmitted) {
-        setMakeInventoryMessage(
-          `${inventoryStation} has already submitted count. Waiting for all stations before final report.`
-        );
-        return;
-      }
-
-      const displayImage = getEquipmentDisplayImage(item);
-const fallbackImage = getEquipmentFallbackImage(item);
-
-setCurrentInventoryItem({
-  ...item,
-  image: displayImage,
-  imageFallback: fallbackImage,
-  itemKey,
-});
-
-      setInventoryQty(countedRecord ? String(countedRecord.qty ?? "") : "");
-      setEditingInventoryId(countedRecord?.id || null);
-      setMakeInventoryMessage(`Selected: ${item.name}`);
-    };
-    const sortedMakeInventoryItems = filteredMakeInventoryItems
-      .map((item, index) => ({
-        item,
-        index,
-        itemKey: getInventoryItemKey(item),
-      }))
-      .sort((a, b) => {
-        const aCounted = countedKeysForMe.has(a.itemKey);
-        const bCounted = countedKeysForMe.has(b.itemKey);
-
-        if (aCounted !== bCounted) {
-          return aCounted ? 1 : -1;
-        }
-
-        return a.index - b.index;
-      })
-      .map((entry) => entry.item);
-
     return (
-      <main style={styles.page}>
-        <header style={styles.header}>
-          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
-          <div style={styles.headerActions}>
-            <button style={styles.backButton} onClick={() => setEquipmentMode("inventory")}>← Back</button>
-            <div style={styles.shipBadge}>🚢 {getShipDisplayName(makeInventoryShip || userShip)}</div>
-          </div>
-        </header>
-      <MakeInventoryTopBar
-  styles={styles}
-    isAdmin={isAdmin}
-  inventoryReportMode={inventoryReportMode}
-  setInventoryReportMode={setInventoryReportMode}
-  makeInventoryShip={makeInventoryShip}
-  userShip={userShip}
-  refreshMakeInventoryData={refreshMakeInventoryData}
-  inventoryLoading={inventoryLoading}
-  reportBusy={reportBusy}
-  resetInventoryRun={resetInventoryRun}
-  printInventorySummary={printInventorySummary}
-  clearMyInventory={clearMyInventory}
-  clearShipInventory={clearShipInventory}
-  generateFinalInventoryReport={generateFinalInventoryReport}
-  exportInventorySummaryToExcel={exportInventorySummaryToExcel}
-  allStationsSubmitted={allStationsSubmitted}
-  inventoryStation={inventoryStation}
-  currentStationProgress={currentStationProgress}
-  myReportRows={myReportRows}
-  makeInventoryItems={makeInventoryItems}
-  startedStations={startedStations}
-  submittedStations={submittedStations}
-  stationProgressRows={stationProgressRows}
-/>
-
-        <section style={styles.grid}>
-          <div style={styles.card}>
-            <h2 style={styles.cardTitle}>📝 {activeEquipmentDepartmentLabel} Make Inventory</h2>
-
-            <label style={styles.label}>Choose ship for this inventory</label>
-            <select
-              value={makeInventoryShip}
-              onChange={(e) => setMakeInventoryShip(e.target.value)}
-              style={styles.select}
-            >
-              <option value="">Choose ship</option>
-              {SHIPS.map((ship) => (
-  <option key={ship} value={ship}>
-    {getShipDisplayName(ship)}
-  </option>
-))}
-            </select>
-
-            <label style={styles.label}>Choose {inventoryStationLabel}</label>
-            <select
-              value={inventoryStation}
-              onChange={(e) => setInventoryStation(e.target.value)}
-              style={styles.select}
-            >
-              <option value="">Choose {inventoryStationLabel}</option>
-              {activeInventoryStations.map((station) => (
-                <option key={station} value={station}>{station}</option>
-              ))}
-            </select>
-
-            <label style={styles.label}>Choose user</label>
-            <input
-              placeholder="Type your name..."
-              value={inventoryUserName}
-              onChange={(e) => setInventoryUserName(e.target.value)}
-              style={styles.searchInput}
-            />
-
-            <label style={styles.label}>Position</label>
-            <input
-              placeholder="Type your position..."
-              value={inventoryUserPosition}
-              onChange={(e) => setInventoryUserPosition(e.target.value)}
-              style={styles.searchInput}
-            />
-
-<button
-  type="button"
-  style={styles.backButton}
-  onClick={() => loadMasterInventoryItems(makeInventoryShip || userShip)}
-  disabled={masterInventoryLoading}
->
-  {masterInventoryLoading ? "Refreshing..." : "🔄 Refresh Shared Master List"}
-</button>
-{isAdmin && equipmentDepartment === "culinary" && (
-  <button
-    type="button"
-    style={styles.backButton}
-    onClick={syncMasterInventoryPicturesFromDrive}
-    disabled={pictureLibraryBusy || masterInventoryLoading}
-  >
-    {pictureLibraryBusy
-      ? "Syncing pictures..."
-      : "🖼️ Sync Pictures With Master List"}
-  </button>
-)}
-
-            {makeInventoryMessage && <p style={styles.message}>{makeInventoryMessage}</p>}
-
-            <div style={styles.infoBox}>
-              <div>🚢 Inventory ship: <strong>{makeInventoryShip || "Not selected"}</strong></div>
-              <div>📍 {equipmentDepartment === "bar" ? "Bar" : "Station"}: <strong>{inventoryStation || "Not selected"}</strong></div>
-              <div>👤 User: <strong>{userName || "Not selected"}</strong></div>
-              <div>📋 Shared master items: <strong>{makeInventoryItems.length}</strong></div>
-              <div>🖼️ Drive pictures loaded: <strong>{Object.keys(drivePictureLibraryByCode).length}</strong></div>
-              <div>📂 Master source: <strong>{masterInventorySource || "Not loaded"}</strong></div>
-              {masterInventoryLoading && <div>Loading shared master inventory...</div>}
-              <div>✅ My counted items: <strong>{myReportRows.length}</strong></div>
-              <div>🌍 Ship summary records: <strong>{summaryReportRows.length}</strong></div>
-              <div>Duplicate entries are automatically updated instead of added twice.</div>
-              {inventoryLoading && <div>Loading shared inventory records...</div>}
-              {inventoryError && <div style={{ color: "#b00020" }}>{inventoryError}</div>}
-            </div>
-          </div>
-
-          <div style={styles.card}>
-            <h2 style={styles.cardTitle}>🔍 Search Product</h2>
-
-            <input
-              placeholder="Search code, name, category or sheet..."
-              value={makeInventorySearch}
-              onChange={(e) => setMakeInventorySearch(e.target.value)}
-              style={styles.searchInput}
-            />
-
-            {!inventoryReady && (
-              <p style={styles.warningText}>
-                Choose ship, station and user before counting. Supabase must be connected.
-              </p>
-            )}
-
-            <p style={styles.emptyText}>
-              Select the correct product from the master list. Green means already counted by this user for this station.
-            </p>
-          </div>
-              <div style={styles.card}>
-  <h2 style={styles.cardTitle}>➕ Item Not In Master List</h2>
-
-  <p style={styles.emptyText}>
-    Use this only when the item is found during inventory but does not exist in the shared master list.
-  </p>
-
-  <label style={styles.label}>Code / SKU optional</label>
-  <input
-    placeholder="Enter code or SKU..."
-    value={extraInventoryCode}
-    onChange={(event) => setExtraInventoryCode(event.target.value)}
-    style={styles.searchInput}
-  />
-
-  <label style={styles.label}>Item name</label>
-  <input
-    placeholder="Enter item name..."
-    value={extraInventoryName}
-    onChange={(event) => setExtraInventoryName(event.target.value)}
-    style={styles.searchInput}
-  />
-
-  <label style={styles.label}>Quantity</label>
-  <input
-    type="number"
-    min="0"
-    placeholder="Enter quantity..."
-    value={extraInventoryQty}
-    onChange={(event) => setExtraInventoryQty(event.target.value)}
-    style={styles.searchInput}
-  />
-
-  <label style={styles.label}>Take / upload photo optional</label>
-  <input
-    key={extraInventoryPhotoInputKey}
-    type="file"
-    accept="image/*"
-    capture="environment"
-    onChange={(event) =>
-      setExtraInventoryPhotoFile(event.target.files?.[0] || null)
-    }
-    style={styles.fileInput}
-  />
-
-  {extraInventoryPhotoFile && (
-    <div style={styles.statusNeutral}>
-      Photo selected: {extraInventoryPhotoFile.name}
-    </div>
-  )}
-
-  <button
-    type="button"
-    style={styles.primaryButton}
-    onClick={saveExtraInventoryItem}
-    disabled={extraInventorySaving || !inventoryReady || currentStationSubmitted}
-  >
-    {extraInventorySaving ? "Saving..." : "Save Extra Item"}
-  </button>
-
-  {extraInventoryMessage && (
-    <p style={styles.message}>{extraInventoryMessage}</p>
-  )}
-
-  {!inventoryReady && (
-    <p style={styles.warningText}>
-      Choose ship, station and user before saving an extra item.
-    </p>
-  )}
-
-  {currentStationSubmitted && (
-    <p style={styles.warningText}>
-      This station already submitted count. Extra items cannot be added now.
-    </p>
-  )}
-</div>
-        </section>
-
-                <section style={styles.card}>
-          <h2 style={styles.productTitle}>📦 Select Product for Inventory</h2>
-
-          {makeInventoryItems.length === 0 && (
-            <p style={styles.emptyText}>
-              Upload the shared master inventory file once for this ship, or click Refresh if another user already uploaded it.
-            </p>
-          )}
-
-          <div style={styles.equipmentGrid}>
-            {sortedMakeInventoryItems.map((item, index) => {
-              const itemKey = getInventoryItemKey(item);
-              const alreadyCounted = countedKeysForMe.has(itemKey);
-              const countedRecord = countedRecordByKey.get(itemKey);
-              const displayImage = getEquipmentDisplayImage(item);
-              const fallbackImage = getEquipmentFallbackImage(item);
-
-              return (
-                <button
-                  key={`${item.sheetName}-${item.code}-${index}`}
-                  style={{
-  ...styles.inventoryItemCard,
-  ...(alreadyCounted ? styles.countedCard : {}),
-}}
-                  onClick={() =>
-  selectInventoryItemForCounting({
-    ...item,
-    image: displayImage,
-    imageFallback: fallbackImage,
-  })
-}
-                >
-                  {displayImage ? (
-  <div style={styles.inventoryImageFrame}>
-    <img
-  src={getImageUrl(displayImage, "w360")}
-  alt={item.name}
-  loading="lazy"
-  decoding="async"
-  style={styles.inventoryCardImage}
-  data-fallback-src={
-    fallbackImage && fallbackImage !== displayImage
-      ? getImageUrl(fallbackImage, "w360")
-      : ""
+      <EquipmentInventoryOptionsScreen
+            styles={styles}
+            activeEquipmentDepartmentLabel={activeEquipmentDepartmentLabel}
+            equipmentDepartment={equipmentDepartment}
+            EquipmentInventoryOptions={EquipmentInventoryOptions}
+            getShipDisplayName={getShipDisplayName}
+            logUsageEvent={logUsageEvent}
+            setEquipmentMode={setEquipmentMode}
+            userShip={userShip}
+          />
+    );
   }
-  onError={(e) => {
-  const fallbackSrc = e.currentTarget.dataset.fallbackSrc;
-
-  if (fallbackSrc && e.currentTarget.dataset.usedFallback !== "true") {
-    e.currentTarget.dataset.usedFallback = "true";
-    e.currentTarget.src = fallbackSrc;
-    return;
-  }
-
-  e.currentTarget.style.display = "none";
-  const fallback = e.currentTarget.nextElementSibling;
-  if (fallback) fallback.style.display = "flex";
-}}
-/>
-  
-    <div style={{ ...styles.inventoryNoImage, display: "none" }}>
-      No image
-    </div>
-  </div>
-) : (
-  <div style={styles.inventoryNoImage}>No image</div>
-)}
-                  <div style={styles.recipeName}>{item.name}</div>
-                  <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                  <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
-                  <div style={styles.recipeMeta}>Category: {item.category}</div>
-
-                  {alreadyCounted && (
-                    <div style={styles.statusGood}>
-                      Already Counted: {formatQty(countedRecord?.qty || 0)}
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-                </section>
-
-        {currentInventoryItem ? (
-          <div
-            style={styles.modalBackdrop}
-            onClick={() => {
-              setCurrentInventoryItem(null);
-              setInventoryQty("");
-              setEditingInventoryId(null);
-            }}
-          >
-            <div style={styles.modalCard} onClick={(event) => event.stopPropagation()}>
-              <button
-                type="button"
-                style={styles.closeButton}
-                onClick={() => {
-                  setCurrentInventoryItem(null);
-                  setInventoryQty("");
-                  setEditingInventoryId(null);
-                }}
-              >
-                ✕
-              </button>
-
-              <h2 style={styles.productTitle}>
-                {editingInventoryId ? "✏️ Update Quantity" : "✅ Insert Quantity"}
-              </h2>
-
-              <div style={styles.grid}>
-                <div>
-  {currentInventoryDisplayImage ? (
-    <div>
-      <div style={styles.modalPictureFrame}>
-        <img
-          src={getImageUrl(currentInventoryDisplayImage, "w720")}
-          alt={currentInventoryItem.name}
-          style={styles.modalPreviewImage}
-          data-fallback-src={
-            currentInventoryFallbackImage &&
-            currentInventoryFallbackImage !== currentInventoryDisplayImage
-              ? getImageUrl(currentInventoryFallbackImage, "w720")
-              : ""
-          }
-          onError={(e) => {
-            const fallbackSrc = e.currentTarget.dataset.fallbackSrc;
-
-            if (
-              fallbackSrc &&
-              e.currentTarget.dataset.usedFallback !== "true"
-            ) {
-              e.currentTarget.dataset.usedFallback = "true";
-              e.currentTarget.src = fallbackSrc;
-              return;
-            }
-
-            e.currentTarget.style.display = "none";
-            const fallback = e.currentTarget.nextElementSibling;
-            if (fallback) fallback.style.display = "flex";
-          }}
-        />
-
-        <div style={{ ...styles.modalNoImage, display: "none" }}>
-          Picture could not be loaded
-        </div>
-      </div>
-
-      <a
-        href={currentInventoryOpenImage}
-        target="_blank"
-        rel="noreferrer"
-        style={{
-          ...styles.imageButton,
-          display: "block",
-          textDecoration: "none",
-        }}
-      >
-        Open Picture
-      </a>
-    </div>
-  ) : (
-    <div style={styles.modalNoImage}>No image</div>
-  )}
-</div>
-
-                <div>
-                  <h3 style={{ marginTop: 0 }}>{currentInventoryItem.name}</h3>
-
-                  <p><strong>Ship:</strong> {makeInventoryShip || userShip}</p>
-                  <p><strong>Station:</strong> {inventoryStation || "N/A"}</p>
-                  <p><strong>User:</strong> {userName || "N/A"}</p>
-                  <p><strong>Code:</strong> {currentInventoryItem.code || "N/A"}</p>
-                  <p><strong>Sheet:</strong> {currentInventoryItem.sheetName}</p>
-                  <p><strong>Category:</strong> {currentInventoryItem.category}</p>
-
-                  {!inventoryReady && (
-                    <div style={styles.warningText}>
-                      Choose ship, station, and user before confirming quantity.
-                    </div>
-                  )}
-
-                  {currentStationSubmitted && (
-                    <div style={styles.statusWarning}>
-                      This station has already submitted count. You can view this item, but cannot update quantity.
-                    </div>
-                  )}
-
-                  <label style={styles.label}>Insert quantity</label>
-                  <input
-                    autoFocus
-                    type="number"
-                    min="0"
-                    value={inventoryQty}
-                    onChange={(event) => setInventoryQty(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (
-                        event.key === "Enter" &&
-                        inventoryReady &&
-                        !inventoryLoading &&
-                        !currentStationSubmitted
-                      ) {
-                        confirmInventoryQty();
-                      }
-                    }}
-                    style={styles.searchInput}
-                    placeholder="Enter quantity..."
-                  />
-
-                  <div style={styles.headerActions}>
-                    <button
-                      type="button"
-                      style={styles.backButton}
-                      onClick={() => {
-                        setCurrentInventoryItem(null);
-                        setInventoryQty("");
-                        setEditingInventoryId(null);
-                      }}
-                    >
-                      Cancel
-                    </button>
-
-                    <button
-                      type="button"
-                      style={styles.primaryButton}
-                      onClick={confirmInventoryQty}
-                      disabled={!inventoryReady || inventoryLoading || currentStationSubmitted}
-                    >
-                      {inventoryLoading
-                        ? "Saving..."
-                        : editingInventoryId
-                          ? "Update Quantity"
-                          : "Confirm Quantity"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        <section style={styles.card}>
-          <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 20 }}>
-  <h2 style={styles.productTitle}>📄 Inventory Report</h2>
-</div>
-          {inventoryReportMode === "summary" && (
-            <div style={styles.reportFilterBox}>
-              <label style={styles.label}>📍 {equipmentDepartment === "bar" ? "Bar Filter" : "Station Filter"}</label>
-              <select
-                value={summaryStationFilter}
-                onChange={(e) => setSummaryStationFilter(e.target.value)}
-                style={styles.select}
-              >
-                <option value="ALL">{equipmentDepartment === "bar" ? "All Bars" : "All Stations"}</option>
-                {summaryStationOptions.map((station) => (
-                  <option key={station} value={station}>{station}</option>
-                ))}
-              </select>
-
-              <div style={styles.recipeMeta}>
-                Managers can filter the ship summary by galley/station to see where equipment is being consumed.
-              </div>
-            </div>
-          )}
-<div style={styles.reportFilterBox}>
-  <label style={styles.label}>
-    📤 Upload Inventory Sheet Sample For Excel Report
-  </label>
-
-  <input
-    type="file"
-    accept=".xlsx,.xlsm"
-    onChange={handleInventoryCountSheetTemplateFile}
-    style={styles.fileInput}
-  />
-
-  <div style={styles.recipeMeta}>
-    Export Excel will use this uploaded file as the sample/template. It will keep
-    the same item positions and only write counts into column S.
-  </div>
-
-  {inventoryCountSheetTemplateName && (
-    <div style={styles.statusGood}>
-      Uploaded sample: {inventoryCountSheetTemplateName}
-    </div>
-  )}
-</div>
-
-          <div style={styles.infoBox}>
-            <div>🚢 Ship: <strong>{makeInventoryShip || userShip}</strong></div>
-            {inventoryReportMode === "my" ? (
-              <>
-                <div>📍 {equipmentDepartment === "bar" ? "Bar" : "Station"}: <strong>{inventoryStation || "Not selected"}</strong></div>
-                <div>👤 User: <strong>{userName || "Not selected"}</strong></div>
-                <div>✅ My records: <strong>{myReportRows.length}</strong></div>
-              </>
-            ) : (
-              <>
-                <div>🌍 Report: <strong>All users for selected ship</strong></div>
-                <div>📍 Station Filter: <strong>{selectedSummaryStationLabel}</strong></div>
-                <div>📦 Summary items shown: <strong>{summaryReportRows.length}</strong></div>
-              </>
-            )}
-          </div>
-
-          {visibleReportRows.length === 0 && (
-            <p style={styles.emptyText}>
-              {inventoryReportMode === "summary"
-                ? `No ship summary records yet for ${selectedSummaryStationLabel}.`
-                : "Your confirmed quantities will appear here."}
-            </p>
-          )}
-
-          <div style={styles.equipmentGrid}>
-            {inventoryReportMode === "summary"
-              ? visibleReportRows.map((item, index) => (
-                  <div key={`${item.itemKey}-summary-${index}`} style={styles.equipmentCard}>
-                    <div style={styles.recipeName}>{item.name}</div>
-                    <div style={styles.recipeMeta}>Ship: {item.ship}</div>
-                    <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                    <div style={styles.recipeMeta}>Category: {item.category}</div>
-                    <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
-                    <div style={styles.statusGood}>Total Quantity: {formatQty(item.totalQty)}</div>
-                    <div style={styles.recipeMeta}>Stations: {item.stations.join(", ") || "N/A"}</div>
-                    {summaryStationFilter !== "ALL" && (
-                      <div style={styles.statusWarning}>Filtered Station: {summaryStationFilter}</div>
-                    )}
-                    <div style={styles.recipeMeta}>Users: {item.users.join(", ") || "N/A"}</div>
-                    <div style={styles.recipeMeta}>Records: {item.recordCount}</div>
-                    <div style={styles.recipeMeta}>Last Updated: {item.confirmedAt}</div>
-                  </div>
-                ))
-              : visibleReportRows.map((item) => (
-                  <div key={item.id} style={styles.equipmentCard}>
-                {item.image && (
-  <img
-    src={getImageUrl(item.image, "w360")}
-    alt={item.name}
-    style={styles.equipmentImage}
-    onError={(event) => {
-      event.currentTarget.style.display = "none";
-    }}
-  />
-)}
-                    <div style={styles.recipeName}>{item.name}</div>
-                    <div style={styles.recipeMeta}>Ship: {item.ship}</div>
-                    <div style={styles.recipeMeta}>Station: {item.station}</div>
-                    <div style={styles.recipeMeta}>User: {item.userName}</div>
-                    <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                    <div style={styles.recipeMeta}>Category: {item.category}</div>
-                    <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
-                    <div style={styles.statusGood}>Quantity: {formatQty(item.qty)}</div>
-                    <div style={styles.recipeMeta}>Confirmed: {item.confirmedAt}</div>
-
-                    <div style={styles.headerActions}>
-                      <button style={styles.backButton} onClick={() => editInventoryItem(item)}>
-                        ✏️ Edit
-                      </button>
-
-                      <button style={styles.deleteButton} onClick={() => deleteInventoryItem(item)}>
-                        🗑️ Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                    </div>
-
-          <div style={styles.finishBar}>
-            {inventoryReportMode === "my" ? (
-              <>
-                <div>
-                  <strong>{inventoryStation || "Station"}</strong>
-                  <div style={styles.recipeMeta}>
-                    Live count: {myReportRows.length} / {makeInventoryItems.length || 0}
-                  </div>
-                  <div style={styles.recipeMeta}>
-                    Status: {currentStationProgress?.statusLabel || "Not Started"}
-                  </div>
-                </div>
-
-                {currentStationSubmitted ? (
-                  <div style={styles.statusWarning}>
-                    ✅ {inventoryStation} - Count Submitted. Waiting for all stations.
-                  </div>
-                ) : (
-                  <button
-                    style={styles.primaryButton}
-                    onClick={submitInventoryStationCount}
-                    disabled={!inventoryReady || reportBusy}
-                  >
-                    ✅ Finish / Submit Station Count
-                  </button>
-                )}
-              </>
-            ) : (
-              <>
-                <div>
-                  <strong>Final Inventory Report</strong>
-                  <div style={styles.recipeMeta}>
-                    Submitted stations: {submittedStations} / {stationProgressRows.length}
-                  </div>
-                  <div style={styles.recipeMeta}>
-                    Uploaded sample: {inventoryCountSheetTemplateName || "Not uploaded"}
-                  </div>
-                </div>
-
-                {allStationsSubmitted ? (
-                  <button
-                    style={styles.primaryButton}
-                    onClick={generateFinalInventoryReport}
-                    disabled={reportBusy}
-                  >
-                    📥 Generate Final Report
-                  </button>
-                ) : (
-                  <div style={styles.statusWarning}>
-                    ⏳ Final report will unlock after all stations submit.
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </section>
-
-        <section style={styles.card}>
-          <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: showVariance ? 20 : 0 }}>
-            <h2 style={styles.productTitle}>📊 Count Status</h2>
-
-            <div style={styles.headerActions}>
-              <button
-                style={styles.backButton}
-                onClick={() => setShowVariance((value) => !value)}
-              >
-                {showVariance ? "Hide Status" : "Open Status"}
-              </button>
-
-              {showVariance && (
-                <>
-                  <button style={styles.backButton} onClick={printInventoryStatus}>
-                    🖨️ Print
-                  </button>
-
-                  <button style={styles.primaryButton} onClick={exportInventoryStatusToExcel}>
-                    📥 Export Excel
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {showVariance && (
-            <>
-              <div style={styles.infoBox}>
-                <div>📋 Master items: <strong>{makeInventoryItems.length}</strong></div>
-                <div>✅ Counted by me: <strong>{statusCountedItems.length}</strong></div>
-                <div>📋 Remaining for me: <strong>{statusPendingItems.length}</strong></div>
-              </div>
-
-              {makeInventoryItems.length === 0 && (
-                <p style={styles.emptyText}>Upload the master inventory file to see count status.</p>
-              )}
-
-              <h3 style={styles.sectionTitle}>📋 My Master Inventory Status</h3>
-
-              <div style={styles.equipmentGrid}>
-                {inventoryStatusRows.map((item, index) => (
-                  <div
-                    key={`${item.code}-status-${index}`}
-                    style={{ ...styles.equipmentCard, ...(item.status === "Counted" ? styles.countedCard : {}) }}
-                  >
-                    <div style={styles.recipeName}>{item.name}</div>
-                    <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                    <div style={styles.recipeMeta}>Category: {item.category}</div>
-                    <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
-
-                    {item.status === "Counted" ? (
-                      <>
-                        <div style={styles.statusGood}>Counted: {formatQty(item.countedQty)}</div>
-                        <div style={styles.recipeMeta}>Counted: {item.countedAt}</div>
-                      </>
-                    ) : (
-                      <div style={styles.statusNeutral}>Pending Count</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </section>
-      </main>
+  if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "makeinventory") {
+    return (
+      <MakeInventoryScreen
+            styles={styles}
+            activeEquipmentDepartmentLabel={activeEquipmentDepartmentLabel}
+            cleanText={cleanText}
+            clearMyInventory={clearMyInventory}
+            clearShipInventory={clearShipInventory}
+            confirmInventoryQty={confirmInventoryQty}
+            currentInventoryItem={currentInventoryItem}
+            deleteInventoryItem={deleteInventoryItem}
+            drivePictureLibraryByCode={drivePictureLibraryByCode}
+            editingInventoryId={editingInventoryId}
+            editInventoryItem={editInventoryItem}
+            equipmentDepartment={equipmentDepartment}
+            exportInventoryStatusToExcel={exportInventoryStatusToExcel}
+            exportInventorySummaryToExcel={exportInventorySummaryToExcel}
+            extraInventoryCode={extraInventoryCode}
+            extraInventoryMessage={extraInventoryMessage}
+            extraInventoryName={extraInventoryName}
+            extraInventoryPhotoFile={extraInventoryPhotoFile}
+            extraInventoryPhotoInputKey={extraInventoryPhotoInputKey}
+            extraInventoryQty={extraInventoryQty}
+            extraInventorySaving={extraInventorySaving}
+            formatQty={formatQty}
+            generateFinalInventoryReport={generateFinalInventoryReport}
+            getActiveInventoryStationList={getActiveInventoryStationList}
+            getAllInventoryStationsSubmitted={getAllInventoryStationsSubmitted}
+            getCurrentStationProgress={getCurrentStationProgress}
+            getEffectiveInventoryUserName={getEffectiveInventoryUserName}
+            getEquipmentDisplayImage={getEquipmentDisplayImage}
+            getEquipmentFallbackImage={getEquipmentFallbackImage}
+            getFilteredMakeInventoryItems={getFilteredMakeInventoryItems}
+            getImageUrl={getImageUrl}
+            getInventoryItemKey={getInventoryItemKey}
+            getInventoryStationLabel={getInventoryStationLabel}
+            getInventoryStationProgressRows={getInventoryStationProgressRows}
+            getMyInventoryRows={getMyInventoryRows}
+            getMyInventoryStatusRows={getMyInventoryStatusRows}
+            getShipDisplayName={getShipDisplayName}
+            getShipSummaryRows={getShipSummaryRows}
+            getSummaryStationOptions={getSummaryStationOptions}
+            getVisibleInventoryReportRows={getVisibleInventoryReportRows}
+            handleInventoryCountSheetTemplateFile={handleInventoryCountSheetTemplateFile}
+            inventoryCountSheetTemplateName={inventoryCountSheetTemplateName}
+            inventoryError={inventoryError}
+            inventoryLoading={inventoryLoading}
+            inventoryQty={inventoryQty}
+            inventoryReportMode={inventoryReportMode}
+            inventoryStation={inventoryStation}
+            inventoryUserName={inventoryUserName}
+            inventoryUserPosition={inventoryUserPosition}
+            isAdmin={isAdmin}
+            loadMasterInventoryItems={loadMasterInventoryItems}
+            makeInventoryItems={makeInventoryItems}
+            makeInventoryMessage={makeInventoryMessage}
+            makeInventorySearch={makeInventorySearch}
+            makeInventoryShip={makeInventoryShip}
+            MakeInventoryTopBar={MakeInventoryTopBar}
+            masterInventoryLoading={masterInventoryLoading}
+            masterInventorySource={masterInventorySource}
+            pictureLibraryBusy={pictureLibraryBusy}
+            printInventoryStatus={printInventoryStatus}
+            printInventorySummary={printInventorySummary}
+            refreshMakeInventoryData={refreshMakeInventoryData}
+            reportBusy={reportBusy}
+            resetInventoryRun={resetInventoryRun}
+            saveExtraInventoryItem={saveExtraInventoryItem}
+            setCurrentInventoryItem={setCurrentInventoryItem}
+            setEditingInventoryId={setEditingInventoryId}
+            setEquipmentMode={setEquipmentMode}
+            setExtraInventoryCode={setExtraInventoryCode}
+            setExtraInventoryName={setExtraInventoryName}
+            setExtraInventoryPhotoFile={setExtraInventoryPhotoFile}
+            setExtraInventoryQty={setExtraInventoryQty}
+            setInventoryQty={setInventoryQty}
+            setInventoryReportMode={setInventoryReportMode}
+            setInventoryStation={setInventoryStation}
+            setInventoryUserName={setInventoryUserName}
+            setInventoryUserPosition={setInventoryUserPosition}
+            setMakeInventoryMessage={setMakeInventoryMessage}
+            setMakeInventorySearch={setMakeInventorySearch}
+            setMakeInventoryShip={setMakeInventoryShip}
+            setShowVariance={setShowVariance}
+            setSummaryStationFilter={setSummaryStationFilter}
+            SHIPS={SHIPS}
+            showVariance={showVariance}
+            submitInventoryStationCount={submitInventoryStationCount}
+            summaryStationFilter={summaryStationFilter}
+            supabase={supabase}
+            syncMasterInventoryPicturesFromDrive={syncMasterInventoryPicturesFromDrive}
+            userShip={userShip}
+          />
     );
   }
 
   if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "inuse") {
-    const inUseItems = parseInUseItems();
-    const missingItems = inUseItems.filter((item) => item.status === "Missing");
-    const zeroItems = inUseItems.filter((item) => item.status === "Zero Count");
-    const activeItems = inUseItems.filter((item) => item.status === "In Use");
-
     return (
-      <main style={styles.page}>
-        <header style={styles.header}>
-          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
-          <div style={styles.headerActions}>
-            <button style={styles.backButton} onClick={() => setEquipmentMode("inventory")}>← Back</button>
-            <div style={styles.shipBadge}>🚢 {getShipDisplayName(userShip)}</div>
-          </div>
-        </header>
-
-        <section style={styles.grid}>
-          <div style={styles.card}>
-            <h2 style={styles.cardTitle}>📤 Upload Inventory in Use</h2>
-
-            <label style={styles.label}>Step 1: Equipment Master List file</label>
-            <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadMusterFile} style={styles.fileInput} />
-
-            <label style={styles.label}>Step 2: Inventory in Use file</label>
-            <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadInUseFile} style={styles.fileInput} />
-
-            {musterMessage && <p style={styles.message}>{musterMessage}</p>}
-            {inUseMessage && <p style={styles.message}>{inUseMessage}</p>}
-
-            <div style={styles.infoBox}>
-              <div>❌ Missing from Inventory: <strong>{missingItems.length}</strong></div>
-              <div>⚠️ Zero Count: <strong>{zeroItems.length}</strong></div>
-              <div>✅ In Use: <strong>{activeItems.length}</strong></div>
-              <div>Master List: C = Category, D = Code, E = Name</div>
-              <div>In Use: A = Code, B = Name, H = On Hand</div>
-            </div>
-          </div>
-
-          <div style={styles.card}>
-            <h2 style={styles.cardTitle}>🔍 Search Inventory in Use</h2>
-
-            <input
-              placeholder="Search code, name, category, sheet or status..."
-              value={inUseSearch}
-              onChange={(e) => setInUseSearch(e.target.value)}
-              style={styles.searchInput}
-            />
-
-            <p style={styles.emptyText}>
-              Missing items are shown first in red under Missing from Inventory.
-            </p>
-          </div>
-        </section>
-
-        <section style={styles.card}>
-          <h2 style={{ ...styles.productTitle, color: "#b00020" }}>❌ Missing from Inventory</h2>
-
-          {musterItems.length === 0 && <p style={styles.emptyText}>Upload the Equipment Master List first.</p>}
-          {inUseRows.length === 0 && <p style={styles.emptyText}>Upload the Inventory in Use file to compare.</p>}
-          {musterItems.length > 0 && inUseRows.length > 0 && missingItems.length === 0 && (
-            <p style={styles.emptyText}>No missing items found.</p>
-          )}
-
-          <div style={styles.equipmentGrid}>
-            {missingItems.map((item, i) => (
-              <div key={`${item.code}-missing-${i}`} style={{ ...styles.equipmentCard, ...styles.orderWarningCard }}>
-                <div style={styles.recipeName}>{item.name || "Unnamed Item"}</div>
-                <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
-                <div style={styles.recipeMeta}>Category: {item.category}</div>
-                <div style={styles.statusBad}>Missing</div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section style={styles.card}>
-          <h2 style={{ ...styles.productTitle, color: "#8a5a00" }}>⚠️ Zero Count</h2>
-
-          <div style={styles.equipmentGrid}>
-            {zeroItems.map((item, i) => (
-              <div key={`${item.code}-zero-${i}`} style={{ ...styles.equipmentCard, ...styles.zeroCountCard }}>
-                <div style={styles.recipeName}>{item.name || "Unnamed Item"}</div>
-                <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
-                <div style={styles.recipeMeta}>Category: {item.category}</div>
-                <div style={styles.recipeMeta}>On Hand: {formatQty(item.onHand)}</div>
-                <div style={styles.statusWarning}>Zero Count</div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section style={styles.card}>
-          <h2 style={{ ...styles.productTitle, color: "#2e7d32" }}>✅ In Use</h2>
-
-          <div style={styles.equipmentGrid}>
-            {activeItems.map((item, i) => (
-              <div key={`${item.code}-active-${i}`} style={styles.equipmentCard}>
-                <div style={styles.recipeName}>{item.name || "Unnamed Item"}</div>
-                <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                <div style={styles.recipeMeta}>Sheet: {item.sheetName}</div>
-                <div style={styles.recipeMeta}>Category: {item.category}</div>
-                <div style={styles.recipeMeta}>On Hand: {formatQty(item.onHand)}</div>
-                <div style={styles.statusGood}>In Use</div>
-              </div>
-            ))}
-          </div>
-        </section>
-      </main>
+      <InventoryInUseScreen
+            styles={styles}
+            formatQty={formatQty}
+            getShipDisplayName={getShipDisplayName}
+            inUseMessage={inUseMessage}
+            inUseRows={inUseRows}
+            inUseSearch={inUseSearch}
+            musterItems={musterItems}
+            musterMessage={musterMessage}
+            parseInUseItems={parseInUseItems}
+            setEquipmentMode={setEquipmentMode}
+            setInUseSearch={setInUseSearch}
+            uploadInUseFile={uploadInUseFile}
+            uploadMusterFile={uploadMusterFile}
+            userShip={userShip}
+          />
     );
   }
 
   if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "warehouse") {
-    const allWarehouseItems = parseWarehouseItems();
-    const isWarehouseOverstock = (item) => Number(item.onHand || 0) - Number(item.par || 0) > 10;
-    const needsWarehouseOrder = (item) => Number(item.suggested || 0) > 0;
-    const warehouseItems = allWarehouseItems.filter((item) => {
-      if (warehouseFilter === "overstock") return isWarehouseOverstock(item);
-      if (warehouseFilter === "needsOrder") return needsWarehouseOrder(item);
-      return true;
-    });
-    const totalSuggested = allWarehouseItems.reduce((sum, item) => sum + item.suggested, 0);
-    const criticalItems = allWarehouseItems.filter(needsWarehouseOrder).length;
-    const warehouseItemsWithPictures = allWarehouseItems.filter((item) => item.image).length;
-    const warehouseOverstockItems = allWarehouseItems.filter(isWarehouseOverstock).length;
-
     return (
-      <main style={styles.page}>
-        <header style={styles.header}>
-          <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
-          <div style={styles.headerActions}>
-            <button style={styles.backButton} onClick={() => setEquipmentMode("inventory")}>← Back</button>
-            <div style={styles.shipBadge}>🚢 {getShipDisplayName(userShip)}</div>
-          </div>
-        </header>
-
-        <section style={styles.grid}>
-          <div style={styles.card}>
-            <h2 style={styles.cardTitle}>📤 Upload Warehouse Inventory</h2>
-            <label style={styles.label}>Warehouse inventory file</label>
-            <input type="file" accept=".xlsx,.xls,.xlsm" onChange={uploadWarehouseFile} style={styles.fileInput} />
-
-            {warehouseMessage && <p style={styles.message}>{warehouseMessage}</p>}
-
-            <div style={styles.infoBox}>
-              <div>📦 Items loaded: <strong>{allWarehouseItems.length}</strong></div>
-              <div>👀 Showing now: <strong>{warehouseItems.length}</strong></div>
-              <div>🖼️ Pictures matched: <strong>{warehouseItemsWithPictures}</strong></div>
-              <div>🔵 Items needing order: <strong>{criticalItems}</strong></div>
-              <div>🛒 Total suggested order: <strong>{formatQty(totalSuggested)}</strong></div>
-              <div>🔴 Over par by more than 10: <strong>{warehouseOverstockItems}</strong></div>
-              <div>A = Code, B = Name, G = Par, H = On Hand, M = Future Order</div>
-              <div>Pictures are matched from the shared MEL master list by code/name.</div>
-            </div>
-          </div>
-
-          <div style={styles.card}>
-            <h2 style={styles.cardTitle}>🔍 Search Warehouse</h2>
-            <input
-              placeholder="Search code or equipment name..."
-              value={warehouseSearch}
-              onChange={(e) => setWarehouseSearch(e.target.value)}
-              style={styles.searchInput}
-            />
-            <p style={styles.emptyText}>Blue = suggested order needed. Red = on hand is more than 10 above par level.</p>
-
-            <div style={styles.viewModeBox}>
-              <button
-                style={{ ...styles.viewModeButton, ...(warehouseFilter === "all" ? styles.viewModeButtonActive : {}) }}
-                onClick={() => setWarehouseFilter("all")}
-              >
-                📋 All ({allWarehouseItems.length})
-              </button>
-
-              <button
-                style={{ ...styles.viewModeButton, ...(warehouseFilter === "overstock" ? styles.viewModeButtonActive : {}) }}
-                onClick={() => setWarehouseFilter("overstock")}
-              >
-                🔴 Overstock ({warehouseOverstockItems})
-              </button>
-
-              <button
-                style={{ ...styles.viewModeButton, ...(warehouseFilter === "needsOrder" ? styles.viewModeButtonActive : {}) }}
-                onClick={() => setWarehouseFilter("needsOrder")}
-              >
-                🔵 Needs Order ({criticalItems})
-              </button>
-            </div>
-
-            <button style={styles.backButton} onClick={() => loadMasterInventoryItems(makeInventoryShip || userShip)}>
-              🔄 Refresh Pictures
-            </button>
-          </div>
-        </section>
-
-        <section style={styles.card}>
-          <h2 style={styles.productTitle}>🏬 {activeEquipmentDepartmentLabel} Inventory Warehouse</h2>
-
-          {warehouseRows.length === 0 && <p style={styles.emptyText}>Upload the warehouse inventory file to begin.</p>}
-          {warehouseRows.length > 0 && warehouseItems.length === 0 && (
-            <p style={styles.emptyText}>
-              No warehouse items match the current search/filter.
-            </p>
-          )}
-
-          <div style={styles.equipmentGrid}>
-            {warehouseItems.map((item, i) => {
-  const displayImage = getEquipmentDisplayImage(item);
-  const overstockAmount = Number(item.onHand || 0) - Number(item.par || 0);
-  const isOverstock = overstockAmount > 10;
-
-              return (
-              <div
-                key={`${item.code}-${i}`}
-                style={{
-                  ...styles.equipmentCard,
-                  ...(item.suggested > 0 ? styles.orderNeededCard : {}),
-                  ...(isOverstock ? styles.overstockCard : {}),
-                }}
-              >
-                {displayImage ? (
-                  <div>
-                    <img
-                      src={getImageUrl(displayImage)}
-                      alt={item.name}
-                      style={styles.equipmentImage}
-                      onClick={() => setSelectedEquipment({
-                        name: item.name,
-                        code: item.code,
-                        category: item.masterCategory || "Warehouse Item",
-                        sheetName: item.masterSheetName || "Warehouse",
-                        image: displayImage,
-                      })}
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                        const link = e.currentTarget.nextElementSibling;
-                        if (link) link.style.display = "block";
-                      }}
-                    />
-                    <button
-                      style={styles.imageButton}
-                      onClick={() => setSelectedEquipment({
-                        name: item.name,
-                        code: item.code,
-                        category: item.masterCategory || "Warehouse Item",
-                        sheetName: item.masterSheetName || "Warehouse",
-                        image: displayImage,
-                      })}
-                    >
-                      View Picture
-                    </button>
-                    <a href={displayImage} target="_blank" rel="noreferrer" style={styles.imageLink}>Open Picture</a>
-                  </div>
-                ) : (
-                  <div style={styles.equipmentNoImage}>No image matched</div>
-                )}
-
-                <div style={styles.recipeName}>{item.name || "Unnamed Item"}</div>
-                <div style={styles.recipeMeta}>Code: {item.code || "N/A"}</div>
-                <div style={styles.recipeMeta}>Par Level: {formatQty(item.par)}</div>
-                <div style={styles.recipeMeta}>On Hand: {formatQty(item.onHand)}</div>
-                <div style={styles.recipeMeta}>Future Order: {formatQty(item.future)}</div>
-                {item.imageSource && <div style={styles.recipeMeta}>Picture match: {item.imageSource}</div>}
-                {isOverstock && (
-                  <div style={styles.overstockWarning}>
-                    Overstock Alert: {formatQty(overstockAmount)} above par
-                  </div>
-                )}
-                <div style={item.suggested > 0 ? styles.suggestedOrderBad : styles.suggestedOrderGood}>
-                  Suggested Next Order: {formatQty(item.suggested)}
-                </div>
-              </div>
-              );
-            })}
-          </div>
-
-          {selectedEquipment && (
-  <div style={styles.modalBackdrop} onClick={() => setSelectedEquipment(null)}>
-    <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
-      <button style={styles.closeButton} onClick={() => setSelectedEquipment(null)}>
-        ✕
-      </button>
-
-      <h2>{selectedEquipment.name}</h2>
-      <p><strong>Code:</strong> {selectedEquipment.code || "N/A"}</p>
-      <p><strong>Sheet:</strong> {selectedEquipment.sheetName || "N/A"}</p>
-      <p><strong>Category:</strong> {selectedEquipment.category || "N/A"}</p>
-
-      {selectedEquipment.image || selectedEquipment.imageFallback ? (
-        <div>
-          <img
-            src={getImageUrl(selectedEquipment.image || selectedEquipment.imageFallback)}
-            alt={selectedEquipment.name}
-            style={styles.modalImage}
-            onError={(e) => {
-              const fallbackSrc = selectedEquipment.imageFallback
-                ? getImageUrl(selectedEquipment.imageFallback)
-                : "";
-
-              if (fallbackSrc && e.currentTarget.dataset.usedFallback !== "true") {
-                e.currentTarget.dataset.usedFallback = "true";
-                e.currentTarget.src = fallbackSrc;
-                return;
-              }
-
-              e.currentTarget.style.display = "none";
-              const link = e.currentTarget.nextElementSibling;
-              if (link) link.style.display = "block";
-            }}
+      <WarehouseInventoryScreen
+            styles={styles}
+            activeEquipmentDepartmentLabel={activeEquipmentDepartmentLabel}
+            formatQty={formatQty}
+            getEquipmentDisplayImage={getEquipmentDisplayImage}
+            getImageUrl={getImageUrl}
+            getShipDisplayName={getShipDisplayName}
+            loadMasterInventoryItems={loadMasterInventoryItems}
+            makeInventoryShip={makeInventoryShip}
+            parseWarehouseItems={parseWarehouseItems}
+            selectedEquipment={selectedEquipment}
+            setEquipmentMode={setEquipmentMode}
+            setSelectedEquipment={setSelectedEquipment}
+            setWarehouseFilter={setWarehouseFilter}
+            setWarehouseSearch={setWarehouseSearch}
+            uploadWarehouseFile={uploadWarehouseFile}
+            userShip={userShip}
+            warehouseFilter={warehouseFilter}
+            warehouseMessage={warehouseMessage}
+            warehouseRows={warehouseRows}
+            warehouseSearch={warehouseSearch}
           />
-
-          <a
-            href={selectedEquipment.imageFallback || selectedEquipment.image}
-            target="_blank"
-            rel="noreferrer"
-            style={{ ...styles.imageLink, display: "block" }}
-          >
-            Open Picture
-          </a>
-        </div>
-      ) : (
-        <div style={styles.equipmentNoImage}>No image</div>
-      )}
-    </div>
-  </div>
-)}
-        </section>
-      </main>
     );
   }
 
   if (module === "equipment" && hasEquipmentDepartment && equipmentMode === "muster") {
+    return (
+      <EquipmentMusterScreen
+            styles={styles}
+            activeEquipmentDepartmentLabel={activeEquipmentDepartmentLabel}
+            equipmentDepartment={equipmentDepartment}
+            EquipmentMusterModule={EquipmentMusterModule}
+            getEquipmentDisplayImage={getEquipmentDisplayImage}
+            getEquipmentFallbackImage={getEquipmentFallbackImage}
+            getImageUrl={getImageUrl}
+            getShipDisplayName={getShipDisplayName}
+            isAdmin={isAdmin}
+            loadMasterInventoryItems={loadMasterInventoryItems}
+            makeInventoryShip={makeInventoryShip}
+            masterInventoryLoading={masterInventoryLoading}
+            musterItems={musterItems}
+            musterMessage={musterMessage}
+            pictureLibraryBusy={pictureLibraryBusy}
+            pictureLibraryMessage={pictureLibraryMessage}
+            setEquipmentMode={setEquipmentMode}
+            syncMasterInventoryPicturesFromDrive={syncMasterInventoryPicturesFromDrive}
+            uploadEquipmentPictureZipFile={uploadEquipmentPictureZipFile}
+            uploadMusterFile={uploadMusterFile}
+            userShip={userShip}
+          />
+    );
+  }
   return (
-    <EquipmentMusterModule
+    <ProductDashboardScreen
       styles={styles}
-      userShip={userShip}
-      makeInventoryShip={makeInventoryShip}
-      isAdmin={isAdmin}
-      equipmentDepartment={equipmentDepartment}
       activeEquipmentDepartmentLabel={activeEquipmentDepartmentLabel}
+      allergenWarnings={allergenWarnings}
+      combinedBreakdown={combinedBreakdown}
+      consumptionRows={consumptionRows}
+      dashboardRegionalMatchedCount={dashboardRegionalMatchedCount}
+      equipmentDepartment={equipmentDepartment}
+      exportMainConsumptionCostReportToExcel={exportMainConsumptionCostReportToExcel}
+      exportSelectedProductConsumptionReportToExcel={exportSelectedProductConsumptionReportToExcel}
+      exportTopNotInUseByLocationReportToExcel={exportTopNotInUseByLocationReportToExcel}
+      exportYearlyRegionalConsumptionReportToExcel={exportYearlyRegionalConsumptionReportToExcel}
+      filteredProductCostReportRows={filteredProductCostReportRows}
+      filteredProducts={filteredProducts}
+      formatMoney={formatMoney}
+      formatQty={formatQty}
+      formatRegionalQty={formatRegionalQty}
       getShipDisplayName={getShipDisplayName}
-      musterItems={musterItems}
-      musterMessage={musterMessage}
-      pictureLibraryMessage={pictureLibraryMessage}
-      pictureLibraryBusy={pictureLibraryBusy}
-      masterInventoryLoading={masterInventoryLoading}
-      uploadMusterFile={uploadMusterFile}
-      loadMasterInventoryItems={loadMasterInventoryItems}
-      syncMasterInventoryPicturesFromDrive={syncMasterInventoryPicturesFromDrive}
-      uploadEquipmentPictureZipFile={uploadEquipmentPictureZipFile}
-      getEquipmentDisplayImage={getEquipmentDisplayImage}
-      getEquipmentFallbackImage={getEquipmentFallbackImage}
-      getImageUrl={getImageUrl}
-      onBack={() => setEquipmentMode("")}
+      getSubRecipeIngredients={getSubRecipeIngredients}
+      isAdmin={isAdmin}
+      loadPermanentIngredientByLocationForProductDashboard={loadPermanentIngredientByLocationForProductDashboard}
+      message={message}
+      printMainConsumptionCostReport={printMainConsumptionCostReport}
+      printSelectedProductConsumptionReport={printSelectedProductConsumptionReport}
+      printTopNotInUseByLocationReport={printTopNotInUseByLocationReport}
+      productCostReportRows={productCostReportRows}
+      productCostReportRowsWithRegionalPar={productCostReportRowsWithRegionalPar}
+      productCostReportSearch={productCostReportSearch}
+      productMissingReportLoading={productMissingReportLoading}
+      productMissingReportMessage={productMissingReportMessage}
+      productReportView={productReportView}
+      products={products}
+      productsInRecipe={productsInRecipe}
+      recipeRows={recipeRows}
+      recipesForProduct={recipesForProduct}
+      refreshProductMissingReport={refreshProductMissingReport}
+      regionalParBufferPercent={regionalParBufferPercent}
+      search={search}
+      selectedProduct={selectedProduct}
+      selectedRecipe={selectedRecipe}
+      selectedRegionalConsumptionRegion={selectedRegionalConsumptionRegion}
+      setEquipmentMode={setEquipmentMode}
+      setModule={setModule}
+      setProductCostReportSearch={setProductCostReportSearch}
+      setProductMode={setProductMode}
+      setProductReportView={setProductReportView}
+      setRegionalParBufferPercent={setRegionalParBufferPercent}
+      setSearch={setSearch}
+      setSelectedProduct={setSelectedProduct}
+      setSelectedRecipe={setSelectedRecipe}
+      setSelectedRegionalConsumptionRegion={setSelectedRegionalConsumptionRegion}
+      setViewMode={setViewMode}
+      setYearlyRegionalReportMonths={setYearlyRegionalReportMonths}
+      setYearlyRegionalReportRegion={setYearlyRegionalReportRegion}
+      setYearlyRegionalReportSearch={setYearlyRegionalReportSearch}
+      setYearlyRegionalReportShip={setYearlyRegionalReportShip}
+      setYearlyRegionalReportSort={setYearlyRegionalReportSort}
+      showProductMissingReport={showProductMissingReport}
+      templateStatus={templateStatus}
+      toggleProductMissingReport={toggleProductMissingReport}
+      toggleYearlyRegionalReportMonth={toggleYearlyRegionalReportMonth}
+      topNotInUseReport={topNotInUseReport}
+      totalConsumption={totalConsumption}
+      uploadConsumptionFile={uploadConsumptionFile}
+      uploadRecipeFile={uploadRecipeFile}
+      uploadTemplateFile={uploadTemplateFile}
+      uploadYearlyRegionalConsumptionFile={uploadYearlyRegionalConsumptionFile}
+      userShip={userShip}
+      viewMode={viewMode}
+      visibleShips={visibleShips}
+      YEARLY_REGION_ALL={YEARLY_REGION_ALL}
+      YEARLY_REPORT_ALL_SHIPS={YEARLY_REPORT_ALL_SHIPS}
+      yearlyRegionalActiveMonthKeys={yearlyRegionalActiveMonthKeys}
+      yearlyRegionalConsumption={yearlyRegionalConsumption}
+      yearlyRegionalConsumptionReportRows={yearlyRegionalConsumptionReportRows}
+      yearlyRegionalFileName={yearlyRegionalFileName}
+      yearlyRegionalMessage={yearlyRegionalMessage}
+      yearlyRegionalMonthOptions={yearlyRegionalMonthOptions}
+      yearlyRegionalReportMonths={yearlyRegionalReportMonths}
+      yearlyRegionalReportRegion={yearlyRegionalReportRegion}
+      yearlyRegionalReportSearch={yearlyRegionalReportSearch}
+      yearlyRegionalReportShip={yearlyRegionalReportShip}
+      yearlyRegionalReportSort={yearlyRegionalReportSort}
     />
-  );
-}
-  return (
-    <main style={styles.page}>
-      <header style={styles.header}>
-        <img src="/virgin-logo.png" alt="Virgin Voyages" style={styles.headerLogo} />
-        <div style={styles.headerActions}>
-          <button
-  style={styles.backButton}
-  onClick={() => {
-    if (equipmentDepartment) {
-      setModule("equipment");
-      setEquipmentMode("");
-      setProductMode("");
-      return;
-    }
-
-    setProductMode("");
-  }}
->
-  {equipmentDepartment ? `← ${activeEquipmentDepartmentLabel} Options` : "← Product Options"}
-</button>
-          <div style={styles.shipBadge}>🚢 {getShipDisplayName(userShip)}</div>
-        </div>
-      </header>
-
-      <div style={styles.viewModeBox}>
-        <button onClick={() => setViewMode("single")} style={{ ...styles.viewModeButton, ...(viewMode === "single" ? styles.viewModeButtonActive : {}) }}>
-          🚢 {getShipDisplayName(userShip)} Only
-        </button>
-
-        <button onClick={() => setViewMode("all")} style={{ ...styles.viewModeButton, ...(viewMode === "all" ? styles.viewModeButtonActive : {}) }}>
-          🌍 All Ships Overview
-        </button>
-      </div>
-
-      <section style={styles.grid}>
-  <div style={styles.card}>
-    <h2 style={styles.cardTitle}>📤 Upload Files</h2>
-
-    <label style={styles.label}>Step 1: Consumption file</label>
-    <input
-      type="file"
-      accept=".xlsx,.xls,.xlsm"
-      onChange={uploadConsumptionFile}
-      style={styles.fileInput}
-    />
-
-    <label style={styles.label}>Step 2: Permanent Ingredient by Location file</label>
-
-    <div style={styles.infoBox}>
-      <div>
-        📄 Ingredient by Location file loads automatically for all users.
-      </div>
-      <div>
-        🔒 Only admins can replace the permanent file.
-      </div>
-    </div>
-
-    <button
-      type="button"
-      style={styles.backButton}
-      onClick={() => loadPermanentIngredientByLocationForProductDashboard()}
-    >
-      🔄 Reload Permanent Ingredient by Location
-    </button>
-
-    {isAdmin && (
-      <>
-        <label style={styles.label}>
-          Admin only: replace permanent Ingredient by Location file
-        </label>
-
-        <input
-          type="file"
-          accept=".xlsx,.xls,.xlsm"
-          onChange={uploadRecipeFile}
-          style={styles.fileInput}
-        />
-      </>
-    )}
-
-    <label style={styles.label}>Optional: Replace template file</label>
-
-    <input
-      type="file"
-      accept=".xlsx,.xls,.xlsm"
-      onChange={uploadTemplateFile}
-      style={styles.fileInput}
-    />
-
-    <label style={styles.label}>
-      Optional: Yearly regional consumption file May 2025 - April 2026
-    </label>
-
-    <input
-      type="file"
-      accept=".xlsx,.xls,.xlsm"
-      onChange={uploadYearlyRegionalConsumptionFile}
-      style={styles.fileInput}
-    />
-
-    <label style={styles.label}>Region / home port</label>
-
-    <select
-  value={selectedRegionalConsumptionRegion}
-  onChange={(e) => setSelectedRegionalConsumptionRegion(e.target.value)}
-  style={styles.searchInput}
->
-  <option value="">Select region / origin</option>
-  <option value={YEARLY_REGION_ALL}>All regions</option>
-
-  {(yearlyRegionalConsumption?.regionOptions || []).map((region) => (
-    <option key={region} value={region}>
-      {region}
-    </option>
-  ))}
-</select>
-
-    <label style={styles.label}>Regional par buffer %</label>
-
-    <input
-      type="number"
-      min="0"
-      step="1"
-      value={regionalParBufferPercent}
-      onChange={(e) => setRegionalParBufferPercent(Number(e.target.value || 0))}
-      style={styles.searchInput}
-    />
-
-    {message && <p style={styles.message}>{message}</p>}
-
-    <div style={styles.infoBox}>
-      <div>
-        📦 Products loaded: <strong>{products.length}</strong>
-      </div>
-
-      <div>
-        📘 Recipe rows loaded:{" "}
-        <strong>{Math.max(recipeRows.length - 1, 0)}</strong>
-      </div>
-
-      <div>
-        📋 Template: <strong>{templateStatus}</strong>
-      </div>
-
-      <div>
-  🌎 Yearly regional file:{" "}
-  <strong>{yearlyRegionalFileName || "Not uploaded"}</strong>
-</div>
-
-<div>
-  🧭 Selected region:{" "}
-  <strong>
-    {!selectedRegionalConsumptionRegion
-      ? "Not selected"
-      : selectedRegionalConsumptionRegion === YEARLY_REGION_ALL
-      ? "All regions"
-      : selectedRegionalConsumptionRegion}
-  </strong>
-</div>
-
-<div>
-  📈 Regional matches:{" "}
-  <strong>
-    {dashboardRegionalMatchedCount} / {productCostReportRowsWithRegionalPar.length}
-  </strong>
-</div>
-
-      <div>
-        🧮 Regional buffer:{" "}
-        <strong>{formatQty(regionalParBufferPercent)}%</strong>
-      </div>
-
-      <div>{yearlyRegionalMessage}</div>
-
-      <div style={{ color: "#b00020" }}>
-        Red = recipe/location or template charge location expects usage, but consumption is 0 for visible ship(s).
-      </div>
-
-      <div style={{ color: "#0057b8" }}>
-        Blue = product is in recipe/location, but missing from the matching venue template.
-      </div>
-    </div>
-  </div>
-
-  <div style={styles.card}>
-    <h2 style={styles.cardTitle}>🧭 Product Report View</h2>
-    <p style={styles.emptyText}>Choose the report you want to work with.</p>
-
-    <div style={styles.reportModeGrid}>
-      <button
-        style={{
-          ...styles.reportModeButton,
-          ...(productReportView === "main" ? styles.reportModeButtonActive : {}),
-        }}
-        onClick={() => setProductReportView("main")}
-      >
-        <strong>💰 Main Report</strong>
-        <span>Consumption and cost by product, venue and ship</span>
-      </button>
-        <button
-  style={{
-    ...styles.reportModeButton,
-    ...(productReportView === "yearlyRegional"
-      ? styles.reportModeButtonActive
-      : {}),
-  }}
-  onClick={() => setProductReportView("yearlyRegional")}
->
-  <strong>🌎 Yearly Regional Consumption</strong>
-  <span>Consumption by month, region / home port, ship, and product</span>
-</button>
-
-      <button
-        style={{
-          ...styles.reportModeButton,
-          ...(productReportView === "consumption"
-            ? styles.reportModeButtonActive
-            : {}),
-        }}
-        onClick={() => setProductReportView("consumption")}
-      >
-        <strong>📊 Consumption Report</strong>
-        <span>Consumption vs locations and template</span>
-      </button>
-
-      <button
-        style={{
-          ...styles.reportModeButton,
-          ...(productReportView === "reports" ? styles.reportModeButtonActive : {}),
-        }}
-        onClick={() => setProductReportView("reports")}
-      >
-        <strong>📋 Generate Report</strong>
-        <span>Top 50 items not in use by location</span>
-      </button>
-    </div>
-  </div>
-
-  {productReportView === "consumption" && (
-    <div style={styles.card}>
-      <h2 style={styles.cardTitle}>🔍 Select Product</h2>
-
-      <input
-        placeholder="Search product..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        style={styles.searchInput}
-      />
-
-      <div style={styles.productList}>
-        {filteredProducts.map((product, i) => (
-          <button
-            key={i}
-            onClick={() => {
-              setSelectedProduct(product);
-              setSelectedRecipe(null);
-            }}
-            style={{
-              ...styles.productItem,
-              ...(selectedProduct === product ? styles.productItemActive : {}),
-            }}
-          >
-            {product}
-          </button>
-        ))}
-      </div>
-    </div>
-  )}
-</section>
-
-{productReportView === "yearlyRegional" && (
-  <section style={styles.card}>
-    <div
-      style={{
-        ...styles.header,
-        boxShadow: "none",
-        padding: 0,
-        marginBottom: 18,
-      }}
-    >
-      <div>
-        <h2 style={styles.productTitle}>🌎 Yearly Regional Consumption</h2>
-        <p style={{ ...styles.emptyText, margin: 0 }}>
-          Uses the yearly May 2025 - April 2026 file. Filter by month, region /
-          home port, ship, and product.
-        </p>
-      </div>
-
-      <div style={styles.headerActions}>
-        <button
-          style={styles.primaryButton}
-          onClick={exportYearlyRegionalConsumptionReportToExcel}
-        >
-          📥 Export Excel
-        </button>
-      </div>
-    </div>
-
-    {!yearlyRegionalConsumption && (
-      <p style={styles.emptyText}>
-        Upload or load the yearly regional consumption file to use this report.
-      </p>
-    )}
-
-    <div style={styles.grid}>
-      <div style={styles.card}>
-        <h3 style={styles.cardTitle}>🔎 Filters</h3>
-
-        <label style={styles.label}>Search product, code, category, region, or ship</label>
-        <input
-          placeholder="Search yearly regional data..."
-          value={yearlyRegionalReportSearch}
-          onChange={(event) => setYearlyRegionalReportSearch(event.target.value)}
-          style={styles.searchInput}
-        />
-
-        <label style={styles.label}>Region / home port</label>
-        <select
-          value={yearlyRegionalReportRegion}
-          onChange={(event) => setYearlyRegionalReportRegion(event.target.value)}
-          style={styles.searchInput}
-        >
-          <option value={YEARLY_REGION_ALL}>All regions</option>
-
-          {(yearlyRegionalConsumption?.regionOptions || []).map((region) => (
-            <option key={region} value={region}>
-              {region}
-            </option>
-          ))}
-        </select>
-
-        <label style={styles.label}>Ship</label>
-        <select
-          value={yearlyRegionalReportShip}
-          onChange={(event) => setYearlyRegionalReportShip(event.target.value)}
-          style={styles.searchInput}
-        >
-          <option value={YEARLY_REPORT_ALL_SHIPS}>All ships</option>
-          <option value="BRL">BRL</option>
-          <option value="RL">RL</option>
-          <option value="SC">SC</option>
-          <option value="VL">VL</option>
-        </select>
-
-        <label style={styles.label}>Sort by</label>
-        <select
-          value={yearlyRegionalReportSort}
-          onChange={(event) => setYearlyRegionalReportSort(event.target.value)}
-          style={styles.searchInput}
-        >
-          <option value="qty">Highest quantity</option>
-          <option value="value">Highest value</option>
-          <option value="daily">Highest daily consumption</option>
-          <option value="product">Product name A-Z</option>
-        </select>
-      </div>
-
-      <div style={styles.card}>
-        <h3 style={styles.cardTitle}>📅 Month comparison</h3>
-
-        <div style={styles.viewModeBox}>
-          <button
-            style={{
-              ...styles.viewModeButton,
-              ...(yearlyRegionalReportMonths.length === 0
-                ? styles.viewModeButtonActive
-                : {}),
-            }}
-            onClick={() => setYearlyRegionalReportMonths([])}
-          >
-            All months
-          </button>
-
-          {yearlyRegionalMonthOptions.map((month) => {
-            const active =
-              yearlyRegionalReportMonths.length === 0 ||
-              yearlyRegionalReportMonths.includes(month.monthKey);
-
-            return (
-              <button
-                key={month.monthKey}
-                style={{
-                  ...styles.viewModeButton,
-                  ...(active ? styles.viewModeButtonActive : {}),
-                }}
-                onClick={() => toggleYearlyRegionalReportMonth(month.monthKey)}
-              >
-                {month.monthName}
-              </button>
-            );
-          })}
-        </div>
-
-        <div style={styles.infoBox}>
-          <div>
-            📄 File:{" "}
-            <strong>{yearlyRegionalFileName || "Not loaded"}</strong>
-          </div>
-
-          <div>
-            📦 Product rows shown:{" "}
-            <strong>{yearlyRegionalConsumptionReportRows.length}</strong>
-          </div>
-
-          <div>
-            🧭 Region filter:{" "}
-            <strong>
-              {yearlyRegionalReportRegion === YEARLY_REGION_ALL
-                ? "All regions"
-                : yearlyRegionalReportRegion}
-            </strong>
-          </div>
-
-          <div>
-            🚢 Ship filter:{" "}
-            <strong>
-              {yearlyRegionalReportShip === YEARLY_REPORT_ALL_SHIPS
-                ? "All ships"
-                : yearlyRegionalReportShip}
-            </strong>
-          </div>
-
-          <div>
-            📅 Months selected:{" "}
-            <strong>
-              {yearlyRegionalReportMonths.length === 0
-                ? "All months"
-                : yearlyRegionalMonthOptions
-                    .filter((month) =>
-                      yearlyRegionalReportMonths.includes(month.monthKey)
-                    )
-                    .map((month) => month.monthName)
-                    .join(", ")}
-            </strong>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    {yearlyRegionalConsumption &&
-      yearlyRegionalConsumptionReportRows.length === 0 && (
-        <p style={styles.emptyText}>
-          No yearly regional rows match the current filters.
-        </p>
-      )}
-
-    <div style={styles.costReportLineList}>
-      {yearlyRegionalConsumptionReportRows.map((item, index) => {
-        const activeMonthSet = new Set(yearlyRegionalActiveMonthKeys);
-        const visibleMonths = yearlyRegionalMonthOptions.filter((month) =>
-          activeMonthSet.has(month.monthKey)
-        );
-
-        return (
-          <div
-            key={`${item.productCode || item.productKey || item.productName}-${index}`}
-            style={styles.costReportLine}
-          >
-            <div style={styles.costLineMain}>
-              <div style={styles.costLineProduct}>
-                {item.productName || "Unnamed product"}
-              </div>
-
-              <div style={styles.costLineMeta}>
-                {item.productCode ? "Code: " + item.productCode + " • " : ""}
-                U/M: {item.unitMeasure || "N/A"}
-              </div>
-
-              <div style={styles.costLineMeta}>
-                {item.categoryName || "No category"}
-                {item.subCategoryName ? " • " + item.subCategoryName : ""}
-              </div>
-
-              <div style={styles.statusGood}>
-                Daily: {formatRegionalQty(item.avgDailyQty)} • Days:{" "}
-                {formatQty(item.totalDays)} • Blocks: {item.blocks}
-              </div>
-            </div>
-
-            <div style={styles.costLineTotals}>
-              <span>Total Qty</span>
-              <strong>{formatRegionalQty(item.totalQty)}</strong>
-              <span>{formatMoney(item.totalValue)}</span>
-              {item.avgPrice > 0 && (
-                <small>{formatMoney(item.avgPrice)} / unit</small>
-              )}
-            </div>
-
-            <div style={styles.costLineVenues}>
-              {visibleMonths.map((month) => {
-                const monthData = item.months?.[month.monthKey] || {};
-                const hasMonthData =
-                  Number(monthData.qty || 0) !== 0 ||
-                  Number(monthData.value || 0) !== 0;
-
-                return (
-                  <div key={month.monthKey} style={styles.costLineVenue}>
-                    <div style={styles.costLineVenueTitle}>{month.monthName}</div>
-
-                    {hasMonthData ? (
-                      <>
-                        <div style={styles.costLineShipChips}>
-                          <div style={styles.costLineShipChip}>
-                            <span style={styles.costLineShipName}>Qty</span>
-                            <strong>{formatRegionalQty(monthData.qty)}</strong>
-                          </div>
-
-                          <div style={styles.costLineShipChip}>
-                            <span style={styles.costLineShipName}>Value</span>
-                            <strong>{formatMoney(monthData.value)}</strong>
-                          </div>
-
-                          <div style={styles.costLineShipChip}>
-                            <span style={styles.costLineShipName}>Daily</span>
-                            <strong>
-                              {formatRegionalQty(monthData.avgDailyQty)}
-                            </strong>
-                          </div>
-
-                          <div style={styles.costLineShipChip}>
-                            <span style={styles.costLineShipName}>Days</span>
-                            <strong>{formatQty(monthData.days)}</strong>
-                          </div>
-                        </div>
-
-                        <div style={styles.costLinePriceNote}>
-                          Ships: {(monthData.ships || []).join(", ") || "N/A"}
-                        </div>
-
-                        <div style={styles.recipeMeta}>
-                          Regions: {(monthData.regions || []).join(", ") || "N/A"}
-                        </div>
-                      </>
-                    ) : (
-                      <div style={styles.statusNeutral}>No consumption</div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  </section>
-)}
-      {productReportView === "main" && (
-      <section style={styles.card}>
-        <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 18 }}>
-          <div>
-            <h2 style={styles.productTitle}>💰 Main Consumption & Cost Report</h2>
-            <p style={{ ...styles.emptyText, margin: 0 }}>
-              Automatically generated from the consumption file. Lowest unit price is highlighted when ship prices differ.
-            </p>
-          </div>
-
-          <div style={styles.headerActions}>
-            <button style={styles.backButton} onClick={printMainConsumptionCostReport}>
-              🖨️ Print
-            </button>
-            <button style={styles.primaryButton} onClick={exportMainConsumptionCostReportToExcel}>
-              📥 Export Excel
-            </button>
-          </div>
-        </div>
-
-        <div style={styles.infoBox}>
-          <div>📦 Products in report: <strong>{filteredProductCostReportRows.length}</strong> / {productCostReportRows.length}</div>
-          <div>🚢 View: <strong>{viewMode === "single" ? userShip : "All Ships"}</strong></div>
-          <div>📘 Source columns: C Venue, I/L/O/R Quantity, J/M/P/S Total Cost, H/K/N/Q Unit Price.</div>
-        </div>
-
-        <input
-          placeholder="Search product, code, or venue..."
-          value={productCostReportSearch}
-          onChange={(e) => setProductCostReportSearch(e.target.value)}
-          style={{ ...styles.searchInput, marginTop: 14 }}
-        />
-
-        {consumptionRows.length === 0 && (
-          <p style={styles.emptyText}>Upload the consumption file to generate this report.</p>
-        )}
-
-        {consumptionRows.length > 0 && filteredProductCostReportRows.length === 0 && (
-          <p style={styles.emptyText}>No products found for this search.</p>
-        )}
-
-        <div style={styles.costReportLineList}>
-          {filteredProductCostReportRows.map((item) => {
-  const itemVenues = Array.isArray(item.venues) ? item.venues : [];
-
-  return (
-            <div key={item.productKey} style={styles.costReportLine}>
-              <div style={styles.costLineMain}>
-  <div style={styles.costLineProduct}>{item.product}</div>
-
-  <div style={styles.costLineMeta}>
-    {item.code ? "Code: " + item.code + " • " : ""}
-    {itemVenues.length} venue{itemVenues.length === 1 ? "" : "s"}
-  </div>
-
-  {item.regionalHasData ? (
-    <div style={styles.statusGood}>
-      Region:{" "}
-      {item.regionalRegion === YEARLY_REGION_ALL
-        ? "All regions"
-        : item.regionalRegion}{" "}
-      • Daily: {formatRegionalQty(item.regionalAvgDailyQty)} • Suggested Par:{" "}
-      {formatRegionalQty(item.regionalSuggestedParLevel)}
-    </div>
-  ) : yearlyRegionalConsumption ? (
-    <div style={styles.statusNeutral}>
-      No regional yearly match
-    </div>
-  ) : null}
-</div>
-
-              <div style={styles.costLineTotals}>
-                <span>Total</span>
-                <strong>{formatQty(item.visibleTotalQty)}</strong>
-                <span>{formatMoney(item.visibleTotalCost)}</span>
-              </div>
-
-              <div style={styles.costLineVenues}>
-                {itemVenues.map((venue) => (
-                  <div key={venue.venueKey} style={styles.costLineVenue}>
-                    <div style={styles.costLineVenueTitle}>{venue.location}</div>
-
-                    <div style={styles.costLineShipChips}>
-                      {visibleShips.map((ship) => {
-                        const shipData = venue.ships[ship] || { qty: 0, cost: 0, unitPrice: 0, isLowestUnitPrice: false };
-                        const hasData = Number(shipData.qty || 0) !== 0 || Number(shipData.cost || 0) !== 0;
-
-                        if (!hasData) return null;
-
-                        return (
-                          <div
-                            key={ship}
-                            style={{
-                              ...styles.costLineShipChip,
-                              ...(shipData.isLowestUnitPrice ? styles.costLineShipLowest : {}),
-                            }}
-                          >
-                            <span style={styles.costLineShipName}>{ship}</span>
-                            <strong>{formatQty(shipData.qty)}</strong>
-                            <span>{formatMoney(shipData.cost)}</span>
-                            {shipData.unitPrice > 0 && (
-                              <small>{formatMoney(shipData.unitPrice)} / unit</small>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {venue.hasPriceDifference && (
-                      <div style={styles.costLinePriceNote}>Lowest unit price highlighted.</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-                        </div>
-          );
-        })}
-        </div>
-
-      </section>
-      )}
-
-      {productReportView === "reports" && (
-      <section style={styles.card}>
-        <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: showProductMissingReport ? 18 : 0 }}>
-          <div>
-            <h2 style={styles.productTitle}>📋 Generate Report</h2>
-            <p style={{ ...styles.emptyText, margin: 0 }}>
-              Generate the Top 50 items not in use by the location where they should be used.
-            </p>
-          </div>
-
-          <div style={styles.headerActions}>
-            <button
-              style={styles.backButton}
-              onClick={toggleProductMissingReport}
-              disabled={productMissingReportLoading}
-            >
-              {productMissingReportLoading ? "Preparing..." : showProductMissingReport ? "Hide Report" : "Open Report"}
-            </button>
-
-            {showProductMissingReport && (
-              <button
-                style={styles.backButton}
-                onClick={refreshProductMissingReport}
-                disabled={productMissingReportLoading}
-              >
-                🔄 Refresh Report
-              </button>
-            )}
-
-            <button
-              style={styles.backButton}
-              onClick={printTopNotInUseByLocationReport}
-              disabled={productMissingReportLoading}
-            >
-              🖨️ Print
-            </button>
-
-            <button
-              style={styles.primaryButton}
-              onClick={exportTopNotInUseByLocationReportToExcel}
-              disabled={productMissingReportLoading}
-            >
-              📥 Export Excel
-            </button>
-          </div>
-        </div>
-
-        {showProductMissingReport && (
-          <>
-            <div style={styles.infoBox}>
-              <div>📋 Report: <strong>Top 50 Not In Use By Location</strong></div>
-              <div>🚢 View: <strong>{viewMode === "single" ? userShip : "All Ships"}</strong></div>
-              <div>🔎 Rows found: <strong>{topNotInUseReport.length}</strong></div>
-              {productMissingReportLoading && <div>Preparing report, please wait...</div>}
-              {productMissingReportMessage && <div style={{ color: topNotInUseReport.length ? "#555" : "#8a5a00" }}>{productMissingReportMessage}</div>}
-              <div style={{ color: "#b00020" }}>
-                Shows products that are expected by recipe/location or template charge location, but usage is 0 for one or more visible ship(s).
-              </div>
-            </div>
-
-            {!productMissingReportLoading && topNotInUseReport.length === 0 && (
-              <p style={styles.emptyText}>
-                No not-in-use records found. Upload consumption, recipe/location, and template files, then open the report again.
-              </p>
-            )}
-
-            <div style={styles.equipmentGrid}>
-              {topNotInUseReport.map((item, index) => (
-                <div key={`${item.product}-${item.venueKey}-${index}`} style={{ ...styles.equipmentCard, ...styles.orderWarningCard }}>
-                  <div style={styles.recipeMeta}>#{index + 1}</div>
-                  <div style={styles.recipeName}>{item.product}</div>
-                  <div style={styles.recipeMeta}>Location: {item.location}</div>
-                  <div style={styles.recipeMeta}>Source: {item.source}</div>
-
-                  {item.templateMatches.length > 0 && (
-                    <div style={styles.templateFound}>Template/Menu: {item.templateMatches.join(", ")}</div>
-                  )}
-
-                  {item.missingFromTemplate && (
-                    <div style={styles.templateWarningText}>Also missing from matching template.</div>
-                  )}
-
-                  <div style={styles.shipGrid}>
-                    {visibleShips.map((ship) => {
-                      const isMissing = item.missingShips.includes(ship);
-
-                      return (
-                        <div
-                          key={ship}
-                          style={{ ...styles.shipBox, ...(ship === userShip ? styles.shipBoxActive : {}), ...(isMissing ? styles.shipBoxMissing : {}) }}
-                        >
-                          <span style={styles.shipName}>{ship}</span>
-                          <strong style={styles.shipQty}>{formatQty(item.ships?.[ship])}</strong>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div style={styles.statusBad}>Missing: {item.missingShips.join(", ")}</div>
-
-                  <button
-                    style={styles.backButton}
-                    onClick={() => {
-                      setProductReportView("consumption");
-                      setSelectedProduct(item.product);
-                      setSelectedRecipe(null);
-                    }}
-                  >
-                    Open Product
-                  </button>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </section>
-      )}
-
-      {productReportView === "consumption" && selectedProduct && (
-        <section style={styles.card}>
-          <div style={{ ...styles.header, boxShadow: "none", padding: 0, marginBottom: 18 }}>
-            <div>
-              <h2 style={styles.productTitle}>📦 {selectedProduct}</h2>
-              <p style={{ ...styles.emptyText, margin: 0 }}>
-                Consumption vs locations and template for the selected product.
-              </p>
-            </div>
-
-            <div style={styles.headerActions}>
-              <button style={styles.backButton} onClick={printSelectedProductConsumptionReport}>
-                🖨️ Print
-              </button>
-              <button style={styles.primaryButton} onClick={exportSelectedProductConsumptionReportToExcel}>
-                📥 Export Excel
-              </button>
-            </div>
-          </div>
-
-          <h3 style={styles.sectionTitle}>📊 Total Consumption</h3>
-
-          <div style={styles.totalBox}>
-            <div style={styles.totalMain}>
-              {viewMode === "single" ? `${userShip} Total: ` : "Total All Ships: "}
-              {formatQty(totalConsumption.allShips)}
-            </div>
-
-            <div style={styles.totalShipGrid}>
-              {visibleShips.map((ship) => (
-                <div key={ship} style={styles.totalShipBox}>
-                  <span>{ship}</span>
-                  <strong>{formatQty(totalConsumption.totals[ship])}</strong>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <h3 style={styles.sectionTitle}>🏢 Consumption by Venue and Ship</h3>
-
-          <div style={styles.venueGrid}>
-            {combinedBreakdown.map((venueItem, i) => (
-              <div key={i} style={{ ...styles.venueCard, ...(venueItem.missingShips.length > 0 ? styles.venueCardWarning : {}), ...(venueItem.missingFromTemplate ? styles.venueCardTemplateWarning : {}) }}>
-                <h4 style={styles.venueTitle}>
-                  {venueItem.displayName}
-                  <span style={styles.badgeGroup}>
-                    {venueItem.requiredFromTemplate && <span style={styles.chargeBadge}>Template Charge</span>}
-                    {venueItem.missingFromTemplate && <span style={styles.templateBadge}>Missing Template</span>}
-                    {venueItem.missingShips.length > 0 && <span style={styles.missingBadge}>Missing: {venueItem.missingShips.join(", ")}</span>}
-                  </span>
-                </h4>
-
-                {venueItem.requiredFromTemplate && (
-                  <div style={styles.templateFound}>
-                    Template charge location: {venueItem.templateMatches.join(", ") || "Template"}
-                  </div>
-                )}
-
-                {venueItem.missingFromTemplate && (
-                  <div style={styles.templateWarningText}>
-                    Product is used in the recipe/location file for this venue, but it is not found in this venue template.
-                  </div>
-                )}
-
-                <div style={styles.shipGrid}>
-                  {visibleShips.map((ship) => {
-                    const isMissing = venueItem.required && (venueItem.ships[ship] || 0) === 0;
-
-                    return (
-                      <div key={ship} style={{ ...styles.shipBox, ...(ship === userShip ? styles.shipBoxActive : {}), ...(isMissing ? styles.shipBoxMissing : {}) }}>
-                        <span style={styles.shipName}>{ship}</span>
-                        <strong style={styles.shipQty}>{formatQty(venueItem.ships[ship])}</strong>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {venueItem.missingShips.length > 0 && (
-                  <div style={styles.warningSmall}>
-                    {venueItem.requiredFromTemplate
-                      ? "Product appears in the template charge location, but usage is 0 for highlighted ship(s)."
-                      : "Product appears in recipe/location file for this venue, but usage is 0 for highlighted ship(s)."}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-
-          <h3 style={styles.sectionTitle}>👨‍🍳 Recipes using this product</h3>
-
-          {recipeRows.length === 0 && <p style={styles.emptyText}>Upload the recipe/location file to see recipe details.</p>}
-          {recipeRows.length > 0 && recipesForProduct.length === 0 && <p style={styles.emptyText}>No recipes found for this product.</p>}
-
-          <div style={styles.recipeList}>
-            {recipesForProduct.map((recipe, i) => (
-              <button key={i} onClick={() => setSelectedRecipe(recipe)} style={{ ...styles.recipeCard, ...(selectedRecipe?.key === recipe.key ? styles.recipeCardActive : {}) }}>
-                <div style={styles.recipeName}>{recipe.recipeName}</div>
-                <div style={styles.recipeMeta}>Code: {recipe.recipeCode}</div>
-                <div style={styles.recipeMeta}>Venues: {recipe.venues.length ? recipe.venues.join(", ") : "N/A"}</div>
-              </button>
-            ))}
-          </div>
-
-          {selectedRecipe && (
-            <div style={styles.ingredientsCard}>
-              <h3 style={styles.sectionTitle}>🧾 Products used in recipe</h3>
-              <h4 style={{ marginTop: 0 }}>{selectedRecipe.recipeName} ({selectedRecipe.recipeCode})</h4>
-
-              {productsInRecipe.length === 0 ? (
-                <p style={styles.emptyText}>No products found for this recipe.</p>
-              ) : (
-                <ul>
-                  {productsInRecipe.map((product, i) => {
-                    const subIngredients = getSubRecipeIngredients(product);
-
-                    return (
-                      <li key={i} style={{ marginBottom: 10 }}>
-                        <strong>{product}</strong>
-                        {subIngredients.length > 0 && (
-                          <ul style={styles.subRecipeList}>
-                            {subIngredients.map((subItem, j) => <li key={j}>{subItem}</li>)}
-                          </ul>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-
-              <h3 style={styles.sectionTitle}>⚠️ Rule-Based Allergen Warning</h3>
-              <p style={styles.warningText}>This is a keyword-based warning only. Verify against official allergen data before use.</p>
-
-              {allergenWarnings.length === 0 ? (
-                <p style={styles.emptyText}>No likely allergens detected by keyword rules.</p>
-              ) : (
-                <div style={styles.allergenList}>
-                  {allergenWarnings.map((item, i) => (
-                    <div key={i} style={styles.allergenCard}>
-                      <strong>{item.allergen}</strong>
-                      <ul>
-                        {item.products.map((product, j) => <li key={j}>{product}</li>)}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-      )}
-    </main>
   );
 }
 
