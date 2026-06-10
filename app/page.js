@@ -80,26 +80,131 @@ import EquipmentInventoryOptions from "./components/equipment/EquipmentInventory
 import EquipmentMusterModule from "./components/equipment/EquipmentMusterModule";
 import AdminDashboard from "./components/admin/AdminDashboard";
 import { AppProvider } from "./context/AppContext";
-import WelcomeStartScreen from "./components/screens/WelcomeStartScreen";
-import EmailAccessScreen from "./components/screens/EmailAccessScreen";
-import ShipSelectionScreen from "./components/screens/ShipSelectionScreen";
-import ModuleSelectionScreen from "./components/screens/ModuleSelectionScreen";
-import AdminScreen from "./components/screens/AdminScreen";
-import ProductOptionsScreen from "./components/screens/ProductOptionsScreen";
-import GenerateNextOrderScreen from "./components/screens/GenerateNextOrderScreen";
-import TrainingScreen from "./components/screens/TrainingScreen";
-import AllergenScreen from "./components/screens/AllergenScreen";
-import TemperatureScreen from "./components/screens/TemperatureScreen";
-import PeopleScheduleScreen from "./components/screens/PeopleScheduleScreen";
-import EquipmentDepartmentSelectionScreen from "./components/screens/EquipmentDepartmentSelectionScreen";
-import BreakageScreen from "./components/screens/BreakageScreen";
-import EquipmentDepartmentOptionsScreen from "./components/screens/EquipmentDepartmentOptionsScreen";
-import EquipmentInventoryOptionsScreen from "./components/screens/EquipmentInventoryOptionsScreen";
-import MakeInventoryScreen from "./components/screens/MakeInventoryScreen";
-import InventoryInUseScreen from "./components/screens/InventoryInUseScreen";
-import WarehouseInventoryScreen from "./components/screens/WarehouseInventoryScreen";
-import EquipmentMusterScreen from "./components/screens/EquipmentMusterScreen";
-import ProductDashboardScreen from "./components/screens/ProductDashboardScreen";
+const ScreenLoading = () => (
+  <div
+    style={{
+      minHeight: "100vh",
+      padding: 24,
+      background: "#f6f7fb",
+      fontFamily:
+        'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    }}
+  >
+    <div
+      style={{
+        maxWidth: 760,
+        margin: "40px auto",
+        borderRadius: 24,
+        padding: 24,
+        background: "#fff",
+        boxShadow: "0 18px 45px rgba(15, 23, 42, 0.08)",
+        color: "#111827",
+      }}
+    >
+      Loading...
+    </div>
+  </div>
+);
+
+const WelcomeStartScreen = dynamic(() =>
+  import("./components/screens/WelcomeStartScreen"), {
+  loading: ScreenLoading,
+});
+
+const EmailAccessScreen = dynamic(() =>
+  import("./components/screens/EmailAccessScreen"), {
+  loading: ScreenLoading,
+});
+
+const ShipSelectionScreen = dynamic(() =>
+  import("./components/screens/ShipSelectionScreen"), {
+  loading: ScreenLoading,
+});
+
+const ModuleSelectionScreen = dynamic(() =>
+  import("./components/screens/ModuleSelectionScreen"), {
+  loading: ScreenLoading,
+});
+
+const AdminScreen = dynamic(() =>
+  import("./components/screens/AdminScreen"), {
+  loading: ScreenLoading,
+});
+
+const ProductOptionsScreen = dynamic(() =>
+  import("./components/screens/ProductOptionsScreen"), {
+  loading: ScreenLoading,
+});
+
+const GenerateNextOrderScreen = dynamic(() =>
+  import("./components/screens/GenerateNextOrderScreen"), {
+  loading: ScreenLoading,
+});
+
+const TrainingScreen = dynamic(() =>
+  import("./components/screens/TrainingScreen"), {
+  loading: ScreenLoading,
+});
+
+const AllergenScreen = dynamic(() =>
+  import("./components/screens/AllergenScreen"), {
+  loading: ScreenLoading,
+});
+
+const TemperatureScreen = dynamic(() =>
+  import("./components/screens/TemperatureScreen"), {
+  loading: ScreenLoading,
+});
+
+const PeopleScheduleScreen = dynamic(() =>
+  import("./components/screens/PeopleScheduleScreen"), {
+  loading: ScreenLoading,
+});
+
+const EquipmentDepartmentSelectionScreen = dynamic(() =>
+  import("./components/screens/EquipmentDepartmentSelectionScreen"), {
+  loading: ScreenLoading,
+});
+
+const BreakageScreen = dynamic(() =>
+  import("./components/screens/BreakageScreen"), {
+  loading: ScreenLoading,
+});
+
+const EquipmentDepartmentOptionsScreen = dynamic(() =>
+  import("./components/screens/EquipmentDepartmentOptionsScreen"), {
+  loading: ScreenLoading,
+});
+
+const EquipmentInventoryOptionsScreen = dynamic(() =>
+  import("./components/screens/EquipmentInventoryOptionsScreen"), {
+  loading: ScreenLoading,
+});
+
+const MakeInventoryScreen = dynamic(() =>
+  import("./components/screens/MakeInventoryScreen"), {
+  loading: ScreenLoading,
+});
+
+const InventoryInUseScreen = dynamic(() =>
+  import("./components/screens/InventoryInUseScreen"), {
+  loading: ScreenLoading,
+});
+
+const WarehouseInventoryScreen = dynamic(() =>
+  import("./components/screens/WarehouseInventoryScreen"), {
+  loading: ScreenLoading,
+});
+
+const EquipmentMusterScreen = dynamic(() =>
+  import("./components/screens/EquipmentMusterScreen"), {
+  loading: ScreenLoading,
+});
+
+const ProductDashboardScreen = dynamic(() =>
+  import("./components/screens/ProductDashboardScreen"), {
+  loading: ScreenLoading,
+});
 
 const loadPeopleScheduleModule = () => import("./components/PeopleScheduleModule");
 const PeopleScheduleModule = lazy(loadPeopleScheduleModule);
