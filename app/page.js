@@ -7004,46 +7004,46 @@ const exportYearlyRegionalConsumptionReportToExcel = async () => {
 };
 
   const verifyAccessCode = () => {
-    const email = normalizeAppEmail(userEmail);
-    const token = String(emailOtpCode || "").replace(/\s+/g, "").trim();
+  const email = normalizeAppEmail(userEmail);
+  const token = String(emailOtpCode || "").replace(/\s+/g, "").trim();
 
-    if (!isVirginVoyagesEmail(email)) {
-      setEmailError("Please use your Virgin Voyages email ending with @virginvoyages.com.");
-      return;
+  if (!isAllowedAppEmail(email)) {
+    setEmailError("Access is allowed only for alebass80@gmail.com.");
+    return;
+  }
+
+  if (!token) {
+    setEmailError("Enter the access code.");
+    return;
+  }
+
+  if (token !== "1818") {
+    setEmailError("Access code is incorrect.");
+    return;
+  }
+
+  if (typeof window !== "undefined") {
+    if (rememberEmail) {
+      window.localStorage.setItem(USER_EMAIL_STORAGE_KEY, email);
+    } else {
+      window.localStorage.removeItem(USER_EMAIL_STORAGE_KEY);
     }
+  }
 
-    if (!token) {
-      setEmailError("Enter the access code.");
-      return;
-    }
+  setUserEmail(email);
+  setEmailConfirmed(true);
+  setEmailCodeSent(false);
+  setEmailOtpCode("");
+  setEmailError("");
+  setEmailMessage("");
+  setOtpLoading(false);
 
-    if (token !== "1818") {
-      setEmailError("Access code is incorrect.");
-      return;
-    }
-
-    if (typeof window !== "undefined") {
-      if (rememberEmail) {
-        window.localStorage.setItem(USER_EMAIL_STORAGE_KEY, email);
-      } else {
-        window.localStorage.removeItem(USER_EMAIL_STORAGE_KEY);
-      }
-    }
-
-    setUserEmail(email);
-    setEmailConfirmed(true);
-    setEmailCodeSent(false);
-    setEmailOtpCode("");
-    setEmailError("");
-    setEmailMessage("");
-    setOtpLoading(false);
-
-    logUsageEvent("email_verified_with_access_code", {
-      module: "welcome",
-      userEmail: email,
-      remembered: rememberEmail,
-    });
-  };
+  logUsageEvent("email_verified_with_access_code", {
+    module: "welcome",
+    userEmail: email,
+    remembered: rememberEmail,
+  });
+};
 
   const resetUserEmail = () => {
     try {
