@@ -809,16 +809,27 @@ setEditingInventoryId(null);
   };
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+  if (typeof window === "undefined") return;
 
-    const savedEmail = normalizeAppEmail(window.localStorage.getItem(USER_EMAIL_STORAGE_KEY));
-    if (isVirginVoyagesEmail(savedEmail)) {
-      setUserEmail(savedEmail);
-      setRememberEmail(true);
-      setEmailConfirmed(true);
-      logUsageEvent("remembered_email_loaded", { module: "welcome", userEmail: savedEmail });
-    }
-  }, []);
+  const savedEmail = normalizeAppEmail(
+    window.localStorage.getItem(USER_EMAIL_STORAGE_KEY)
+  );
+
+  if (isAllowedAppEmail(savedEmail)) {
+    setUserEmail(savedEmail);
+    setRememberEmail(true);
+    setEmailConfirmed(true);
+    logUsageEvent("remembered_email_loaded", {
+      module: "welcome",
+      userEmail: savedEmail,
+    });
+    return;
+  }
+
+  if (savedEmail) {
+    window.localStorage.removeItem(USER_EMAIL_STORAGE_KEY);
+  }
+}, []);
 
   useEffect(() => {
     logUsageEvent("app_opened", { module: "welcome" });
