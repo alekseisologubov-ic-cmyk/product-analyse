@@ -6984,24 +6984,24 @@ const exportYearlyRegionalConsumptionReportToExcel = async () => {
 };
 
   const sendAccessCode = () => {
-    const email = normalizeAppEmail(userEmail);
+  const email = normalizeAppEmail(userEmail);
 
-    if (!isVirginVoyagesEmail(email)) {
-      setEmailError("Please use your Virgin Voyages email ending with @virginvoyages.com.");
-      return;
-    }
+  if (!isAllowedAppEmail(email)) {
+    setEmailError("Access is allowed only for alebass80@gmail.com.");
+    return;
+  }
 
-    setUserEmail(email);
-    setEmailError("");
-    setEmailMessage("Email accepted. Enter the access code to continue.");
-    setOtpLoading(false);
-    setEmailCodeSent(true);
+  setUserEmail(email);
+  setEmailError("");
+  setEmailMessage("Email accepted. Enter the access code to continue.");
+  setOtpLoading(false);
+  setEmailCodeSent(true);
 
-    logUsageEvent("access_code_screen_opened", {
-      module: "welcome",
-      userEmail: email,
-    });
-  };
+  logUsageEvent("access_code_screen_opened", {
+    module: "welcome",
+    userEmail: email,
+  });
+};
 
   const verifyAccessCode = () => {
     const email = normalizeAppEmail(userEmail);
