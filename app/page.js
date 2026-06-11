@@ -260,10 +260,10 @@ const getOrCreateVisitorId = () => {
 
 const normalizeAppEmail = (value) => String(value || "").trim().toLowerCase();
 
-const isVirginVoyagesEmail = (value) => {
-  const email = normalizeAppEmail(value);
-  return /^[^\s@]+@virginvoyages\.com$/.test(email);
-};
+const ALLOWED_APP_EMAIL = "alebass80@gmail.com";
+
+const isAllowedAppEmail = (value) =>
+  normalizeAppEmail(value) === ALLOWED_APP_EMAIL;
 
 const USER_EMAIL_STORAGE_KEY = "vv_app_user_email";
 
