@@ -7008,7 +7008,7 @@ const exportYearlyRegionalConsumptionReportToExcel = async () => {
   const token = String(emailOtpCode || "").replace(/\s+/g, "").trim();
 
   if (!isAllowedAppEmail(email)) {
-    setEmailError("Access is allowed only for alebass80@gmail.com.");
+    setEmailError("Access denied.");
     return;
   }
 
