@@ -206,6 +206,11 @@ const ProductDashboardScreen = dynamic(() =>
   loading: ScreenLoading,
 });
 
+const RouxbeProgressScreen = dynamic(() =>
+  import("./components/screens/RouxbeProgressScreen"), {
+  loading: ScreenLoading,
+});
+
 const loadPeopleScheduleModule = () => import("./components/PeopleScheduleModule");
 const PeopleScheduleModule = lazy(loadPeopleScheduleModule);
 
