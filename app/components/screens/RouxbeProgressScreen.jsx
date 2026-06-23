@@ -1334,7 +1334,7 @@ export default function RouxbeProgressScreen({
           type="search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search by name, ID, group, position, course, or status..."
+                    placeholder="Search by ship, sheet, Leaders, name, ID, group, position, course, or status..."
           style={styles.searchInput || { width: "100%", padding: 11, borderRadius: 10, border: "1px solid #ccc" }}
         />
 
