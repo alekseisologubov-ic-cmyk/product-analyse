@@ -721,16 +721,24 @@ export default function RouxbeProgressScreen({
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const getDisplayNameForShip = (shipCode) =>
-    typeof getShipDisplayName === "function"
-      ? getShipDisplayName(shipCode)
-      : SHIP_DISPLAY_NAMES[shipCode] || shipCode || "";
+    const getDisplayNameForShip = (shipCode) => {
+    const code = String(shipCode || "").trim();
+
+    if (code === LEADERS_SCOPE) return "Leaders";
+    if (SHIP_DISPLAY_NAMES[code]) return SHIP_DISPLAY_NAMES[code];
+
+    return typeof getShipDisplayName === "function"
+      ? getShipDisplayName(code)
+      : code || "";
+  };
 
   const selectedAppShipName = getDisplayNameForShip(userShip) || "Ship";
   const activeRosterScopeName =
     rosterShipScope === ALL_SHIPS_SCOPE
-      ? "All Ships"
-      : getDisplayNameForShip(rosterShipScope) || "Ship";
+      ? "All Ships + Leaders"
+      : rosterShipScope === LEADERS_SCOPE
+        ? "Leaders"
+        : getDisplayNameForShip(rosterShipScope) || "Ship";
 
   useEffect(() => {
     if (!rosterShipScope && userShip) {
