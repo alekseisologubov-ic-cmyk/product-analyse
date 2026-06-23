@@ -158,6 +158,22 @@ const getLeadersSheetName = (workbook) => {
 const getShipCodeForSheetName = (sheetName) => {
   const normalizedSheet = cleanText(sheetName);
 
+  if (
+    LEADERS_SHEET_ALIASES.some(
+      (alias) => normalizedSheet === cleanText(alias)
+    )
+  ) {
+    return LEADERS_SCOPE;
+  }
+
+  if (
+    LEADERS_SHEET_ALIASES.some((alias) =>
+      normalizedSheet.includes(cleanText(alias))
+    )
+  ) {
+    return LEADERS_SCOPE;
+  }
+
   for (const shipCode of SHIP_ORDER) {
     const aliases = SHIP_SHEET_ALIASES[shipCode] || [];
 
