@@ -933,10 +933,14 @@ export default function RouxbeProgressScreen({
 
       if (!term) return true;
 
-      return [
+            return [
+        SHIP_DISPLAY_NAMES[row.ship] || row.ship,
+        row.ship,
+        row.sheetName,
         row.group,
         row.name,
         row.id,
+        row.number,
         row.position,
         row.progressCategory,
         row.progressStatus,
