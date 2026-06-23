@@ -134,7 +134,27 @@ const getShipSheetName = (workbook, userShip) => {
 
   return sheetNames[0] || "";
 };
+const getLeadersSheetName = (workbook) => {
+  const sheetNames = workbook?.SheetNames || [];
 
+  const exactMatch = sheetNames.find((sheetName) =>
+    LEADERS_SHEET_ALIASES.some(
+      (alias) => cleanText(sheetName) === cleanText(alias)
+    )
+  );
+
+  if (exactMatch) return exactMatch;
+
+  const containsMatch = sheetNames.find((sheetName) =>
+    LEADERS_SHEET_ALIASES.some(
+      (alias) => cleanText(sheetName).includes(cleanText(alias))
+    )
+  );
+
+  if (containsMatch) return containsMatch;
+
+  return "";
+};
 const getShipCodeForSheetName = (sheetName) => {
   const normalizedSheet = cleanText(sheetName);
 
