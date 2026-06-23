@@ -1034,8 +1034,17 @@ export default function RouxbeProgressScreen({
       XLSX.utils.book_append_sheet(workbook, summarySheet, "Summary");
       XLSX.utils.book_append_sheet(workbook, detailSheet, "Progress Detail");
 
-      const scopePart = rosterShipScope === ALL_SHIPS_SCOPE ? "all-ships" : rosterShipScope || "ship";
-      XLSX.writeFile(workbook, `rouxbe-progress-${makeSafeFilePart(scopePart)}-${getReportDateStamp()}.xlsx`);
+            const scopePart =
+        rosterShipScope === ALL_SHIPS_SCOPE
+          ? "all-ships-leaders"
+          : rosterShipScope === LEADERS_SCOPE
+            ? "leaders"
+            : rosterShipScope || "ship";
+
+      XLSX.writeFile(
+        workbook,
+        `rouxbe-progress-${makeSafeFilePart(scopePart)}-${getReportDateStamp()}.xlsx`
+      );
 
       logUsageEvent?.("rouxbe_progress_excel_exported", {
         module: "rouxbe_progress",
