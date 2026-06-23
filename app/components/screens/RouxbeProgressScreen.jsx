@@ -16,6 +16,9 @@ const SHIP_DISPLAY_NAMES = {
   BRL: "Brilliant",
 };
 
+const SHIP_ORDER = ["SC", "VL", "BRL", "RL"];
+const ALL_SHIPS_SCOPE = "ALL";
+
 const DEFAULT_ROUXBE_ROSTER_PATH = "/rouxbe-groups.xlsx";
 
 const loadXlsx = async () => {
@@ -127,6 +130,33 @@ const getShipSheetName = (workbook, userShip) => {
   return sheetNames[0] || "";
 };
 
+const getShipCodeForSheetName = (sheetName) => {
+  const normalizedSheet = cleanText(sheetName);
+
+  for (const shipCode of SHIP_ORDER) {
+    const aliases = SHIP_SHEET_ALIASES[shipCode] || [];
+
+    if (aliases.some((alias) => normalizedSheet === cleanText(alias))) {
+      return shipCode;
+    }
+  }
+
+  for (const shipCode of SHIP_ORDER) {
+    const aliases = SHIP_SHEET_ALIASES[shipCode] || [];
+
+    if (
+      aliases
+        .map((alias) => cleanText(alias))
+        .filter((alias) => alias.length > 2)
+        .some((alias) => normalizedSheet.includes(alias))
+    ) {
+      return shipCode;
+    }
+  }
+
+  return "";
+};
+
 const findGroupLabel = (rows, headerRowIndex, nameColumnIndex) => {
   const startRow = Math.max(0, headerRowIndex - 8);
   const columnsToCheck = [nameColumnIndex - 1, nameColumnIndex, nameColumnIndex + 1];
@@ -148,18 +178,12 @@ const findGroupLabel = (rows, headerRowIndex, nameColumnIndex) => {
   return "Group";
 };
 
-const parseRouxbeRosterWorkbook = (workbook, userShip, XLSX) => {
-  const sheetName = getShipSheetName(workbook, userShip);
-
-  if (!sheetName) {
-    return {
-      sheetName: "",
-      rows: [],
-      sheetNames: workbook?.SheetNames || [],
-    };
-  }
+const parseRouxbeRosterSheet = ({ workbook, sheetName, shipCode, XLSX }) => {
+  if (!sheetName || !shipCode) return [];
 
   const worksheet = workbook.Sheets[sheetName];
+  if (!worksheet) return [];
+
   const rows = XLSX.utils.sheet_to_json(worksheet, {
     header: 1,
     defval: "",
@@ -200,17 +224,16 @@ const parseRouxbeRosterWorkbook = (workbook, userShip, XLSX) => {
       const normalizedName = normalizeName(name);
 
       if (!id && !normalizedName) return;
-      if (!normalizedName && !id) return;
       if (cleanText(name) === "NAME") return;
 
-      const rowKey = `${block.group}|${sourceRowNumber}|${block.nameColumnIndex}|${id || normalizedName}`;
+      const rowKey = `${shipCode}|${sheetName}|${block.group}|${sourceRowNumber}|${block.nameColumnIndex}|${id || normalizedName}`;
 
       if (seenRowKeys.has(rowKey)) return;
       seenRowKeys.add(rowKey);
 
       rosterRows.push({
         rosterKey: rowKey,
-        ship: userShip,
+        ship: shipCode,
         sheetName,
         group: block.group,
         number,
@@ -223,13 +246,55 @@ const parseRouxbeRosterWorkbook = (workbook, userShip, XLSX) => {
     });
   });
 
-  return {
-    sheetName,
-    sheetNames: workbook.SheetNames || [],
-    rows: rosterRows,
-  };
+  return rosterRows;
 };
 
+const parseRouxbeRosterWorkbook = (workbook, shipScope, XLSX) => {
+  const sheetNames = workbook?.SheetNames || [];
+  const activeScope = shipScope || ALL_SHIPS_SCOPE;
+  const allShipsMode = activeScope === ALL_SHIPS_SCOPE;
+
+  const sheetTargets = allShipsMode
+    ? sheetNames
+        .map((sheetName) => ({
+          sheetName,
+          shipCode: getShipCodeForSheetName(sheetName),
+        }))
+        .filter((item) => item.shipCode)
+    : [
+        {
+          sheetName: getShipSheetName(workbook, activeScope),
+          shipCode: activeScope,
+        },
+      ].filter((item) => item.sheetName && item.shipCode);
+
+  const usedSheetNames = [];
+  const rosterRows = [];
+
+  sheetTargets.forEach((target) => {
+    const rows = parseRouxbeRosterSheet({
+      workbook,
+      sheetName: target.sheetName,
+      shipCode: target.shipCode,
+      XLSX,
+    });
+
+    if (rows.length) {
+      usedSheetNames.push(target.sheetName);
+      rosterRows.push(...rows);
+    }
+  });
+
+  return {
+    sheetName: allShipsMode
+      ? usedSheetNames.join(", ")
+      : sheetTargets[0]?.sheetName || "",
+    usedSheetNames,
+    sheetNames,
+    rows: rosterRows,
+    shipScope: activeScope,
+  };
+};
 
 const parseCsvText = (text) => {
   const rows = [];
@@ -551,48 +616,99 @@ export default function RouxbeProgressScreen({
   const [rosterRows, setRosterRows] = useState([]);
   const [rosterMeta, setRosterMeta] = useState({ sheetName: "", fileName: "" });
   const [rosterLoading, setRosterLoading] = useState(false);
+  const [rosterSource, setRosterSource] = useState(null);
+  const [rosterShipScope, setRosterShipScope] = useState(userShip || ALL_SHIPS_SCOPE);
   const [progressRows, setProgressRows] = useState([]);
   const [progressFileName, setProgressFileName] = useState("");
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const shipName =
+  const getDisplayNameForShip = (shipCode) =>
     typeof getShipDisplayName === "function"
-      ? getShipDisplayName(userShip)
-      : SHIP_DISPLAY_NAMES[userShip] || userShip || "Ship";
+      ? getShipDisplayName(shipCode)
+      : SHIP_DISPLAY_NAMES[shipCode] || shipCode || "";
 
-  const loadRosterFromArrayBuffer = async ({ arrayBuffer, fileName }) => {
-    const XLSX = await loadXlsx();
-    const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
-
-    const parsed = parseRouxbeRosterWorkbook(workbook, userShip, XLSX);
-
-    setRosterRows(parsed.rows);
-    setRosterMeta({
-      sheetName: parsed.sheetName,
-      fileName,
-      sheetNames: parsed.sheetNames || [],
-    });
-
-    setMessage(
-      parsed.rows.length
-        ? `Roster loaded for ${shipName}. Tab used: ${parsed.sheetName}. ${parsed.rows.length} enrolled CM(s) found.`
-        : `Roster loaded, but no enrolled CM rows were found for ${shipName}. Check the tab layout.`
-    );
-
-    logUsageEvent?.("rouxbe_roster_loaded", {
-      module: "rouxbe_progress",
-      ship: userShip,
-      fileName,
-      sheetName: parsed.sheetName,
-      enrolledRows: parsed.rows.length,
-    });
-  };
+  const selectedAppShipName = getDisplayNameForShip(userShip) || "Ship";
+  const activeRosterScopeName =
+    rosterShipScope === ALL_SHIPS_SCOPE
+      ? "All Ships"
+      : getDisplayNameForShip(rosterShipScope) || "Ship";
 
   useEffect(() => {
-    if (!userShip) return;
+    if (!rosterShipScope && userShip) {
+      setRosterShipScope(userShip);
+    }
+  }, [rosterShipScope, userShip]);
 
+  useEffect(() => {
+    if (!rosterSource?.arrayBuffer) return;
+
+    let active = true;
+
+    const parseRosterSource = async () => {
+      setRosterLoading(true);
+      setMessage("Loading Rouxbe enrolled CM roster...");
+
+      try {
+        const XLSX = await loadXlsx();
+        const workbook = XLSX.read(rosterSource.arrayBuffer, {
+          type: "array",
+          cellDates: true,
+        });
+
+        const parsed = parseRouxbeRosterWorkbook(
+          workbook,
+          rosterShipScope || userShip || ALL_SHIPS_SCOPE,
+          XLSX
+        );
+
+        if (!active) return;
+
+        const tabText = parsed.usedSheetNames?.length
+          ? parsed.usedSheetNames.join(", ")
+          : parsed.sheetName;
+
+        setRosterRows(parsed.rows);
+        setRosterMeta({
+          sheetName: parsed.sheetName,
+          fileName: rosterSource.fileName,
+          sheetNames: parsed.sheetNames || [],
+          usedSheetNames: parsed.usedSheetNames || [],
+        });
+
+        setMessage(
+          parsed.rows.length
+            ? `Roster loaded for ${activeRosterScopeName}. Tab(s) used: ${tabText}. ${parsed.rows.length} enrolled CM(s) found.`
+            : `Roster loaded, but no enrolled CM rows were found for ${activeRosterScopeName}. Check the tab layout.`
+        );
+
+        logUsageEvent?.("rouxbe_roster_loaded", {
+          module: "rouxbe_progress",
+          ship: rosterShipScope || userShip || ALL_SHIPS_SCOPE,
+          fileName: rosterSource.fileName,
+          sheetName: parsed.sheetName,
+          enrolledRows: parsed.rows.length,
+        });
+      } catch (error) {
+        if (!active) return;
+
+        setRosterRows([]);
+        setRosterMeta({ sheetName: "", fileName: rosterSource.fileName });
+        setMessage(error?.message || "Could not load the Rouxbe roster file.");
+      } finally {
+        if (active) setRosterLoading(false);
+      }
+    };
+
+    parseRosterSource();
+
+    return () => {
+      active = false;
+    };
+  }, [activeRosterScopeName, logUsageEvent, rosterShipScope, rosterSource, userShip]);
+
+  useEffect(() => {
     let active = true;
 
     const loadDefaultRoster = async () => {
@@ -617,7 +733,7 @@ export default function RouxbeProgressScreen({
 
         if (!active) return;
 
-        await loadRosterFromArrayBuffer({
+        setRosterSource({
           arrayBuffer,
           fileName: "rouxbe-groups.xlsx",
         });
@@ -637,8 +753,7 @@ export default function RouxbeProgressScreen({
     return () => {
       active = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userShip]);
+  }, []);
 
   const handleRosterUpload = async (event) => {
     const file = event.target.files?.[0];
@@ -648,7 +763,11 @@ export default function RouxbeProgressScreen({
       setRosterLoading(true);
       setMessage("Loading uploaded Rouxbe Groups file...");
       const arrayBuffer = await file.arrayBuffer();
-      await loadRosterFromArrayBuffer({ arrayBuffer, fileName: file.name });
+
+      setRosterSource({
+        arrayBuffer,
+        fileName: file.name,
+      });
     } catch (error) {
       setRosterRows([]);
       setRosterMeta({ sheetName: "", fileName: file.name });
@@ -672,7 +791,7 @@ export default function RouxbeProgressScreen({
       setProgressRows(parsed);
       setProgressFileName(file.name);
       setMessage(
-        `Progress file loaded. ${parsed.length} Rouxbe progress row(s) found. Progress is now matched to the ${shipName} enrolled CM list.`
+        `Progress file loaded. ${parsed.length} Rouxbe progress row(s) found. Progress is now matched to the ${activeRosterScopeName} enrolled CM list.`
       );
 
       logUsageEvent?.("rouxbe_progress_file_uploaded", {
@@ -737,7 +856,7 @@ export default function RouxbeProgressScreen({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `rouxbe-progress-${userShip || "ship"}.csv`;
+    link.download = `rouxbe-progress-${rosterShipScope === ALL_SHIPS_SCOPE ? "all-ships" : rosterShipScope || "ship"}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -778,23 +897,42 @@ export default function RouxbeProgressScreen({
 
   return (
     <div style={styles.page || { minHeight: "100vh", padding: 24, background: "#f5f5f5", fontFamily: "Arial, sans-serif" }}>
-      <div style={styles.header || { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", background: "#fff", borderRadius: 16, padding: 18, marginBottom: 16 }}>
-        <div>
+      <div style={styles.header || { display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", background: "#fff", borderRadius: 16, padding: 18, marginBottom: 16, flexWrap: "wrap" }}>
+        <div style={{ minWidth: 260 }}>
           <h1 style={{ margin: 0 }}>Rouxbe Progress</h1>
           <p style={styles.subtitle || { margin: "4px 0 0", color: "#666" }}>
-            Ship: <strong>{shipName}</strong>{rosterMeta.sheetName ? ` / roster tab: ${rosterMeta.sheetName}` : ""}
+            View: <strong>{activeRosterScopeName}</strong> / App ship: <strong>{selectedAppShipName}</strong>{rosterMeta.sheetName ? ` / roster tab(s): ${rosterMeta.sheetName}` : ""}
           </p>
         </div>
-        <button type="button" style={styles.backButton || buttonStyle} onClick={() => setModule?.("")}>
-          ← Back
-        </button>
+
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <label style={{ display: "grid", gap: 4, fontWeight: "bold", minWidth: 210 }}>
+            Show progress for
+            <select
+              value={rosterShipScope}
+              onChange={(event) => setRosterShipScope(event.target.value)}
+              style={styles.selectInput || { width: "100%", padding: 11, borderRadius: 10, border: "1px solid #ccc", background: "#fff" }}
+            >
+              <option value={ALL_SHIPS_SCOPE}>All Ships</option>
+              {SHIP_ORDER.map((shipCode) => (
+                <option key={shipCode} value={shipCode}>
+                  {getDisplayNameForShip(shipCode)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <button type="button" style={styles.backButton || buttonStyle} onClick={() => setModule?.("")}>
+            ← Back
+          </button>
+        </div>
       </div>
 
       <div style={{ ...cardStyle, marginBottom: 16, display: "grid", gap: 14 }}>
         <div>
           <h2 style={{ margin: 0 }}>Files</h2>
           <p style={styles.message || { color: "#555", fontSize: 14 }}>
-            The enrolled CM roster comes from the Rouxbe Groups workbook. The app uses the selected ship to choose the correct tab automatically.
+            The enrolled CM roster comes from the Rouxbe Groups workbook. Choose one ship or All Ships, and the app will use the correct workbook tab(s) automatically.
           </p>
         </div>
 
@@ -877,9 +1015,10 @@ export default function RouxbeProgressScreen({
         </div>
 
         <div style={{ overflowX: "auto", border: "1px solid #ddd", borderRadius: 14 }}>
-          <table style={{ width: "100%", minWidth: 1120, borderCollapse: "collapse", fontSize: 13 }}>
+          <table style={{ width: "100%", minWidth: 1200, borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ background: "#111", color: "#fff" }}>
+                <th style={tableHeaderStyle}>Ship</th>
                 <th style={tableHeaderStyle}>Group</th>
                 <th style={tableHeaderStyle}>Name</th>
                 <th style={tableHeaderStyle}>ID</th>
@@ -897,6 +1036,7 @@ export default function RouxbeProgressScreen({
               {visibleRows.length ? (
                 visibleRows.map((row) => (
                   <tr key={row.rosterKey} style={{ borderBottom: "1px solid #eee" }}>
+                    <td style={tableCellStyle}>{getDisplayNameForShip(row.ship) || row.ship}</td>
                     <td style={tableCellStyle}>{row.group}</td>
                     <td style={{ ...tableCellStyle, fontWeight: "bold" }}>{row.name}</td>
                     <td style={tableCellStyle}>{row.id}</td>
@@ -928,8 +1068,8 @@ export default function RouxbeProgressScreen({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={11} style={{ ...tableCellStyle, textAlign: "center", color: "#777", padding: 22 }}>
-                    Upload the Rouxbe progress CSV to see matched progress for the selected ship.
+                  <td colSpan={12} style={{ ...tableCellStyle, textAlign: "center", color: "#777", padding: 22 }}>
+                    Upload the Rouxbe progress CSV to see matched progress for the selected ship view.
                   </td>
                 </tr>
               )}
