@@ -1237,10 +1237,10 @@ export default function RouxbeProgressScreen({
               onChange={(event) => setRosterShipScope(event.target.value)}
               style={styles.selectInput || { width: "100%", padding: 11, borderRadius: 10, border: "1px solid #ccc", background: "#fff" }}
             >
-              <option value={ALL_SHIPS_SCOPE}>All Ships</option>
-              {SHIP_ORDER.map((shipCode) => (
-                <option key={shipCode} value={shipCode}>
-                  {getDisplayNameForShip(shipCode)}
+                            <option value={ALL_SHIPS_SCOPE}>All Ships + Leaders</option>
+              {ROSTER_SCOPE_ORDER.map((scopeCode) => (
+                <option key={scopeCode} value={scopeCode}>
+                  {getDisplayNameForShip(scopeCode)}
                 </option>
               ))}
             </select>
