@@ -7298,7 +7298,17 @@ if (module === "allergen") {
           />
     );
   }
-
+  if (module === "rouxbe") {
+  return (
+    <RouxbeProgressScreen
+      styles={styles}
+      getShipDisplayName={getShipDisplayName}
+      logUsageEvent={logUsageEvent}
+      setModule={setModule}
+      userShip={userShip}
+    />
+  );
+}
   if (module === "equipment" && !equipmentDepartment) {
     return (
       <EquipmentDepartmentSelectionScreen
