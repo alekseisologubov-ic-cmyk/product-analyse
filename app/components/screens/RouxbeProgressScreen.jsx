@@ -9,15 +9,20 @@ const SHIP_SHEET_ALIASES = {
   BRL: ["BRILLIANT", "BRILIANT", "BRILLIANT LADY", "BRL", "BR"],
 };
 
+const SHIP_ORDER = ["SC", "VL", "BRL", "RL"];
+const LEADERS_SCOPE = "LEADERS";
+const ALL_SHIPS_SCOPE = "ALL";
+const ROSTER_SCOPE_ORDER = [...SHIP_ORDER, LEADERS_SCOPE];
+
 const SHIP_DISPLAY_NAMES = {
   SC: "Scarlet",
   VL: "Valiant",
   RL: "Resilient",
   BRL: "Brilliant",
+  [LEADERS_SCOPE]: "Leaders",
 };
 
-const SHIP_ORDER = ["SC", "VL", "BRL", "RL"];
-const ALL_SHIPS_SCOPE = "ALL";
+const LEADERS_SHEET_ALIASES = ["LEADERS", "LEADER", "LEADERSHIP"];
 
 const DEFAULT_ROUXBE_ROSTER_PATH = "/rouxbe-groups.xlsx";
 
