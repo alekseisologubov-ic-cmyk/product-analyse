@@ -304,15 +304,24 @@ const parseRouxbeRosterWorkbook = (workbook, shipScope, XLSX) => {
         .filter((item) => item.shipCode)
     : [
         {
-          sheetName: getShipSheetName(workbook, activeScope),
+          sheetName:
+            activeScope === LEADERS_SCOPE
+              ? getLeadersSheetName(workbook)
+              : getShipSheetName(workbook, activeScope),
           shipCode: activeScope,
         },
       ].filter((item) => item.sheetName && item.shipCode);
 
   const usedSheetNames = [];
   const rosterRows = [];
+  const seenSheets = new Set();
 
   sheetTargets.forEach((target) => {
+    const sheetKey = cleanText(`${target.shipCode}|${target.sheetName}`);
+
+    if (seenSheets.has(sheetKey)) return;
+    seenSheets.add(sheetKey);
+
     const rows = parseRouxbeRosterSheet({
       workbook,
       sheetName: target.sheetName,
