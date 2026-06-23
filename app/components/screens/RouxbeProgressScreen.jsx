@@ -965,7 +965,14 @@ export default function RouxbeProgressScreen({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `rouxbe-progress-${rosterShipScope === ALL_SHIPS_SCOPE ? "all-ships" : rosterShipScope || "ship"}.csv`;
+        const scopePart =
+      rosterShipScope === ALL_SHIPS_SCOPE
+        ? "all-ships-leaders"
+        : rosterShipScope === LEADERS_SCOPE
+          ? "leaders"
+          : rosterShipScope || "ship";
+
+    link.download = `rouxbe-progress-${scopePart}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
