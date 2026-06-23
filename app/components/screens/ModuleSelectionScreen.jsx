@@ -43,6 +43,22 @@ export default function ModuleSelectionScreen(props) {
       </button>
     )}
 
+              <button
+      type="button"
+      style={styles.moduleCard}
+      onClick={() => {
+        logUsageEvent?.("module_selected", {
+          module: "rouxbe_progress",
+          ship: userShip,
+        });
+        setModule("rouxbe");
+      }}
+    >
+      <div style={styles.moduleIcon}>👩‍🍳</div>
+      <strong>Rouxbe Progress</strong>
+      <span>Track CM training progress</span>
+    </button>
+              
     <button
       style={styles.moduleCard}
       onClick={() => {
