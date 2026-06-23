@@ -590,6 +590,53 @@ const buildExportCsv = (rows) => {
     .join("\n");
 };
 
+
+const escapeHtmlValue = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const getReportDateStamp = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const hour = String(now.getHours()).padStart(2, "0");
+  const minute = String(now.getMinutes()).padStart(2, "0");
+
+  return `${year}-${month}-${day}-${hour}${minute}`;
+};
+
+const makeSafeFilePart = (value) =>
+  String(value || "report")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "report";
+
+const buildRouxbeReportRows = (rows, getDisplayNameForShip) =>
+  rows.map((row, index) => ({
+    Number: index + 1,
+    Ship: getDisplayNameForShip(row.ship) || row.ship || "",
+    Sheet: row.sheetName || "",
+    Group: row.group || "",
+    Name: row.name || "",
+    CrewID: row.id || "",
+    Position: row.position || "",
+    ProgressCategory: row.progressCategory || "",
+    RouxbeStatus: row.progressStatus || "",
+    Progress: row.progressText || "",
+    PercentComplete: Number(row.percentComplete || 0),
+    Grade: Number(row.grade || 0),
+    Course: row.course || "",
+    EnrolledAt: row.enrolledAt || "",
+    StartedAt: row.startAt || "",
+    FinishedAt: row.finishAt || "",
+    LastEngaged: row.lastEngaged || "",
+  }));
+
 const statusStyle = (category) => {
   if (category === "Completed") {
     return { background: "#e8f5e9", color: "#2e7d32", border: "1px solid #2e7d32" };
@@ -863,6 +910,221 @@ export default function RouxbeProgressScreen({
     URL.revokeObjectURL(url);
   };
 
+
+  const downloadVisibleExcel = async () => {
+    if (!visibleRows.length) {
+      window.alert("No Rouxbe progress rows to export.");
+      return;
+    }
+
+    try {
+      const XLSX = await loadXlsx();
+      const reportRows = buildRouxbeReportRows(visibleRows, getDisplayNameForShip);
+      const detailSheet = XLSX.utils.json_to_sheet(reportRows);
+      const summarySheet = XLSX.utils.json_to_sheet([
+        { Metric: "View", Value: activeRosterScopeName },
+        { Metric: "App Ship", Value: selectedAppShipName },
+        { Metric: "Roster File", Value: rosterMeta.fileName || "" },
+        { Metric: "Roster Tab(s)", Value: rosterMeta.sheetName || "" },
+        { Metric: "Progress File", Value: progressFileName || "" },
+        { Metric: "Search", Value: search || "All" },
+        { Metric: "Status Filter", Value: statusFilter === "all" ? "All" : statusFilter },
+        { Metric: "Visible Rows", Value: visibleRows.length },
+        { Metric: "Total Enrolled", Value: summary.total },
+        { Metric: "Matched", Value: summary.matched },
+        { Metric: "Completed", Value: summary.completed },
+        { Metric: "In Progress", Value: summary.inProgress },
+        { Metric: "Not Started", Value: summary.notStarted },
+        { Metric: "No Record", Value: summary.noRecord },
+        { Metric: "Average Percent", Value: Math.round(summary.averagePercent) + "%" },
+        { Metric: "Generated", Value: new Date().toLocaleString() },
+      ]);
+
+      detailSheet["!cols"] = [
+        { wch: 8 },
+        { wch: 14 },
+        { wch: 18 },
+        { wch: 22 },
+        { wch: 30 },
+        { wch: 14 },
+        { wch: 26 },
+        { wch: 18 },
+        { wch: 22 },
+        { wch: 16 },
+        { wch: 16 },
+        { wch: 10 },
+        { wch: 36 },
+        { wch: 18 },
+        { wch: 18 },
+        { wch: 18 },
+        { wch: 18 },
+      ];
+      summarySheet["!cols"] = [{ wch: 24 }, { wch: 60 }];
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, summarySheet, "Summary");
+      XLSX.utils.book_append_sheet(workbook, detailSheet, "Progress Detail");
+
+      const scopePart = rosterShipScope === ALL_SHIPS_SCOPE ? "all-ships" : rosterShipScope || "ship";
+      XLSX.writeFile(workbook, `rouxbe-progress-${makeSafeFilePart(scopePart)}-${getReportDateStamp()}.xlsx`);
+
+      logUsageEvent?.("rouxbe_progress_excel_exported", {
+        module: "rouxbe_progress",
+        ship: rosterShipScope || userShip || ALL_SHIPS_SCOPE,
+        rows: visibleRows.length,
+        progressFileName,
+      });
+    } catch (error) {
+      window.alert(error?.message || "Could not export Rouxbe Excel report.");
+    }
+  };
+
+  const printVisibleReport = () => {
+    if (!visibleRows.length) {
+      window.alert("No Rouxbe progress rows to print.");
+      return;
+    }
+
+    const reportRows = buildRouxbeReportRows(visibleRows, getDisplayNameForShip);
+    const printedAt = new Date().toLocaleString();
+    const filterLabel = statusFilter === "all" ? "All" : statusFilter;
+    const scopeLabel = activeRosterScopeName;
+
+    const summaryCards = [
+      ["Enrolled", summary.total],
+      ["Visible", visibleRows.length],
+      ["Matched", summary.matched],
+      ["Completed", summary.completed],
+      ["In Progress", summary.inProgress],
+      ["Not Started", summary.notStarted],
+      ["No Record", summary.noRecord],
+      ["Avg %", `${Math.round(summary.averagePercent)}%`],
+    ];
+
+    const html = `
+      <html>
+        <head>
+          <title>Rouxbe Progress Report - ${escapeHtmlValue(scopeLabel)}</title>
+          <style>
+            @page { size: landscape; margin: 12mm; }
+            * { box-sizing: border-box; }
+            body { font-family: Arial, sans-serif; color: #111; margin: 0; padding: 20px; }
+            h1 { margin: 0 0 4px; font-size: 24px; }
+            .meta { color: #444; font-size: 12px; line-height: 1.45; margin: 2px 0; }
+            .summary { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; margin: 16px 0; }
+            .summary-card { border: 1px solid #ddd; border-radius: 10px; padding: 8px; text-align: center; break-inside: avoid; }
+            .summary-label { color: #666; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+            .summary-value { font-size: 18px; font-weight: 900; margin-top: 3px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 9px; }
+            th, td { border: 1px solid #ccc; padding: 5px; text-align: left; vertical-align: top; }
+            th { background: #111; color: #fff; }
+            tr { break-inside: avoid; }
+            .completed { color: #2e7d32; font-weight: bold; }
+            .inprogress { color: #0057b8; font-weight: bold; }
+            .notstarted { color: #8a5a00; font-weight: bold; }
+            .norecord { color: #b00020; font-weight: bold; }
+            .small { color: #555; font-size: 8px; }
+            @media print { body { padding: 0; } .no-print { display: none; } }
+          </style>
+        </head>
+        <body>
+          <div class="no-print" style="margin-bottom:12px;color:#555;font-size:12px;">
+            Use the browser print dialog to print or choose Save as PDF.
+          </div>
+          <h1>Rouxbe Progress Report</h1>
+          <div class="meta"><strong>View:</strong> ${escapeHtmlValue(scopeLabel)} | <strong>App Ship:</strong> ${escapeHtmlValue(selectedAppShipName)}</div>
+          <div class="meta"><strong>Roster:</strong> ${escapeHtmlValue(rosterMeta.fileName || "N/A")} | <strong>Tab(s):</strong> ${escapeHtmlValue(rosterMeta.sheetName || "N/A")}</div>
+          <div class="meta"><strong>Progress File:</strong> ${escapeHtmlValue(progressFileName || "N/A")} | <strong>Status Filter:</strong> ${escapeHtmlValue(filterLabel)} | <strong>Search:</strong> ${escapeHtmlValue(search || "All")}</div>
+          <div class="meta"><strong>Generated:</strong> ${escapeHtmlValue(printedAt)}</div>
+          <div class="summary">
+            ${summaryCards
+              .map(
+                ([label, value]) => `
+                  <div class="summary-card">
+                    <div class="summary-label">${escapeHtmlValue(label)}</div>
+                    <div class="summary-value">${escapeHtmlValue(value)}</div>
+                  </div>
+                `
+              )
+              .join("")}
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Ship</th>
+                <th>Group</th>
+                <th>Name</th>
+                <th>ID</th>
+                <th>Position</th>
+                <th>Status</th>
+                <th>Progress</th>
+                <th>%</th>
+                <th>Grade</th>
+                <th>Last Engaged</th>
+                <th>Course</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${reportRows
+                .map((row) => {
+                  const className =
+                    row.ProgressCategory === "Completed"
+                      ? "completed"
+                      : row.ProgressCategory === "In Progress"
+                        ? "inprogress"
+                        : row.ProgressCategory === "No Record"
+                          ? "norecord"
+                          : "notstarted";
+
+                  return `
+                    <tr>
+                      <td>${escapeHtmlValue(row.Number)}</td>
+                      <td>${escapeHtmlValue(row.Ship)}</td>
+                      <td>${escapeHtmlValue(row.Group)}</td>
+                      <td><strong>${escapeHtmlValue(row.Name)}</strong></td>
+                      <td>${escapeHtmlValue(row.CrewID)}</td>
+                      <td>${escapeHtmlValue(row.Position)}</td>
+                      <td class="${className}">${escapeHtmlValue(row.ProgressCategory)}<br /><span class="small">${escapeHtmlValue(row.RouxbeStatus)}</span></td>
+                      <td>${escapeHtmlValue(row.Progress || "--")}</td>
+                      <td><strong>${escapeHtmlValue(Math.round(Number(row.PercentComplete || 0)))}%</strong></td>
+                      <td>${escapeHtmlValue(row.Grade || "--")}</td>
+                      <td>${escapeHtmlValue(row.LastEngaged || "--")}</td>
+                      <td>${escapeHtmlValue(row.Course || "--")}</td>
+                    </tr>
+                  `;
+                })
+                .join("")}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open("", "_blank");
+
+    if (!printWindow) {
+      window.alert("Print window was blocked. Allow popups for this app and try again.");
+      return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+
+    window.setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+    }, 250);
+
+    logUsageEvent?.("rouxbe_progress_print_report_opened", {
+      module: "rouxbe_progress",
+      ship: rosterShipScope || userShip || ALL_SHIPS_SCOPE,
+      rows: visibleRows.length,
+      progressFileName,
+    });
+  };
+
   const cardStyle = styles.card || {
     background: "#fff",
     borderRadius: 16,
@@ -993,9 +1255,17 @@ export default function RouxbeProgressScreen({
               Showing {visibleRows.length} of {mergedRows.length} enrolled CM(s). Emails are used only for matching and are not shown here.
             </p>
           </div>
-          <button type="button" style={buttonStyle} onClick={downloadVisibleCsv}>
-            Export visible CSV
-          </button>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <button type="button" style={buttonStyle} onClick={printVisibleReport}>
+              Print / Save PDF
+            </button>
+            <button type="button" style={buttonStyle} onClick={downloadVisibleExcel}>
+              Export Excel
+            </button>
+            <button type="button" style={buttonStyle} onClick={downloadVisibleCsv}>
+              Export CSV
+            </button>
+          </div>
         </div>
 
         <input
