@@ -206,6 +206,11 @@ const ProductDashboardScreen = dynamic(() =>
   loading: ScreenLoading,
 });
 
+const ERPVenueIngredientsScreen = dynamic(() =>
+  import("./components/screens/ERPVenueIngredientsScreen"), {
+  loading: ScreenLoading,
+});
+
 const RouxbeProgressScreen = dynamic(() =>
   import("./components/screens/RouxbeProgressScreen"), {
   loading: ScreenLoading,
