@@ -594,10 +594,14 @@ const isRowOneProductLocator = (value) => {
   if (key === "UM" || key === "UOM" || key.includes("UNIT OF MEASURE")) return false;
 
   // In the ERP location workbook, Excel row 1 contains the product-location
-  // locator such as: "14 - Pink Agave - Fruit & Vegetables 03/14/06".
-  // Use that row as the section locator, even when the Code header is blank
-  // or one column to the left of the row-1 title.
-  return /\d/.test(key) && key.includes("-");
+  // locator such as: "16 - Extra Virgin - Vegetables & Fruit 03/16/06".
+  // Important: cleanKey removes hyphens, so check the original text, not the
+  // normalized key. Otherwise blocks like Extra Virgin Vegetables & Fruit are
+  // missed when the Code header row is blank.
+  const hasDashLocator = /\d+\s*[-–—]\s*[^-–—]+/.test(text);
+  const hasDateLocator = /\d{1,2}\s*\/\s*\d{1,2}\s*\/\s*\d{1,4}/.test(text);
+
+  return /\d/.test(key) && (hasDashLocator || hasDateLocator);
 };
 
 const getCodeCountForColumn = ({ rows, codeCol, firstDataRowIndex }) => {
