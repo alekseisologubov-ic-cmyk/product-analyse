@@ -7314,6 +7314,15 @@ if (module === "allergen") {
     />
   );
 }
+  if (module === "erpVenueIngredients") {
+  return (
+    <ERPVenueIngredientsScreen
+      styles={styles}
+      logUsageEvent={logUsageEvent}
+      setModule={setModule}
+    />
+  );
+}
   if (module === "equipment" && !equipmentDepartment) {
     return (
       <EquipmentDepartmentSelectionScreen
