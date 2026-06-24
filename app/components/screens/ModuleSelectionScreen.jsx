@@ -42,6 +42,21 @@ export default function ModuleSelectionScreen(props) {
         <span>Usage, inventory status, logs, and admin tools</span>
       </button>
     )}
+              <button
+  type="button"
+  style={styles.moduleCard}
+  onClick={() => {
+    logUsageEvent?.("module_selected", {
+      module: "erp_location_ingredients",
+      ship: userShip,
+    });
+    setModule("erpVenueIngredients");
+  }}
+>
+  <div style={styles.moduleIcon}>📋</div>
+  <strong>ERP Venue Ingredients</strong>
+  <span>View ingredients by venue from ERP location tabs</span>
+</button>
 
               <button
       type="button"
