@@ -44,6 +44,24 @@ const normalizeProductCode = (value) => {
   return digits || cleanKey(text);
 };
 
+const normalizeVenueProductCode = (value) => {
+  const rawText = String(value ?? "").replace(/\u00a0/g, " ").trim();
+
+  if (!rawText) return "";
+
+  const digits = rawText.replace(/[^0-9]/g, "");
+  if (!digits) return "";
+
+  const letters = rawText.replace(/[^A-Za-z]/g, "");
+  const mostlyText = letters.length > 2 && digits.length < rawText.length / 2;
+
+  // Venue tabs must use the real product code as the lookup key.
+  // This prevents old ingredient names from being treated as code values.
+  if (mostlyText) return "";
+
+  return normalizeProductCode(rawText);
+};
+
 const makeSafeFilePart = (value) =>
   cleanText(value || "report")
     .toLowerCase()
@@ -344,7 +362,7 @@ const findVenueBlocks = ({ workbook, sheetName, XLSX }) => {
 
       let itemCount = 0;
       for (let dataRowIndex = rowIndex + 1; dataRowIndex < rows.length; dataRowIndex += 1) {
-        const code = normalizeProductCode(rows[dataRowIndex]?.[colIndex]);
+        const code = normalizeVenueProductCode(rows[dataRowIndex]?.[colIndex]);
         if (code) itemCount += 1;
       }
 
@@ -400,7 +418,7 @@ const buildVenueItemRows = ({ workbook, sheetName, fmlIndex, XLSX }) => {
   blocks.forEach((block) => {
     for (let rowIndex = block.headerRowIndex + 1; rowIndex < rows.length; rowIndex += 1) {
       const row = rows[rowIndex] || [];
-      const code = normalizeProductCode(row[block.codeCol]);
+      const code = normalizeVenueProductCode(row[block.codeCol]);
       if (!code) continue;
 
       const fmlItem = fmlIndex?.byCode?.get(code) || null;
@@ -472,7 +490,7 @@ const buildCorrectionOverrideMap = (items) => {
   items.forEach((item) => {
     if (item.codeAddress) {
       overrideMap.set(item.codeAddress, {
-        value: item.displayCode,
+        value: item.displayCode || item.code,
         fromFml: item.fmlMatched,
         field: "Code",
         fmlAddress: item.fmlAddress,
@@ -620,6 +638,10 @@ const applyFmlCorrectionsToWorksheet = ({ worksheet, items, fmlSheetName, values
   if (!worksheet) return;
 
   items.forEach((item) => {
+    if (item.codeAddress) {
+      writeStringCell(worksheet, item.codeAddress, item.displayCode || item.code);
+    }
+
     if (item.nameAddress) {
       if (valuesOnly || !item.fmlMatched || !fmlSheetName) {
         writeStringCell(worksheet, item.nameAddress, item.productName);
@@ -1352,7 +1374,7 @@ export default function ERPVenueIngredientsScreen({
         <div>
           <h2 style={{ margin: 0 }}>Corrected Template Preview</h2>
           <p style={styles.message || { color: "#555", fontSize: 14 }}>
-            This keeps the same row and column layout as the venue tab. Blue-highlighted code, name, and UM cells are rebuilt from the FML sheet.
+            This keeps the same row and column layout as the venue tab. Code stays in the Code column, product name stays in the Ingredient Name column, and UM comes from the FML sheet.
             {visibleGridRows.length >= MAX_PREVIEW_ROWS ? ` Preview is limited to ${MAX_PREVIEW_ROWS} rows for browser speed.` : ""}
           </p>
         </div>
