@@ -3,11 +3,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 const DEFAULT_ERP_LOCATION_TEMPLATE_PATH = "/erp-template-locations.xlsx";
+const DEFAULT_INGREDIENT_BY_LOCATION_PATH = "/ingredient-by-location.xlsx";
 const DEFAULT_FML_SHEET_NAME = "FML March 2026";
 const MAX_PREVIEW_ROWS = 900;
 const ALL_SECTIONS_SCOPE = "__ALL_SECTIONS__";
 const FML_SOURCE_MODE = "fmlSource";
 const FML_VENUE_NOTE_SOURCE_MODE = "fmlVenueNote";
+const INGREDIENT_LOCATION_SOURCE_MODE = "ingredientLocation";
 const TEMPLATE_CODE_SOURCE_MODE = "templateCodes";
 
 const loadXlsx = async () => {
@@ -383,6 +385,224 @@ const buildFmlIndex = ({ workbook, fmlSheetName, XLSX }) => {
     sourceSheetName: fmlSheetName,
   };
 };
+
+const isActiveFlag = (value) => {
+  const key = cleanKey(value);
+  if (!key) return true;
+  return ["Y", "YES", "ACTIVE", "TRUE", "1"].includes(key);
+};
+
+const parseIngredientLocationWorkbook = ({ workbook, XLSX }) => {
+  const sheetName = workbook?.SheetNames?.[0] || "";
+  const worksheet = workbook?.Sheets?.[sheetName];
+
+  if (!worksheet || !XLSX) {
+    return {
+      rows: [],
+      sourceSheetName: sheetName,
+      byCode: new Map(),
+    };
+  }
+
+  const rows = getWorksheetRows({ worksheet, XLSX });
+  let headerRowIndex = -1;
+
+  rows.slice(0, 20).some((row, index) => {
+    const headerMap = getHeaderMap(row || []);
+    const hasRestaurant = getColumnIndex(headerMap, ["RestaurantName", "Restaurant Name", "Venue", "Location"], -1) >= 0;
+    const hasCode = getColumnIndex(headerMap, ["Code", "Product Code", "Ingredient Code"], -1) >= 0;
+    const hasName = getColumnIndex(headerMap, ["Name", "Product Name", "Ingredient Name"], -1) >= 0;
+
+    if (hasRestaurant && hasCode && hasName) {
+      headerRowIndex = index;
+      return true;
+    }
+
+    return false;
+  });
+
+  if (headerRowIndex < 0) {
+    headerRowIndex = 0;
+  }
+
+  const headerMap = getHeaderMap(rows[headerRowIndex] || []);
+  const restaurantCodeIndex = getColumnIndex(headerMap, ["RestaurantCode", "Restaurant Code"], 0);
+  const restaurantNameIndex = getColumnIndex(headerMap, ["RestaurantName", "Restaurant Name", "Venue", "Location"], 1);
+  const menuCodeIndex = getColumnIndex(headerMap, ["MenuCode", "Menu Code"], 2);
+  const menuNameIndex = getColumnIndex(headerMap, ["MenuName", "Menu Name"], 3);
+  const categoryIndex = getColumnIndex(headerMap, ["Category"], 4);
+  const subCategoryIndex = getColumnIndex(headerMap, ["SubCategory", "Sub Category"], 5);
+  const codeIndex = getColumnIndex(headerMap, ["Code", "Product Code", "Ingredient Code"], 6);
+  const nameIndex = getColumnIndex(headerMap, ["Name", "Product Name", "Ingredient Name"], 7);
+  const isBasicIndex = getColumnIndex(headerMap, ["IsBasic", "Is Basic"], 8);
+  const recipesIndex = getColumnIndex(headerMap, ["Recipes", "Recipe Count"], 9);
+  const resultTypeIndex = getColumnIndex(headerMap, ["ResultType", "Result Type"], 10);
+  const activeIndex = getColumnIndex(headerMap, ["Active"], 11);
+  const assignedIndex = getColumnIndex(headerMap, ["Assigned"], 12);
+  const assignedTypeIndex = getColumnIndex(headerMap, ["AssignedType", "Assigned Type"], 13);
+  const assignedActiveIndex = getColumnIndex(headerMap, ["AssignedActive", "Assigned Active"], 14);
+  const recipeCodeIndex = getColumnIndex(headerMap, ["RecipeCode", "Recipe Code"], 15);
+  const recipeNameIndex = getColumnIndex(headerMap, ["RecipeName", "Recipe Name"], 16);
+  const specialInstructionsIndex = getColumnIndex(headerMap, ["SpecialInstructions", "Special Instructions"], 17);
+  const specialInstructions2Index = getColumnIndex(headerMap, ["SpecialInstructions2", "Special Instructions 2"], 18);
+
+  const parsedRows = [];
+  const byCode = new Map();
+  const seenRows = new Set();
+
+  rows.slice(headerRowIndex + 1).forEach((row, offset) => {
+    const excelRow = headerRowIndex + 2 + offset;
+    const code = normalizeProductCode(row[codeIndex]);
+    const restaurantName = cleanText(row[restaurantNameIndex]);
+    const productName = cleanText(row[assignedIndex]) || cleanText(row[nameIndex]);
+    const category = cleanText(row[categoryIndex]);
+    const subCategory = cleanText(row[subCategoryIndex]);
+    const assignedType = cleanKey(row[assignedTypeIndex]);
+    const isBasic = cleanKey(row[isBasicIndex]);
+
+    if (!code || !restaurantName || !productName) return;
+    if (!isActiveFlag(row[activeIndex]) || !isActiveFlag(row[assignedActiveIndex])) return;
+
+    // Ingredient by Location contains recipe rows and product rows. Use product
+    // rows as placement instructions; skip recipe-level rows such as AssignedType R.
+    if (assignedType && !["P", "PRODUCT", "I", "INGREDIENT"].includes(assignedType)) return;
+    if (isBasic === "Y" && !category && !subCategory) return;
+
+    const rowKey = [
+      restaurantName,
+      row[menuCodeIndex],
+      row[menuNameIndex],
+      category,
+      subCategory,
+      code,
+      row[recipeCodeIndex],
+      row[recipeNameIndex],
+    ].map(cleanKey).join("|");
+
+    if (seenRows.has(rowKey)) return;
+    seenRows.add(rowKey);
+
+    const item = {
+      key: `ingredient-location-${excelRow}-${code}-${parsedRows.length}`,
+      sourceRow: excelRow,
+      restaurantCode: cleanText(row[restaurantCodeIndex]),
+      restaurantName,
+      menuCode: cleanText(row[menuCodeIndex]),
+      menuName: cleanText(row[menuNameIndex]),
+      category,
+      subCategory,
+      code,
+      ingredientName: cleanText(row[nameIndex]),
+      productName,
+      isBasic: cleanText(row[isBasicIndex]),
+      recipes: cleanText(row[recipesIndex]),
+      resultType: cleanText(row[resultTypeIndex]),
+      active: cleanText(row[activeIndex]),
+      assigned: cleanText(row[assignedIndex]),
+      assignedType: cleanText(row[assignedTypeIndex]),
+      assignedActive: cleanText(row[assignedActiveIndex]),
+      recipeCode: cleanText(row[recipeCodeIndex]),
+      recipeName: cleanText(row[recipeNameIndex]),
+      specialInstructions: cleanText(row[specialInstructionsIndex]),
+      specialInstructions2: cleanText(row[specialInstructions2Index]),
+      locationText: cleanText([
+        row[restaurantNameIndex],
+        row[menuNameIndex],
+        row[categoryIndex],
+        row[subCategoryIndex],
+        row[recipeNameIndex],
+      ].filter(Boolean).join(" / ")),
+    };
+
+    parsedRows.push(item);
+
+    if (!byCode.has(code)) byCode.set(code, []);
+    byCode.get(code).push(item);
+  });
+
+  return {
+    rows: parsedRows,
+    sourceSheetName: sheetName,
+    headerRowIndex,
+    byCode,
+  };
+};
+
+const ingredientLocationRowMatchesVenueSheet = (locationRow, sheetName) => {
+  const textKey = cleanKey([
+    locationRow?.restaurantName,
+    locationRow?.menuName,
+  ].join(" "));
+
+  if (!textKey) return false;
+
+  const aliases = getVenueAliasesForSheetName(sheetName);
+  const sheetKey = cleanKey(sheetName);
+  const sheetWithoutNumber = sheetKey.replace(/^\d+\s+/, "");
+
+  if (aliases.some((alias) => aliasMatchesText(textKey, alias))) return true;
+  if (sheetWithoutNumber && sheetWithoutNumber.length > 5 && textKey.includes(sheetWithoutNumber)) return true;
+
+  return false;
+};
+
+const sectionMatchesIngredientLocationRow = ({ sectionTitle, locationRow, fmlItem }) => {
+  const itemForMatch = {
+    ...(fmlItem || {}),
+    productName: fmlItem?.productName || locationRow?.productName || locationRow?.ingredientName || "",
+    category: locationRow?.category || fmlItem?.category || "",
+    subCategory: locationRow?.subCategory || fmlItem?.subCategory || "",
+    comments: [
+      fmlItem?.comments,
+      locationRow?.restaurantName,
+      locationRow?.menuName,
+      locationRow?.recipeName,
+      locationRow?.specialInstructions,
+      locationRow?.specialInstructions2,
+    ].filter(Boolean).join(" / "),
+    notes: fmlItem?.notes || "",
+    venueText: locationRow?.locationText || fmlItem?.venueText || "",
+  };
+
+  return sectionMatchesFmlItem({ sectionTitle, item: itemForMatch });
+};
+
+const getIngredientLocationRowsForVenueSection = ({
+  ingredientLocationRows = [],
+  sheetName,
+  sectionTitle,
+  fmlIndex,
+  usedCodes = new Set(),
+}) => {
+  const seenCodes = new Set();
+
+  return (ingredientLocationRows || [])
+    .filter((locationRow) => ingredientLocationRowMatchesVenueSheet(locationRow, sheetName))
+    .map((locationRow) => {
+      const code = normalizeProductCode(locationRow.code);
+      return {
+        locationRow,
+        code,
+        fmlItem: fmlIndex?.byCode?.get(code) || null,
+      };
+    })
+    .filter(({ code }) => code && !usedCodes.has(code))
+    .filter(({ locationRow, fmlItem }) =>
+      sectionMatchesIngredientLocationRow({ sectionTitle, locationRow, fmlItem })
+    )
+    .filter(({ code }) => {
+      if (seenCodes.has(code)) return false;
+      seenCodes.add(code);
+      return true;
+    })
+    .sort((left, right) => {
+      const leftRow = Number(left.locationRow?.sourceRow || 0);
+      const rightRow = Number(right.locationRow?.sourceRow || 0);
+      if (leftRow !== rightRow) return leftRow - rightRow;
+      return String(left.locationRow?.productName || "").localeCompare(String(right.locationRow?.productName || ""));
+    });
+};
+
 
 const getSectionTypeFromTitle = (sectionTitle) => {
   const key = cleanKey(sectionTitle);
@@ -804,6 +1024,7 @@ const makeVenueItemRecord = ({
   oldUm,
   XLSX,
   sourceMode,
+  ingredientLocationItem = null,
 }) => {
   const productName = fmlItem?.productName || oldName;
   const um = fmlItem?.um || oldUm;
@@ -833,22 +1054,37 @@ const makeVenueItemRecord = ({
     oldUm,
     sourceMode,
     sourceLabel:
-      sourceMode === FML_SOURCE_MODE
-        ? "FML March 2026 via venue template"
-        : sourceMode === FML_VENUE_NOTE_SOURCE_MODE
-          ? "FML venue note"
-          : sourceMode === TEMPLATE_CODE_SOURCE_MODE
-            ? "Venue template code"
-            : "Venue template fallback",
+      sourceMode === INGREDIENT_LOCATION_SOURCE_MODE
+        ? "Ingredient by Location + FML March 2026"
+        : sourceMode === FML_SOURCE_MODE
+          ? "FML March 2026 via venue template"
+          : sourceMode === FML_VENUE_NOTE_SOURCE_MODE
+            ? "FML venue note"
+            : sourceMode === TEMPLATE_CODE_SOURCE_MODE
+              ? "Venue template code"
+              : "Venue template fallback",
     fmlMatched: Boolean(fmlItem),
     wasCorrected:
       Boolean(fmlItem) &&
       (cleanKey(oldName) !== cleanKey(fmlItem.productName) || cleanKey(oldUm) !== cleanKey(fmlItem.um) || normalizeProductCode(code) !== normalizeProductCode(fmlItem.code)),
-    status: fmlItem ? "FML matched" : "Missing in FML",
+    status: fmlItem
+      ? sourceMode === INGREDIENT_LOCATION_SOURCE_MODE
+        ? "FML matched / location verified"
+        : "FML matched"
+      : "Missing in FML",
+    ingredientLocationSourceRow: ingredientLocationItem?.sourceRow || "",
+    ingredientRestaurantName: ingredientLocationItem?.restaurantName || "",
+    ingredientMenuName: ingredientLocationItem?.menuName || "",
+    ingredientRecipeCode: ingredientLocationItem?.recipeCode || "",
+    ingredientRecipeName: ingredientLocationItem?.recipeName || "",
+    ingredientCategory: ingredientLocationItem?.category || "",
+    ingredientSubCategory: ingredientLocationItem?.subCategory || "",
+    ingredientSpecialInstructions: ingredientLocationItem?.specialInstructions || "",
+    ingredientSpecialInstructions2: ingredientLocationItem?.specialInstructions2 || "",
     fmlItem,
-    department: fmlItem?.department || "",
-    category: fmlItem?.category || "",
-    subCategory: fmlItem?.subCategory || "",
+    department: fmlItem?.department || ingredientLocationItem?.category || "",
+    category: fmlItem?.category || ingredientLocationItem?.category || "",
+    subCategory: fmlItem?.subCategory || ingredientLocationItem?.subCategory || "",
     type: fmlItem?.type || "",
     brand: fmlItem?.brand || "",
     allergens: fmlItem?.allergens || "",
@@ -859,10 +1095,10 @@ const makeVenueItemRecord = ({
     val: fmlItem?.val || "",
     res: fmlItem?.res || "",
     brl: fmlItem?.brl || "",
-    comments: fmlItem?.comments || "",
+    comments: fmlItem?.comments || ingredientLocationItem?.specialInstructions || "",
     adjustmentComments: fmlItem?.adjustmentComments || "",
-    notes: fmlItem?.notes || "",
-    venueText: fmlItem?.venueText || "",
+    notes: fmlItem?.notes || ingredientLocationItem?.specialInstructions2 || "",
+    venueText: fmlItem?.venueText || ingredientLocationItem?.locationText || "",
     fmlRow: fmlItem?.fmlRow || "",
     fmlAddress: fmlItem?.fmlAddress || "",
     codeAddress,
@@ -902,6 +1138,58 @@ const buildVenueItemsFromTemplateCodes = ({ rows, sheetName, fmlIndex, XLSX, blo
   }
 
   return items;
+};
+
+
+const buildVenueItemsFromIngredientLocations = ({
+  rows,
+  sheetName,
+  fmlIndex,
+  XLSX,
+  block,
+  sectionRunningCounts,
+  ingredientLocationRows = [],
+}) => {
+  if (!ingredientLocationRows?.length) {
+    return buildVenueItemsFromFmlSection({
+      rows,
+      sheetName,
+      fmlIndex,
+      XLSX,
+      block,
+      sectionRunningCounts,
+    });
+  }
+
+  const firstDataRowIndex = block.headerRowIndex + 1;
+  const usedCodes = new Set();
+
+  const sectionLocations = getIngredientLocationRowsForVenueSection({
+    ingredientLocationRows,
+    sheetName,
+    sectionTitle: block.title,
+    fmlIndex,
+    usedCodes,
+  });
+
+  return sectionLocations.map(({ locationRow, code, fmlItem }, index) => {
+    usedCodes.add(code);
+
+    return makeVenueItemRecord({
+      sheetName,
+      rows,
+      block,
+      rowIndex: firstDataRowIndex + index,
+      sectionRunningCounts,
+      code,
+      fmlItem,
+      oldName: cleanText(locationRow.productName || locationRow.ingredientName),
+      oldUm: "",
+      XLSX,
+      sourceMode: INGREDIENT_LOCATION_SOURCE_MODE,
+      ingredientLocationItem: locationRow,
+    });
+  });
 };
 
 const buildVenueItemsFromFmlSection = ({ rows, sheetName, fmlIndex, XLSX, block, sectionRunningCounts }) => {
@@ -957,7 +1245,7 @@ const buildVenueItemsFromFmlSection = ({ rows, sheetName, fmlIndex, XLSX, block,
 };
 
 
-const buildVenueItemRows = ({ workbook, sheetName, fmlIndex, XLSX, sourceMode = FML_SOURCE_MODE }) => {
+const buildVenueItemRows = ({ workbook, sheetName, fmlIndex, XLSX, sourceMode = INGREDIENT_LOCATION_SOURCE_MODE, ingredientLocationRows = [] }) => {
   const worksheet = workbook?.Sheets?.[sheetName];
   if (!worksheet || !XLSX) return [];
 
@@ -967,25 +1255,38 @@ const buildVenueItemRows = ({ workbook, sheetName, fmlIndex, XLSX, sourceMode = 
   const sectionRunningCounts = new Map();
 
   blocks.forEach((block) => {
-    const blockItems =
-      sourceMode === FML_SOURCE_MODE
-        ? buildVenueItemsFromFmlSection({
-            rows,
-            sheetName,
-            fmlIndex,
-            XLSX,
-            block,
-            sectionRunningCounts,
-          })
-        : buildVenueItemsFromTemplateCodes({
-            rows,
-            sheetName,
-            fmlIndex,
-            XLSX,
-            block,
-            sectionRunningCounts,
-            sourceMode: TEMPLATE_CODE_SOURCE_MODE,
-          });
+    let blockItems = [];
+
+    if (sourceMode === INGREDIENT_LOCATION_SOURCE_MODE) {
+      blockItems = buildVenueItemsFromIngredientLocations({
+        rows,
+        sheetName,
+        fmlIndex,
+        XLSX,
+        block,
+        sectionRunningCounts,
+        ingredientLocationRows,
+      });
+    } else if (sourceMode === FML_SOURCE_MODE) {
+      blockItems = buildVenueItemsFromFmlSection({
+        rows,
+        sheetName,
+        fmlIndex,
+        XLSX,
+        block,
+        sectionRunningCounts,
+      });
+    } else {
+      blockItems = buildVenueItemsFromTemplateCodes({
+        rows,
+        sheetName,
+        fmlIndex,
+        XLSX,
+        block,
+        sectionRunningCounts,
+        sourceMode: TEMPLATE_CODE_SOURCE_MODE,
+      });
+    }
 
     items.push(...blockItems);
   });
@@ -993,7 +1294,7 @@ const buildVenueItemRows = ({ workbook, sheetName, fmlIndex, XLSX, sourceMode = 
   return items;
 };
 
-const buildAllVenuePlacementRows = ({ workbook, venueSheets, fmlIndex, XLSX, sourceMode = FML_SOURCE_MODE }) => {
+const buildAllVenuePlacementRows = ({ workbook, venueSheets, fmlIndex, XLSX, sourceMode = INGREDIENT_LOCATION_SOURCE_MODE, ingredientLocationRows = [] }) => {
   if (!workbook || !XLSX) return [];
 
   return (venueSheets || []).flatMap((sheetName) =>
@@ -1003,6 +1304,7 @@ const buildAllVenuePlacementRows = ({ workbook, venueSheets, fmlIndex, XLSX, sou
       fmlIndex,
       XLSX,
       sourceMode,
+      ingredientLocationRows,
     })
   );
 };
@@ -1040,9 +1342,11 @@ const buildFmlPlacementAuditRows = ({ fmlRows = [], placementRows = [] }) => {
 
     return placements.map((placement, placementIndex) => ({
       key: `placed-${code}-${placement.key || placementIndex}`,
-      placementStatus: placement.sourceMode === FML_VENUE_NOTE_SOURCE_MODE
-        ? "Placed from FML venue note"
-        : "Placed in venue tab",
+      placementStatus: placement.sourceMode === INGREDIENT_LOCATION_SOURCE_MODE
+        ? "Placed from Ingredient by Location"
+        : placement.sourceMode === FML_VENUE_NOTE_SOURCE_MODE
+          ? "Placed from FML venue note"
+          : "Placed in venue tab",
       ...fmlItem,
       displayCode: placement.displayCode || fmlItem.code,
       productName: placement.productName || fmlItem.productName,
@@ -1052,6 +1356,10 @@ const buildFmlPlacementAuditRows = ({ fmlRows = [], placementRows = [] }) => {
       sourceRow: placement.sourceRow || "",
       templateCell: placement.codeAddress || "",
       sourceLabel: placement.sourceLabel || "",
+      ingredientLocationSourceRow: placement.ingredientLocationSourceRow || "",
+      ingredientRestaurantName: placement.ingredientRestaurantName || "",
+      ingredientMenuName: placement.ingredientMenuName || "",
+      ingredientRecipeName: placement.ingredientRecipeName || "",
     }));
   });
 };
@@ -1244,37 +1552,51 @@ const clearCellValue = (worksheet, address) => {
   worksheet[address].w = "";
 };
 
-const clearFmlGeneratedBlockCells = ({ worksheet, items, XLSX }) => {
+const clearFmlGeneratedBlockCells = ({ worksheet, items, blocksToClear = [], XLSX }) => {
   if (!worksheet || !XLSX) return;
 
   const fmlItems = (items || []).filter(
-    (item) => item.sourceMode === FML_SOURCE_MODE || item.sourceMode === FML_VENUE_NOTE_SOURCE_MODE
+    (item) =>
+      item.sourceMode === FML_SOURCE_MODE ||
+      item.sourceMode === FML_VENUE_NOTE_SOURCE_MODE ||
+      item.sourceMode === INGREDIENT_LOCATION_SOURCE_MODE
   );
-  if (!fmlItems.length) return;
+  if (!fmlItems.length && !blocksToClear.length) return;
 
   const blockMap = new Map();
 
-  fmlItems.forEach((item) => {
-    const blockKey = item.block?.blockKey;
+  const addBlockToClear = (block, maxRowIndex) => {
+    const blockKey = block?.blockKey;
     if (!blockKey) return;
 
     const columnIndexes = getFiniteColumnIndexes([
-      item.block?.codeCol,
-      item.block?.nameCol,
-      item.block?.umCol,
+      block?.codeCol,
+      block?.nameCol,
+      block?.umCol,
     ]);
 
     if (!blockMap.has(blockKey)) {
       blockMap.set(blockKey, {
-        block: item.block,
-        maxRowIndex: Number(item.targetRowIndex || 0),
+        block,
+        maxRowIndex: Number(maxRowIndex || block.headerRowIndex || 0),
         columnIndexes,
       });
+      return;
     }
 
     const record = blockMap.get(blockKey);
-    record.maxRowIndex = Math.max(record.maxRowIndex, Number(item.targetRowIndex || 0));
+    record.maxRowIndex = Math.max(record.maxRowIndex, Number(maxRowIndex || 0));
     record.columnIndexes = [...new Set([...record.columnIndexes, ...columnIndexes])];
+  };
+
+  (blocksToClear || []).forEach((block) => {
+    const startRowIndex = Number(block?.headerRowIndex || 0) + 1;
+    const endRowIndex = startRowIndex + Math.max(Number(block?.itemCount || 0), 0) + 8;
+    addBlockToClear(block, endRowIndex);
+  });
+
+  fmlItems.forEach((item) => {
+    addBlockToClear(item.block, Number(item.targetRowIndex || 0));
   });
 
   blockMap.forEach((record) => {
@@ -1326,10 +1648,10 @@ const writeFormulaCell = (worksheet, address, formula, cachedValue) => {
   };
 };
 
-const applyFmlCorrectionsToWorksheet = ({ worksheet, items, fmlSheetName, valuesOnly, XLSX }) => {
+const applyFmlCorrectionsToWorksheet = ({ worksheet, items, fmlSheetName, valuesOnly, XLSX, blocksToClear = [] }) => {
   if (!worksheet) return;
 
-  clearFmlGeneratedBlockCells({ worksheet, items, XLSX });
+  clearFmlGeneratedBlockCells({ worksheet, items, blocksToClear, XLSX });
 
   items.forEach((item) => {
     if (item.codeAddress) {
@@ -1603,7 +1925,13 @@ export default function ERPVenueIngredientsScreen({
   const [showFmlRowsOnly, setShowFmlRowsOnly] = useState(false);
   const [showUnplacedFmlOnly, setShowUnplacedFmlOnly] = useState(false);
   const [selectedSectionKey, setSelectedSectionKey] = useState(ALL_SECTIONS_SCOPE);
-  const [itemSourceMode, setItemSourceMode] = useState(FML_SOURCE_MODE);
+  const [itemSourceMode, setItemSourceMode] = useState(INGREDIENT_LOCATION_SOURCE_MODE);
+  const [ingredientLocationRows, setIngredientLocationRows] = useState([]);
+  const [ingredientLocationFileName, setIngredientLocationFileName] = useState("");
+  const [ingredientLocationMessage, setIngredientLocationMessage] = useState(
+    "Ingredient by Location file has not loaded yet."
+  );
+  const [ingredientLocationLoading, setIngredientLocationLoading] = useState(false);
 
   const cardStyle = styles.card || cardFallbackStyle;
   const primaryButtonStyle = styles.primaryButton || primaryButtonFallbackStyle;
@@ -1681,6 +2009,45 @@ export default function ERPVenueIngredientsScreen({
     }
   };
 
+  const loadIngredientLocationFromArrayBuffer = async ({ arrayBuffer, nextFileName }) => {
+    setIngredientLocationLoading(true);
+    setIngredientLocationMessage("Reading Ingredient by Location workbook...");
+
+    try {
+      const XLSX = await loadXlsx();
+      const workbookObject = XLSX.read(arrayBuffer, {
+        type: "array",
+        cellDates: true,
+      });
+
+      const parsed = parseIngredientLocationWorkbook({
+        workbook: workbookObject,
+        XLSX,
+      });
+
+      setIngredientLocationRows(parsed.rows || []);
+      setIngredientLocationFileName(nextFileName || "Ingredient by Location");
+      setIngredientLocationMessage(
+        parsed.rows?.length
+          ? `Ingredient by Location loaded. ${parsed.rows.length} active product-location row(s) found from ${parsed.sourceSheetName || "the first sheet"}.`
+          : "Ingredient by Location loaded, but no active product-location rows were detected. Check the file headers."
+      );
+
+      logUsageEvent?.("erp_ingredient_location_file_loaded", {
+        module: "erp_location_ingredients",
+        fileName: nextFileName || "Ingredient by Location",
+        rows: parsed.rows?.length || 0,
+        sourceSheetName: parsed.sourceSheetName || "",
+      });
+    } catch (error) {
+      setIngredientLocationRows([]);
+      setIngredientLocationFileName(nextFileName || "");
+      setIngredientLocationMessage(error?.message || "Could not read the Ingredient by Location file.");
+    } finally {
+      setIngredientLocationLoading(false);
+    }
+  };
+
   useEffect(() => {
     let active = true;
 
@@ -1723,6 +2090,48 @@ export default function ERPVenueIngredientsScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    let active = true;
+
+    const loadDefaultIngredientLocation = async () => {
+      try {
+        const response = await fetch(DEFAULT_INGREDIENT_BY_LOCATION_PATH, {
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          if (!active) return;
+          setIngredientLocationRows([]);
+          setIngredientLocationFileName("");
+          setIngredientLocationMessage(
+            "Optional Ingredient by Location file was not found. Add public/ingredient-by-location.xlsx or upload it on this screen."
+          );
+          return;
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        if (!active) return;
+
+        await loadIngredientLocationFromArrayBuffer({
+          arrayBuffer,
+          nextFileName: "ingredient-by-location.xlsx",
+        });
+      } catch (error) {
+        if (!active) return;
+        setIngredientLocationRows([]);
+        setIngredientLocationFileName("");
+        setIngredientLocationMessage(error?.message || "Could not load the default Ingredient by Location file.");
+      }
+    };
+
+    loadDefaultIngredientLocation();
+
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleWorkbookUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1738,6 +2147,24 @@ export default function ERPVenueIngredientsScreen({
     }
   };
 
+  const handleIngredientLocationUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      await loadIngredientLocationFromArrayBuffer({
+        arrayBuffer,
+        nextFileName: file.name,
+      });
+    } catch (error) {
+      setIngredientLocationMessage(error?.message || "Could not read the uploaded Ingredient by Location file.");
+      window.alert(error?.message || "Could not read the uploaded Ingredient by Location file.");
+    } finally {
+      event.target.value = "";
+    }
+  };
+
   const selectedVenueItems = useMemo(
     () => buildVenueItemRows({
       workbook,
@@ -1745,13 +2172,22 @@ export default function ERPVenueIngredientsScreen({
       fmlIndex,
       XLSX: xlsxApi,
       sourceMode: itemSourceMode,
+      ingredientLocationRows,
     }),
-    [workbook, selectedVenueSheet, fmlIndex, xlsxApi, itemSourceMode]
+    [workbook, selectedVenueSheet, fmlIndex, xlsxApi, itemSourceMode, ingredientLocationRows]
   );
 
   const allVenuePlacementRows = useMemo(
-    () => buildAllVenuePlacementRows({ workbook, venueSheets, fmlIndex, XLSX: xlsxApi, sourceMode: FML_SOURCE_MODE }),
-    [workbook, venueSheets, fmlIndex, xlsxApi]
+    () =>
+      buildAllVenuePlacementRows({
+        workbook,
+        venueSheets,
+        fmlIndex,
+        XLSX: xlsxApi,
+        sourceMode: itemSourceMode,
+        ingredientLocationRows,
+      }),
+    [workbook, venueSheets, fmlIndex, xlsxApi, itemSourceMode, ingredientLocationRows]
   );
 
   const fmlPlacedCodeSet = useMemo(
@@ -1863,6 +2299,11 @@ export default function ERPVenueIngredientsScreen({
         item.adjustmentComments,
         item.notes,
         item.venueText,
+        item.ingredientRestaurantName,
+        item.ingredientMenuName,
+        item.ingredientRecipeCode,
+        item.ingredientRecipeName,
+        item.ingredientLocationSourceRow,
         item.sourceLabel,
         item.status,
         item.sourceRow,
@@ -1980,6 +2421,10 @@ export default function ERPVenueIngredientsScreen({
         fmlSheetName,
         valuesOnly: false,
         XLSX,
+        blocksToClear:
+          itemSourceMode === INGREDIENT_LOCATION_SOURCE_MODE
+            ? findVenueBlocks({ workbook, sheetName: selectedVenueSheet, XLSX })
+            : [],
       });
 
       applySectionColumnFilterToWorksheet({
@@ -2004,7 +2449,12 @@ export default function ERPVenueIngredientsScreen({
       }
 
       const sectionPart = activeSectionOption ? `-${makeSafeFilePart(activeSectionName)}` : "-all-sections";
-      const sourcePart = itemSourceMode === FML_SOURCE_MODE ? "fml-venue-located" : "template-codes-fml-linked";
+      const sourcePart =
+        itemSourceMode === INGREDIENT_LOCATION_SOURCE_MODE
+          ? "ingredient-location-fml"
+          : itemSourceMode === FML_SOURCE_MODE
+            ? "fml-venue-located"
+            : "template-codes-fml-linked";
       const outputName = `erp-${makeSafeFilePart(selectedVenueSheet)}${sectionPart}-${sourcePart}-${getDateStamp()}.xlsx`;
 
       XLSX.writeFile(outputWorkbook, outputName, {
@@ -2053,6 +2503,7 @@ export default function ERPVenueIngredientsScreen({
             fmlIndex,
             XLSX,
             sourceMode: itemSourceMode,
+            ingredientLocationRows,
           });
 
           applyFmlCorrectionsToWorksheet({
@@ -2061,6 +2512,10 @@ export default function ERPVenueIngredientsScreen({
             fmlSheetName,
             valuesOnly: false,
             XLSX,
+            blocksToClear:
+              itemSourceMode === INGREDIENT_LOCATION_SOURCE_MODE
+                ? findVenueBlocks({ workbook, sheetName, XLSX })
+                : [],
           });
         }
 
@@ -2068,7 +2523,12 @@ export default function ERPVenueIngredientsScreen({
       });
 
       const baseName = fileName.replace(/\.(xlsx|xlsm|xls)$/i, "") || "erp-template-locations";
-      const sourcePart = itemSourceMode === FML_SOURCE_MODE ? "fml-venue-located" : "template-codes-fml-linked";
+      const sourcePart =
+        itemSourceMode === INGREDIENT_LOCATION_SOURCE_MODE
+          ? "ingredient-location-fml"
+          : itemSourceMode === FML_SOURCE_MODE
+            ? "fml-venue-located"
+            : "template-codes-fml-linked";
       const outputName = `${makeSafeFilePart(baseName)}-all-venues-${sourcePart}-${getDateStamp()}.xlsx`;
 
       XLSX.writeFile(outputWorkbook, outputName, {
@@ -2164,7 +2624,8 @@ export default function ERPVenueIngredientsScreen({
           <div class="meta"><strong>Venue tab:</strong> ${escapeHtmlValue(selectedVenueSheet || "N/A")}</div>
           <div class="meta"><strong>Section:</strong> ${escapeHtmlValue(activeSectionName)}</div>
           <div class="meta"><strong>FML source:</strong> ${escapeHtmlValue(fmlSheetName || "Not found")}</div>
-          <div class="meta"><strong>Source file:</strong> ${escapeHtmlValue(fileName || "N/A")}</div>
+          <div class="meta"><strong>ERP source file:</strong> ${escapeHtmlValue(fileName || "N/A")}</div>
+          <div class="meta"><strong>Ingredient by Location:</strong> ${escapeHtmlValue(ingredientLocationFileName || "N/A")}</div>
           <div class="meta"><strong>Visible rows:</strong> ${escapeHtmlValue(visibleGridRows.length)}</div>
           <div class="meta"><strong>Printed:</strong> ${escapeHtmlValue(new Date().toLocaleString())}</div>
           <table>
@@ -2220,7 +2681,7 @@ export default function ERPVenueIngredientsScreen({
         <div style={{ minWidth: 280 }}>
           <h1 style={{ margin: 0 }}>ERP Venue Ingredients</h1>
           <p style={styles.subtitle || { margin: "4px 0 0", color: "#666" }}>
-            FML is the source of truth for product details. Venue tabs and row-1 locators decide the correct venue/location for each FML code, so FML items no longer appear in every venue unless that venue tab already contains the code or FML has a matching venue note.
+            FML is the source of truth for product details. Ingredient by Location decides which venue needs each product, and row-1 locators on the ERP tabs decide which section/location receives the item.
           </p>
         </div>
 
@@ -2233,31 +2694,49 @@ export default function ERPVenueIngredientsScreen({
         <div>
           <h2 style={{ margin: 0 }}>Files</h2>
           <p style={styles.message || { color: "#555", fontSize: 14 }}>
-            Save the workbook as <strong>public/erp-template-locations.xlsx</strong>, or upload it here. The app uses Excel row 1 on each venue/location tab as the section locator, then reads the product codes underneath that locator. FML March 2026 is the source of truth for product details. Venue/location tabs are the placement map: tab name, row-1 locator, code column, and row position. FML venue notes can add new items only when they match the venue.
+            Save the ERP workbook as <strong>public/erp-template-locations.xlsx</strong> and the Ingredient by Location workbook as <strong>public/ingredient-by-location.xlsx</strong>, or upload both here. The app uses FML March 2026 as the product source, Ingredient by Location as the venue/product placement source, and Excel row 1 on each venue tab as the section locator.
           </p>
         </div>
 
-        <label style={{ display: "grid", gap: 6, fontWeight: "bold" }}>
-          Upload ERP template by locations
-          <input
-            type="file"
-            accept=".xlsx,.xls,.xlsm"
-            onChange={handleWorkbookUpload}
-            disabled={loading}
-            style={styles.fileInput}
-          />
-          <span style={{ color: "#666", fontSize: 13, fontWeight: "normal" }}>
-            Current: {fileName || "No workbook loaded"}
-          </span>
-        </label>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
+          <label style={{ display: "grid", gap: 6, fontWeight: "bold" }}>
+            Upload ERP template by locations
+            <input
+              type="file"
+              accept=".xlsx,.xls,.xlsm"
+              onChange={handleWorkbookUpload}
+              disabled={loading}
+              style={styles.fileInput}
+            />
+            <span style={{ color: "#666", fontSize: 13, fontWeight: "normal" }}>
+              Current: {fileName || "No workbook loaded"}
+            </span>
+          </label>
+
+          <label style={{ display: "grid", gap: 6, fontWeight: "bold" }}>
+            Upload Ingredient by Location
+            <input
+              type="file"
+              accept=".xlsx,.xls,.xlsm"
+              onChange={handleIngredientLocationUpload}
+              disabled={ingredientLocationLoading}
+              style={styles.fileInput}
+            />
+            <span style={{ color: "#666", fontSize: 13, fontWeight: "normal" }}>
+              Current: {ingredientLocationFileName || "No Ingredient by Location file loaded"}
+            </span>
+          </label>
+        </div>
 
         {message ? <div style={styles.infoBox || { padding: 12, borderRadius: 12, background: "#f2f2f2" }}>{message}</div> : null}
+        {ingredientLocationMessage ? <div style={styles.infoBox || { padding: 12, borderRadius: 12, background: "#f7f7f7" }}>{ingredientLocationMessage}</div> : null}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: 10, marginBottom: 16 }}>
         {[
           ["Venue tabs", venueSheets.length],
           ["FML rows", fmlIndex.rows.length],
+          ["Ingredient rows", ingredientLocationRows.length],
           ["FML placed", fmlPlacedCodeSet.size],
           ["FML not placed", fmlUnplacedRows.length],
           ["All placements", allVenuePlacementRows.length],
@@ -2308,6 +2787,7 @@ export default function ERPVenueIngredientsScreen({
               }}
               style={styles.selectInput || { width: "100%", padding: 11, borderRadius: 10, border: "1px solid #ccc", background: "#fff" }}
             >
+              <option value={INGREDIENT_LOCATION_SOURCE_MODE}>Ingredient by Location + FML</option>
               <option value={FML_SOURCE_MODE}>FML via venue/location tabs</option>
               <option value={TEMPLATE_CODE_SOURCE_MODE}>Existing venue-tab codes</option>
             </select>
@@ -2393,6 +2873,8 @@ export default function ERPVenueIngredientsScreen({
                 <th style={tableHeaderStyle}>Type</th>
                 <th style={tableHeaderStyle}>Brand</th>
                 <th style={tableHeaderStyle}>Status</th>
+                <th style={tableHeaderStyle}>Placement Source</th>
+                <th style={tableHeaderStyle}>Menu / Recipe</th>
                 <th style={tableHeaderStyle}>Comments</th>
                 <th style={tableHeaderStyle}>Notes</th>
               </tr>
@@ -2413,13 +2895,18 @@ export default function ERPVenueIngredientsScreen({
                       <span style={statusBadgeStyle(item.fmlMatched)}>{item.status}</span>
                       {item.wasCorrected ? <div style={{ color: "#0057b8", fontWeight: "bold", marginTop: 5 }}>Updated from FML</div> : null}
                     </td>
-                    <td style={tableCellStyle}>{item.comments || item.adjustmentComments || "--"}</td>
-                    <td style={tableCellStyle}>{item.notes || "--"}</td>
+                    <td style={tableCellStyle}>
+                      {item.sourceLabel || "--"}
+                      {item.ingredientLocationSourceRow ? <div style={{ color: "#666", fontSize: 12, marginTop: 4 }}>Ingredient row {item.ingredientLocationSourceRow}</div> : null}
+                    </td>
+                    <td style={tableCellStyle}>{item.ingredientMenuName || item.ingredientRecipeName || "--"}</td>
+                    <td style={tableCellStyle}>{item.comments || item.adjustmentComments || item.ingredientSpecialInstructions || "--"}</td>
+                    <td style={tableCellStyle}>{item.notes || item.ingredientSpecialInstructions2 || "--"}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={11} style={{ ...tableCellStyle, textAlign: "center", color: "#777", padding: 22 }}>
+                  <td colSpan={13} style={{ ...tableCellStyle, textAlign: "center", color: "#777", padding: 22 }}>
                     Choose a venue tab or upload the ERP template workbook.
                   </td>
                 </tr>
