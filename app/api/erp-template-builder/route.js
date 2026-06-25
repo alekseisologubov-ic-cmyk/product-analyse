@@ -6,10 +6,10 @@ export const maxDuration = 120;
 
 const XLSX = XLSXModule.default || XLSXModule;
 
+const ALL_VENUES_SCOPE = "ALL";
+const MAX_PREVIEW_ROWS = 600;
 const FML_SHEET_NAME = "FML March 2026";
 const UOM_SHEET_NAME = "Unit of Measure ship March 2026";
-const ALL_VENUES_SCOPE = "ALL";
-const MAX_PREVIEW_ROWS = 400;
 
 const cleanText = (value) =>
   String(value ?? "")
@@ -61,26 +61,92 @@ const normalizeTemplateProductCode = (value) => {
   const letters = rawText.replace(/[^A-Za-z]/g, "");
   const mostlyText = letters.length > 2 && digits.length < rawText.length / 2;
 
-  // Code cells must be real product codes. This prevents product names or pack sizes
-  // such as "12/2.4 LB" from being treated as template item codes.
   if (mostlyText) return "";
 
   return normalizeProductCode(rawText);
 };
 
-const isLikelyProductCode = (value) => /^\d{3,}$/.test(normalizeTemplateProductCode(value));
+const isLikelyTemplateCode = (value) =>
+  /^\d{3,}$/.test(normalizeTemplateProductCode(value));
 
 const excelAddress = (rowIndex, columnIndex) =>
   XLSX.utils.encode_cell({ r: rowIndex, c: columnIndex });
 
-const getWorksheetRows = ({ worksheet, raw = false }) => {
-  if (!worksheet) return [];
+const isCellAddressKey = (key) => /^[A-Z]{1,3}[0-9]+$/.test(key);
 
-  return XLSX.utils.sheet_to_json(worksheet, {
-    header: 1,
-    defval: "",
-    raw,
+const getCellValue = (cell, raw = false) => {
+  if (!cell) return "";
+  if (raw && cell.v !== undefined && cell.v !== null) return cell.v;
+  if (cell.v !== undefined && cell.v !== null) return cell.v;
+  if (cell.w !== undefined && cell.w !== null) return cell.w;
+  if (cell.f) return `=${cell.f}`;
+  return "";
+};
+
+const getWorksheetBounds = (worksheet) => {
+  const bounds = {
+    minRow: 0,
+    minCol: 0,
+    maxRow: 0,
+    maxCol: 0,
+    hasCells: false,
+  };
+
+  Object.keys(worksheet || {}).forEach((key) => {
+    if (!isCellAddressKey(key)) return;
+
+    const cell = worksheet[key];
+    if (!cell) return;
+
+    const address = XLSX.utils.decode_cell(key);
+
+    if (!bounds.hasCells) {
+      bounds.minRow = address.r;
+      bounds.maxRow = address.r;
+      bounds.minCol = address.c;
+      bounds.maxCol = address.c;
+      bounds.hasCells = true;
+      return;
+    }
+
+    bounds.minRow = Math.min(bounds.minRow, address.r);
+    bounds.maxRow = Math.max(bounds.maxRow, address.r);
+    bounds.minCol = Math.min(bounds.minCol, address.c);
+    bounds.maxCol = Math.max(bounds.maxCol, address.c);
   });
+
+  if (worksheet?.["!ref"]) {
+    try {
+      const range = XLSX.utils.decode_range(worksheet["!ref"]);
+      bounds.minRow = Math.min(bounds.minRow, range.s.r);
+      bounds.minCol = Math.min(bounds.minCol, range.s.c);
+      bounds.maxRow = Math.max(bounds.maxRow, range.e.r);
+      bounds.maxCol = Math.max(bounds.maxCol, range.e.c);
+      bounds.hasCells = true;
+    } catch {}
+  }
+
+  return bounds;
+};
+
+const getWorksheetRows = (worksheet, raw = false) => {
+  const bounds = getWorksheetBounds(worksheet);
+  if (!bounds.hasCells) return [];
+
+  const rows = [];
+
+  for (let rowIndex = 0; rowIndex <= bounds.maxRow; rowIndex += 1) {
+    const row = [];
+
+    for (let columnIndex = 0; columnIndex <= bounds.maxCol; columnIndex += 1) {
+      const address = excelAddress(rowIndex, columnIndex);
+      row.push(getCellValue(worksheet[address], raw));
+    }
+
+    rows.push(row);
+  }
+
+  return rows;
 };
 
 const getHeaderMap = (row = []) => {
@@ -105,56 +171,51 @@ const getColumnIndex = (headerMap, aliases = [], fallbackIndex = -1) => {
   return fallbackIndex;
 };
 
-const isActiveFlag = (value) => {
+const isInactiveFlag = (value) => {
   const text = cleanKey(value);
-  if (!text) return true;
-  if (["N", "NO", "FALSE", "INACTIVE", "0"].includes(text)) return false;
-  return true;
+  return ["N", "NO", "FALSE", "INACTIVE", "0"].includes(text);
 };
 
-const cloneCell = (cell) => {
-  if (!cell) return null;
-  return JSON.parse(JSON.stringify(cell));
-};
+const cloneCell = (cell) => (cell ? JSON.parse(JSON.stringify(cell)) : null);
+const cloneStyle = (style) => (style ? JSON.parse(JSON.stringify(style)) : undefined);
 
-const cloneStyle = (style) => {
-  if (!style) return undefined;
-  return JSON.parse(JSON.stringify(style));
-};
-
-const applyRedFontStyle = (cell) => {
-  const currentStyle = cloneStyle(cell.s) || {};
+const applyFontColor = (cell, rgb) => {
+  const style = cloneStyle(cell.s) || {};
 
   cell.s = {
-    ...currentStyle,
+    ...style,
     font: {
-      ...(currentStyle.font || {}),
-      color: { rgb: "FF0000" },
+      ...(style.font || {}),
+      color: { rgb },
     },
   };
 
   return cell;
 };
 
-const setCell = ({ worksheet, address, cell, red = false }) => {
+const setCell = ({ worksheet, address, cell, color = "" }) => {
   const nextCell = cloneCell(cell) || { t: "s", v: "" };
 
-  if (red) {
-    applyRedFontStyle(nextCell);
+  if (color === "red") {
+    applyFontColor(nextCell, "FF0000");
+  }
+
+  if (color === "blue") {
+    applyFontColor(nextCell, "0057B8");
   }
 
   worksheet[address] = nextCell;
 };
 
 const ensureWorksheetRange = ({ worksheet, rowIndex, columnIndex }) => {
-  const decoded = XLSX.utils.decode_range(worksheet["!ref"] || "A1:A1");
+  const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1:A1");
 
-  decoded.s.r = Math.min(decoded.s.r, rowIndex);
-  decoded.s.c = Math.min(decoded.s.c, columnIndex);
-  decoded.e.r = Math.max(decoded.e.r, rowIndex);
-  decoded.e.c = Math.max(decoded.e.c, columnIndex);
+  range.s.r = Math.min(range.s.r, rowIndex);
+  range.s.c = Math.min(range.s.c, columnIndex);
+  range.e.r = Math.max(range.e.r, rowIndex);
+  range.e.c = Math.max(range.e.c, columnIndex);
 
-  worksheet["!ref"] = XLSX.utils.encode_range(decoded);
+  worksheet["!ref"] = XLSX.utils.encode_range(range);
 };
 
 const makeSafeFilePart = (value) =>
@@ -165,16 +226,18 @@ const makeSafeFilePart = (value) =>
 
 const getDateStamp = () => {
   const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  const hour = String(now.getHours()).padStart(2, "0");
-  const minute = String(now.getMinutes()).padStart(2, "0");
 
-  return `${year}-${month}-${day}-${hour}${minute}`;
+  return (
+    `${now.getFullYear()}-` +
+    `${String(now.getMonth() + 1).padStart(2, "0")}-` +
+    `${String(now.getDate()).padStart(2, "0")}-` +
+    `${String(now.getHours()).padStart(2, "0")}` +
+    `${String(now.getMinutes()).padStart(2, "0")}`
+  );
 };
 
-const escapeRegExp = (value) => String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegExp = (value) =>
+  String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const aliasMatchesText = (textKey, alias) => {
   const aliasKey = cleanKey(alias);
@@ -199,7 +262,7 @@ const VENUE_ALIAS_RULES = [
   { match: ["ARIYA"], aliases: ["ARIYA", "RAZZLE ARIYA"] },
   { match: ["16 EXTRA VIRGIN"], aliases: ["EXTRA VIRGIN", "EV"] },
   { match: ["17 WAKE"], aliases: ["WAKE", "THE WAKE"] },
-  { match: ["18 GUNBAE"], aliases: ["GUNBAE", "GB"] },
+  { match: ["18 GUNBAE"], aliases: ["GUNBAE", "GUNBAE KOREAN", "GB"] },
   { match: ["19 MANNOR", "19 MANOR"], aliases: ["MANNOR", "MANOR", "ANOTHER ROSE"] },
   { match: ["LOLZ"], aliases: ["LOLZ"] },
   { match: ["20 THE DOCK"], aliases: ["DOCK", "THE DOCK", "UP WITH A TWIST"] },
@@ -273,11 +336,92 @@ const ingredientRowMatchesVenueSheet = (ingredientRow, sheetName) => {
   return false;
 };
 
+const ingredientRowSearchKey = (row) =>
+  cleanKey([
+    row?.restaurantName,
+    row?.menuName,
+    row?.category,
+    row?.subCategory,
+    row?.name,
+    row?.productName,
+    row?.assigned,
+    row?.recipeName,
+    row?.specialInstructions,
+    row?.specialInstructions2,
+  ].join(" "));
+
+const ingredientLooksLikeProduce = (row) => {
+  const key = ingredientRowSearchKey(row);
+  return (
+    key.includes("VEGET") ||
+    key.includes("VEGETE") ||
+    key.includes("FRUIT") ||
+    key.includes("PRODUCE") ||
+    key.includes("FRESH VEGETABLE")
+  );
+};
+
+const ingredientLooksLikeFish = (row) => {
+  const key = ingredientRowSearchKey(row);
+  return (
+    key.includes("FISH") ||
+    key.includes("SEAFOOD") ||
+    key.includes("SALMON") ||
+    key.includes("TUNA") ||
+    key.includes("SHRIMP") ||
+    key.includes("LOBSTER") ||
+    key.includes("CRAB") ||
+    key.includes("SCALLOP")
+  );
+};
+
+const ingredientLooksLikeMeat = (row) => {
+  const key = ingredientRowSearchKey(row);
+  return (
+    key.includes("MEAT") ||
+    key.includes("BEEF") ||
+    key.includes("VEAL") ||
+    key.includes("PORK") ||
+    key.includes("LAMB") ||
+    key.includes("POULTRY") ||
+    key.includes("CHICKEN") ||
+    key.includes("TURKEY") ||
+    key.includes("BACON") ||
+    key.includes("SAUSAGE")
+  );
+};
+
+const ingredientLooksLikeLiquor = (row) => {
+  const key = ingredientRowSearchKey(row);
+  return (
+    key.includes("LIQUOR") ||
+    key.includes("LIQUER") ||
+    key.includes("WINE") ||
+    key.includes("BEER") ||
+    key.includes("VODKA") ||
+    key.includes("RUM") ||
+    key.includes("GIN") ||
+    key.includes("TEQUILA") ||
+    key.includes("WHISKEY")
+  );
+};
+
+const ingredientLooksLikeBakery = (row) => {
+  const key = ingredientRowSearchKey(row);
+  return (
+    key.includes("BAKERY") ||
+    key.includes("BREAD") ||
+    key.includes("DOUGH") ||
+    key.includes("PASTRY") ||
+    key.includes("CROISSANT")
+  );
+};
+
 const getTemplateSectionType = (sectionTitle) => {
   const key = cleanKey(sectionTitle);
 
   if (!key) return "general";
-  if (key.includes("LIQUOR") || key.includes("LIQUER") || key.includes("WINE") || key.includes("BEER") || key.includes("ALCOHOL")) return "liquor";
+  if (key.includes("LIQUOR") || key.includes("LIQUER") || key.includes("WINE") || key.includes("BEER")) return "liquor";
   if (key.includes("CHARG")) return "chargeable";
   if (key.includes("VEGET") || key.includes("VEGETE") || key.includes("FRUIT") || key.includes("PRODUCE")) return "produce";
   if (key.includes("FISH") || key.includes("SEAFOOD")) return "fish";
@@ -289,90 +433,51 @@ const getTemplateSectionType = (sectionTitle) => {
   return "general";
 };
 
-const ingredientRowSectionKey = (row) =>
-  cleanKey([
-    row?.menuName,
-    row?.category,
-    row?.subCategory,
-    row?.name,
-    row?.assigned,
-    row?.productName,
-    row?.recipeName,
-    row?.specialInstructions,
-    row?.specialInstructions2,
-  ].join(" "));
-
-const ingredientLooksLikeProduce = (row) => {
-  const key = ingredientRowSectionKey(row);
-  return key.includes("VEGET") || key.includes("VEGETE") || key.includes("FRUIT") || key.includes("PRODUCE") || key.includes("FRESH VEGETABLE");
-};
-
-const ingredientLooksLikeFish = (row) => {
-  const key = ingredientRowSectionKey(row);
-  return key.includes("FISH") || key.includes("SEAFOOD") || key.includes("SALMON") || key.includes("TUNA") || key.includes("SHRIMP") || key.includes("LOBSTER") || key.includes("CRAB") || key.includes("SCALLOP");
-};
-
-const ingredientLooksLikeMeat = (row) => {
-  const key = ingredientRowSectionKey(row);
-  return key.includes("MEAT") || key.includes("BEEF") || key.includes("VEAL") || key.includes("PORK") || key.includes("LAMB") || key.includes("POULTRY") || key.includes("CHICKEN") || key.includes("TURKEY") || key.includes("BACON") || key.includes("SAUSAGE");
-};
-
-const ingredientLooksLikeBakery = (row) => {
-  const key = ingredientRowSectionKey(row);
-  return key.includes("BAKERY") || key.includes("BREAD") || key.includes("FLOUR") || key.includes("DOUGH") || key.includes("CROISSANT") || key.includes("PASTRY");
-};
-
-const ingredientLooksLikeLiquor = (row) => {
-  const key = ingredientRowSectionKey(row);
-  return key.includes("LIQUOR") || key.includes("LIQUER") || key.includes("WINE") || key.includes("BEER") || key.includes("VODKA") || key.includes("RUM") || key.includes("GIN") || key.includes("TEQUILA") || key.includes("WHISKEY");
-};
-
 const sectionMatchesIngredientRow = (sectionTitle, ingredientRow) => {
   const type = getTemplateSectionType(sectionTitle);
   const sectionKey = cleanKey(sectionTitle);
-  const ingredientKey = ingredientRowSectionKey(ingredientRow);
+  const ingredientKey = ingredientRowSearchKey(ingredientRow);
 
-  if (sectionKey && ingredientKey) {
-    const simplifiedSection = sectionKey
-      .replace(/^\d+\s+/, "")
-      .replace(/\b\d{1,2}\s+\d{1,2}\s+\d{1,4}\b/g, "")
-      .replace(/\bMENU BASIC PREPERATION\b/g, "MENU BASIC PREPARATION")
-      .trim();
+  const simplifiedSection = sectionKey
+    .replace(/^\d+\s+/, "")
+    .replace(/\b\d{1,2}\s+\d{1,2}\s+\d{1,4}\b/g, "")
+    .replace(/\bMENU BASIC PREPERATION\b/g, "MENU BASIC PREPARATION")
+    .trim();
 
-    if (
-      simplifiedSection.length >= 8 &&
-      (ingredientKey.includes(simplifiedSection) || simplifiedSection.includes(ingredientKey))
-    ) {
-      return true;
-    }
+  if (
+    simplifiedSection.length >= 10 &&
+    ingredientKey &&
+    (ingredientKey.includes(simplifiedSection) || simplifiedSection.includes(ingredientKey))
+  ) {
+    return true;
   }
 
   if (type === "produce") return ingredientLooksLikeProduce(ingredientRow);
   if (type === "fish") return ingredientLooksLikeFish(ingredientRow);
   if (type === "meat") return ingredientLooksLikeMeat(ingredientRow);
-  if (type === "bakery" || type === "pastry") return ingredientLooksLikeBakery(ingredientRow);
   if (type === "liquor") return ingredientLooksLikeLiquor(ingredientRow);
-  if (type === "chargeable") return cleanKey(ingredientRow?.category).includes("CHARG") || cleanKey(ingredientRow?.subCategory).includes("CHARG");
+  if (type === "bakery" || type === "pastry") return ingredientLooksLikeBakery(ingredientRow);
+  if (type === "chargeable") {
+    return cleanKey(ingredientRow?.category).includes("CHARG") ||
+      cleanKey(ingredientRow?.subCategory).includes("CHARG") ||
+      cleanKey(ingredientRow?.menuName).includes("CHARG");
+  }
 
   if (type === "menuBasic") {
-    return !ingredientLooksLikeProduce(ingredientRow) &&
+    return (
+      !ingredientLooksLikeProduce(ingredientRow) &&
       !ingredientLooksLikeFish(ingredientRow) &&
       !ingredientLooksLikeMeat(ingredientRow) &&
-      !ingredientLooksLikeBakery(ingredientRow) &&
-      !ingredientLooksLikeLiquor(ingredientRow);
+      !ingredientLooksLikeLiquor(ingredientRow)
+    );
   }
 
   return false;
 };
 
-const detectFmlSheetName = (sheetNames = []) =>
-  sheetNames.find((sheetName) => cleanKey(sheetName) === cleanKey(FML_SHEET_NAME)) ||
-  sheetNames.find((sheetName) => cleanKey(sheetName).includes("FML")) ||
-  "";
-
-const detectUomSheetName = (sheetNames = []) =>
-  sheetNames.find((sheetName) => cleanKey(sheetName) === cleanKey(UOM_SHEET_NAME)) ||
-  sheetNames.find((sheetName) => cleanKey(sheetName).includes("UNIT OF MEASURE")) ||
+const findSheetName = (sheetNames = [], expectedName) =>
+  sheetNames.find((sheetName) => cleanKey(sheetName) === cleanKey(expectedName)) ||
+  sheetNames.find((sheetName) => cleanKey(sheetName).includes(cleanKey(expectedName))) ||
   "";
 
 const isVenueSheetName = (sheetName) => {
@@ -382,17 +487,11 @@ const isVenueSheetName = (sheetName) => {
   if (key.includes("FML")) return false;
   if (key.includes("UNIT OF MEASURE")) return false;
   if (key.includes("SUGGESTED ADDITIONS")) return false;
-  if (key === "SHEET5") return false;
   if (key.includes("SUMMARY")) return false;
   if (key.includes("INDEX")) return false;
+  if (key === "SHEET5") return false;
 
   return true;
-};
-
-const isVenueSheet = (sheetName, workbook) => {
-  const worksheet = workbook?.Sheets?.[sheetName];
-  if (!worksheet || !worksheet["!ref"]) return false;
-  return isVenueSheetName(sheetName);
 };
 
 const parseIngredientByLocationWorkbook = (workbook) => {
@@ -403,10 +502,10 @@ const parseIngredientByLocationWorkbook = (workbook) => {
     return { rows: [], sheetName, headerRowIndex: -1 };
   }
 
-  const rows = getWorksheetRows({ worksheet, raw: false });
+  const rows = getWorksheetRows(worksheet, false);
   let headerRowIndex = -1;
 
-  rows.slice(0, 20).some((row, index) => {
+  rows.slice(0, 30).some((row, index) => {
     const headerMap = getHeaderMap(row || []);
     const hasRestaurant = getColumnIndex(headerMap, ["RestaurantName", "Restaurant Name", "Venue", "Location"], -1) >= 0;
     const hasCode = getColumnIndex(headerMap, ["Code", "Product Code", "Ingredient Code"], -1) >= 0;
@@ -423,6 +522,7 @@ const parseIngredientByLocationWorkbook = (workbook) => {
   if (headerRowIndex < 0) headerRowIndex = 0;
 
   const headerMap = getHeaderMap(rows[headerRowIndex] || []);
+
   const restaurantCodeIndex = getColumnIndex(headerMap, ["RestaurantCode", "Restaurant Code"], 0);
   const restaurantNameIndex = getColumnIndex(headerMap, ["RestaurantName", "Restaurant Name", "Venue", "Location"], 1);
   const menuCodeIndex = getColumnIndex(headerMap, ["MenuCode", "Menu Code"], 2);
@@ -447,12 +547,12 @@ const parseIngredientByLocationWorkbook = (workbook) => {
     const sourceRow = headerRowIndex + 2 + offset;
     const code = normalizeProductCode(row[codeIndex]);
     const restaurantName = cleanText(row[restaurantNameIndex]);
-    const productName = cleanText(row[assignedIndex]) || cleanText(row[nameIndex]);
     const name = cleanText(row[nameIndex]);
+    const productName = cleanText(row[assignedIndex]) || name;
     const assignedType = cleanKey(row[assignedTypeIndex]);
 
     if (!code || !restaurantName || !productName) return;
-    if (!isActiveFlag(row[activeIndex]) || !isActiveFlag(row[assignedActiveIndex])) return;
+    if (isInactiveFlag(row[activeIndex]) || isInactiveFlag(row[assignedActiveIndex])) return;
     if (assignedType && !["P", "PRODUCT", "I", "INGREDIENT"].includes(assignedType)) return;
 
     const item = {
@@ -486,6 +586,7 @@ const parseIngredientByLocationWorkbook = (workbook) => {
     ].map(cleanKey).join("|");
 
     if (seen.has(rowKey)) return;
+
     seen.add(rowKey);
     parsedRows.push(item);
   });
@@ -534,8 +635,14 @@ const getTitleColumnIndexes = (rows) => {
 const findCodeColumnInRange = (rows, startColumn, endColumn) => {
   for (let columnIndex = startColumn; columnIndex <= endColumn; columnIndex += 1) {
     const headerText = cleanKey(rows[1]?.[columnIndex]);
+
     if (headerText === "CODE" || headerText.includes("APOLLO") || headerText.includes("VV CODE")) {
-      return { codeCol: columnIndex, nameCol: columnIndex + 1, umCol: columnIndex + 2, headerRowIndex: 1 };
+      return {
+        codeCol: columnIndex,
+        nameCol: columnIndex + 1,
+        umCol: columnIndex + 2,
+        headerRowIndex: 1,
+      };
     }
   }
 
@@ -545,8 +652,8 @@ const findCodeColumnInRange = (rows, startColumn, endColumn) => {
   for (let columnIndex = startColumn; columnIndex <= endColumn; columnIndex += 1) {
     let count = 0;
 
-    for (let rowIndex = 2; rowIndex < Math.min(rows.length, 250); rowIndex += 1) {
-      if (isLikelyProductCode(rows[rowIndex]?.[columnIndex])) {
+    for (let rowIndex = 2; rowIndex < rows.length; rowIndex += 1) {
+      if (isLikelyTemplateCode(rows[rowIndex]?.[columnIndex])) {
         count += 1;
       }
     }
@@ -558,7 +665,12 @@ const findCodeColumnInRange = (rows, startColumn, endColumn) => {
   }
 
   if (bestColumn >= 0 && bestCount > 0) {
-    return { codeCol: bestColumn, nameCol: bestColumn + 1, umCol: bestColumn + 2, headerRowIndex: 1 };
+    return {
+      codeCol: bestColumn,
+      nameCol: bestColumn + 1,
+      umCol: bestColumn + 2,
+      headerRowIndex: 1,
+    };
   }
 
   return null;
@@ -579,29 +691,28 @@ const getLastDataRowForBlock = ({ rows, block }) => {
   return lastRowIndex;
 };
 
-const findTemplateBlocks = ({ worksheet }) => {
+const findTemplateBlocks = (worksheet) => {
   if (!worksheet) return [];
 
-  const rows = getWorksheetRows({ worksheet, raw: false });
-  const decodedRange = XLSX.utils.decode_range(worksheet["!ref"] || "A1:A1");
+  const rows = getWorksheetRows(worksheet, false);
+  const bounds = getWorksheetBounds(worksheet);
   const titleColumns = getTitleColumnIndexes(rows);
 
   return titleColumns
     .map((titleColumn, index) => {
       const nextTitleColumn = titleColumns[index + 1];
 
-      // Important fix:
-      // In this ERP template, the row-1 locator is usually over the name column,
-      // while the real Code column is one column to the left.
-      // Example Gunbae:
-      // row 1 title columns: C / G / K / O
-      // real code columns:   B / F / J / N
-      const searchStartColumn = Math.max(0, titleColumn - 1);
-      const searchEndColumn = nextTitleColumn !== undefined
-        ? Math.max(searchStartColumn, nextTitleColumn - 2)
-        : Math.min(decodedRange.e.c, titleColumn + 4);
+      const searchStartColumn = Math.max(0, titleColumn - 2);
+      const searchEndColumn =
+        nextTitleColumn !== undefined
+          ? Math.max(searchStartColumn, nextTitleColumn - 1)
+          : Math.min(bounds.maxCol, titleColumn + 4);
 
-      const columnInfo = findCodeColumnInRange(rows, searchStartColumn, searchEndColumn);
+      const columnInfo = findCodeColumnInRange(
+        rows,
+        searchStartColumn,
+        searchEndColumn
+      );
 
       if (!columnInfo) return null;
 
@@ -621,97 +732,133 @@ const findTemplateBlocks = ({ worksheet }) => {
     .filter(Boolean);
 };
 
-const getExistingCodesForBlock = ({ rows, block }) => {
-  const codes = new Set();
+const getExistingCodeRowsForBlock = ({ rows, block }) => {
+  const items = [];
+  const seen = new Set();
 
   for (let rowIndex = block.headerRowIndex + 1; rowIndex < rows.length; rowIndex += 1) {
     const code = normalizeTemplateProductCode(rows[rowIndex]?.[block.codeCol]);
-    if (code) codes.add(code);
+
+    if (!code || seen.has(`${code}|${rowIndex}`)) continue;
+
+    seen.add(`${code}|${rowIndex}`);
+
+    items.push({
+      code,
+      rowIndex,
+      product: cleanText(rows[rowIndex]?.[block.nameCol]),
+    });
   }
 
-  return codes;
+  return items;
 };
 
-const getExistingCodeInfoForSheet = ({ rows, blocks }) => {
-  const codeInfo = new Map();
+const getRequiredCodeMapForBlock = ({ ingredientRows, sheetName, sectionTitle }) => {
+  const requiredMap = new Map();
 
-  (blocks || []).forEach((block) => {
-    for (let rowIndex = block.headerRowIndex + 1; rowIndex < rows.length; rowIndex += 1) {
-      const code = normalizeTemplateProductCode(rows[rowIndex]?.[block.codeCol]);
-      if (!code || codeInfo.has(code)) continue;
+  (ingredientRows || []).forEach((row) => {
+    if (!ingredientRowMatchesVenueSheet(row, sheetName)) return;
+    if (!sectionMatchesIngredientRow(sectionTitle, row)) return;
 
-      codeInfo.set(code, {
-        section: block.title,
-        rowIndex,
-        codeCol: block.codeCol,
-      });
-    }
+    const code = normalizeProductCode(row.code);
+    if (!code || requiredMap.has(code)) return;
+
+    requiredMap.set(code, row);
   });
 
-  return codeInfo;
+  return requiredMap;
 };
 
-const getRequiredRowsForVenueSection = ({ ingredientRows, sheetName, sectionTitle }) => {
-  const seenCodes = new Set();
+const getRequiredCodeInfoForVenue = ({ ingredientRows, sheetName, blocks }) => {
+  const info = new Map();
 
-  return (ingredientRows || [])
-    .filter((row) => ingredientRowMatchesVenueSheet(row, sheetName))
-    .filter((row) => sectionMatchesIngredientRow(sectionTitle, row))
-    .filter((row) => {
-      const code = normalizeProductCode(row.code);
-      if (!code || seenCodes.has(code)) return false;
-      seenCodes.add(code);
-      return true;
-    })
-    .sort((left, right) => {
-      const category = String(left.category || "").localeCompare(String(right.category || ""));
-      if (category !== 0) return category;
-
-      const subCategory = String(left.subCategory || "").localeCompare(String(right.subCategory || ""));
-      if (subCategory !== 0) return subCategory;
-
-      return String(left.productName || left.name || "").localeCompare(String(right.productName || right.name || ""));
+  (blocks || []).forEach((block) => {
+    const requiredMap = getRequiredCodeMapForBlock({
+      ingredientRows,
+      sheetName,
+      sectionTitle: block.title,
     });
+
+    requiredMap.forEach((ingredientRow, code) => {
+      if (!info.has(code)) {
+        info.set(code, {
+          code,
+          sections: [],
+          ingredientRow,
+        });
+      }
+
+      info.get(code).sections.push(block.title);
+    });
+  });
+
+  return info;
+};
+
+const makeExistingNotUsedStatus = ({ code, requiredInfoForVenue }) => {
+  const requiredInfo = requiredInfoForVenue.get(code);
+
+  if (requiredInfo?.sections?.length) {
+    return `Blue review - item used in this venue but different section: ${requiredInfo.sections.join(", ")}`;
+  }
+
+  return "Blue review - item exists in ERP template but not required by Ingredient by Location";
 };
 
 const buildAnalysisRows = ({ workbook, ingredientRows, scope = ALL_VENUES_SCOPE }) => {
   if (!workbook || !ingredientRows?.length) return [];
 
   const venueSheets = (workbook.SheetNames || [])
-    .filter((sheetName) => isVenueSheet(sheetName, workbook))
+    .filter(isVenueSheetName)
     .filter((sheetName) => scope === ALL_VENUES_SCOPE || sheetName === scope);
 
-  const rows = [];
+  const reportRows = [];
 
   venueSheets.forEach((sheetName) => {
     const worksheet = workbook.Sheets[sheetName];
-    const worksheetRows = getWorksheetRows({ worksheet, raw: false });
-    const blocks = findTemplateBlocks({ worksheet });
-    const existingCodeInfoBySheet = getExistingCodeInfoForSheet({ rows: worksheetRows, blocks });
-    const previewedCodesForSheet = new Set();
+    const rows = getWorksheetRows(worksheet, false);
+    const blocks = findTemplateBlocks(worksheet);
+    const requiredInfoForVenue = getRequiredCodeInfoForVenue({
+      ingredientRows,
+      sheetName,
+      blocks,
+    });
 
     blocks.forEach((block) => {
-      const existingCodes = getExistingCodesForBlock({ rows: worksheetRows, block });
-      const requiredRows = getRequiredRowsForVenueSection({
+      const requiredMap = getRequiredCodeMapForBlock({
         ingredientRows,
         sheetName,
         sectionTitle: block.title,
       });
 
-      requiredRows.forEach((ingredientRow) => {
-        const code = normalizeProductCode(ingredientRow.code);
-        if (!code || previewedCodesForSheet.has(code)) return;
+      const existingItems = getExistingCodeRowsForBlock({ rows, block });
+      const existingCodes = new Set(existingItems.map((item) => item.code));
 
-        const existsInSection = existingCodes.has(code);
-        const existingInfo = existingCodeInfoBySheet.get(code);
-        const existsInVenue = Boolean(existingInfo);
+      existingItems.forEach((existingItem) => {
+        if (requiredMap.has(existingItem.code)) return;
 
-        rows.push({
-          Status: existsInSection
+        reportRows.push({
+          Status: makeExistingNotUsedStatus({
+            code: existingItem.code,
+            requiredInfoForVenue,
+          }),
+          Venue: sheetName,
+          Section: block.title,
+          Code: existingItem.code,
+          Product: existingItem.product || "Existing ERP template item",
+          Restaurant: "ERP Template",
+          Menu: "Existing item not required here",
+          Category: "Template extra / review",
+          SubCategory: "Blue review",
+          IngredientSourceRow: "ERP template",
+        });
+      });
+
+      requiredMap.forEach((ingredientRow, code) => {
+        reportRows.push({
+          Status: existingCodes.has(code)
             ? "Already in template"
-            : existsInVenue
-              ? `Already in template - different section: ${existingInfo.section || "unknown"}`
-              : "Suggested addition",
+            : "Suggested addition",
           Venue: sheetName,
           Section: block.title,
           Code: code,
@@ -722,17 +869,16 @@ const buildAnalysisRows = ({ workbook, ingredientRows, scope = ALL_VENUES_SCOPE 
           SubCategory: ingredientRow.subCategory,
           IngredientSourceRow: ingredientRow.sourceRow,
         });
-
-        previewedCodesForSheet.add(code);
       });
     });
   });
 
-  return rows;
+  return reportRows;
 };
 
 const makeCodeCell = (code, sourceStyle) => {
   const numericValue = Number(code);
+
   return {
     t: Number.isFinite(numericValue) ? "n" : "s",
     v: Number.isFinite(numericValue) ? numericValue : String(code || ""),
@@ -756,6 +902,7 @@ const writeSuggestedItemToBlock = ({
   uomSheetName,
 }) => {
   const code = normalizeProductCode(ingredientRow.code);
+
   const codeAddress = excelAddress(rowIndex, block.codeCol);
   const nameAddress = excelAddress(rowIndex, block.nameCol);
   const umAddress = block.umCol >= 0 ? excelAddress(rowIndex, block.umCol) : "";
@@ -768,8 +915,6 @@ const writeSuggestedItemToBlock = ({
   const safeFmlName = String(fmlSheetName || "").replace(/'/g, "''");
   const safeUomName = String(uomSheetName || "").replace(/'/g, "''");
 
-  const codeCell = makeCodeCell(code, worksheet[sourceCodeAddress]?.s);
-
   const nameFormula = fmlSheetName
     ? `VLOOKUP(${codeAddress},'${safeFmlName}'!E:F,2,FALSE)`
     : "";
@@ -778,96 +923,157 @@ const writeSuggestedItemToBlock = ({
     ? `VLOOKUP(${codeAddress},'${safeUomName}'!A:C,3,FALSE)`
     : "";
 
-  const nameCell = nameFormula
-    ? makeFormulaCell({
-        formula: nameFormula,
-        fallbackValue: ingredientRow.productName || ingredientRow.name,
-        sourceStyle: worksheet[sourceNameAddress]?.s,
-      })
-    : {
-        t: "s",
-        v: ingredientRow.productName || ingredientRow.name || "",
-        s: cloneStyle(worksheet[sourceNameAddress]?.s),
-      };
+  setCell({
+    worksheet,
+    address: codeAddress,
+    cell: makeCodeCell(code, worksheet[sourceCodeAddress]?.s),
+    color: "red",
+  });
 
-  const umCell = umFormula
-    ? makeFormulaCell({
-        formula: umFormula,
-        fallbackValue: ingredientRow.um || "",
-        sourceStyle: sourceUmAddress ? worksheet[sourceUmAddress]?.s : undefined,
-      })
-    : {
-        t: "s",
-        v: ingredientRow.um || "",
-        s: cloneStyle(sourceUmAddress ? worksheet[sourceUmAddress]?.s : undefined),
-      };
-
-  setCell({ worksheet, address: codeAddress, cell: codeCell, red: true });
-  setCell({ worksheet, address: nameAddress, cell: nameCell, red: true });
+  setCell({
+    worksheet,
+    address: nameAddress,
+    cell: nameFormula
+      ? makeFormulaCell({
+          formula: nameFormula,
+          fallbackValue: ingredientRow.productName || ingredientRow.name,
+          sourceStyle: worksheet[sourceNameAddress]?.s,
+        })
+      : {
+          t: "s",
+          v: ingredientRow.productName || ingredientRow.name || "",
+          s: cloneStyle(worksheet[sourceNameAddress]?.s),
+        },
+    color: "red",
+  });
 
   if (umAddress) {
-    setCell({ worksheet, address: umAddress, cell: umCell, red: true });
+    setCell({
+      worksheet,
+      address: umAddress,
+      cell: umFormula
+        ? makeFormulaCell({
+            formula: umFormula,
+            fallbackValue: ingredientRow.um || "",
+            sourceStyle: worksheet[sourceUmAddress]?.s,
+          })
+        : {
+            t: "s",
+            v: ingredientRow.um || "",
+            s: cloneStyle(worksheet[sourceUmAddress]?.s),
+          },
+      color: "red",
+    });
   }
 
-  // Extra marker so the row is still identifiable even if the local xlsx package
-  // does not preserve generated font color.
-  worksheet[codeAddress].c = [{ a: "ERP Template Builder", t: "Suggested addition from Ingredient by Location" }];
+  worksheet[codeAddress].c = [
+    {
+      a: "ERP Template Builder",
+      t: "Suggested addition from Ingredient by Location",
+    },
+  ];
 
   ensureWorksheetRange({ worksheet, rowIndex, columnIndex: block.codeCol });
   ensureWorksheetRange({ worksheet, rowIndex, columnIndex: block.nameCol });
-  if (block.umCol >= 0) ensureWorksheetRange({ worksheet, rowIndex, columnIndex: block.umCol });
-
-  if (worksheet["!rows"]?.[rowIndex - 1] && !worksheet["!rows"]?.[rowIndex]) {
-    worksheet["!rows"][rowIndex] = cloneStyle(worksheet["!rows"][rowIndex - 1]);
+  if (block.umCol >= 0) {
+    ensureWorksheetRange({ worksheet, rowIndex, columnIndex: block.umCol });
   }
 };
 
-const applyIngredientLocationToTemplate = ({ workbook, ingredientRows, scope = ALL_VENUES_SCOPE }) => {
-  const fmlSheetName = detectFmlSheetName(workbook.SheetNames || []);
-  const uomSheetName = detectUomSheetName(workbook.SheetNames || []);
+const markExistingItemBlue = ({ worksheet, block, rowIndex }) => {
+  [block.codeCol, block.nameCol, block.umCol]
+    .filter((columnIndex) => columnIndex >= 0)
+    .forEach((columnIndex) => {
+      const address = excelAddress(rowIndex, columnIndex);
+      const existingCell = worksheet[address];
+
+      if (!existingCell) return;
+
+      setCell({
+        worksheet,
+        address,
+        cell: existingCell,
+        color: "blue",
+      });
+    });
+};
+
+const applyIngredientLocationToTemplate = ({
+  workbook,
+  ingredientRows,
+  scope = ALL_VENUES_SCOPE,
+}) => {
+  const fmlSheetName = findSheetName(workbook.SheetNames || [], FML_SHEET_NAME);
+  const uomSheetName = findSheetName(workbook.SheetNames || [], UOM_SHEET_NAME);
 
   const venueSheets = (workbook.SheetNames || [])
-    .filter((sheetName) => isVenueSheet(sheetName, workbook))
+    .filter(isVenueSheetName)
     .filter((sheetName) => scope === ALL_VENUES_SCOPE || sheetName === scope);
 
   const summaryRows = [];
   let existingCount = 0;
   let suggestedCount = 0;
+  let blueCount = 0;
 
-  for (const sheetName of venueSheets) {
+  venueSheets.forEach((sheetName) => {
     const worksheet = workbook.Sheets[sheetName];
-    const rows = getWorksheetRows({ worksheet, raw: false });
-    const blocks = findTemplateBlocks({ worksheet });
-    const existingCodeInfoBySheet = getExistingCodeInfoForSheet({ rows, blocks });
-
-    // Prevent duplicate red additions anywhere on the same venue tab.
-    const usedSheetCodes = new Set(existingCodeInfoBySheet.keys());
+    const rows = getWorksheetRows(worksheet, false);
+    const blocks = findTemplateBlocks(worksheet);
+    const requiredInfoForVenue = getRequiredCodeInfoForVenue({
+      ingredientRows,
+      sheetName,
+      blocks,
+    });
 
     blocks.forEach((block) => {
-      const existingCodes = getExistingCodesForBlock({ rows, block });
-      const requiredRows = getRequiredRowsForVenueSection({
+      const requiredMap = getRequiredCodeMapForBlock({
         ingredientRows,
         sheetName,
         sectionTitle: block.title,
       });
 
-      let nextRowIndex = Math.max(block.lastDataRowIndex + 1, block.headerRowIndex + 2);
+      const existingItems = getExistingCodeRowsForBlock({ rows, block });
+      const existingCodes = new Set(existingItems.map((item) => item.code));
 
-      requiredRows.forEach((ingredientRow) => {
-        const code = normalizeProductCode(ingredientRow.code);
-        if (!code) return;
+      existingItems.forEach((existingItem) => {
+        if (requiredMap.has(existingItem.code)) return;
 
-        const existsInSection = existingCodes.has(code);
-        const existingInfo = existingCodeInfoBySheet.get(code);
-        const existsInVenue = Boolean(existingInfo);
+        markExistingItemBlue({
+          worksheet,
+          block,
+          rowIndex: existingItem.rowIndex,
+        });
 
-        if (existsInSection || existsInVenue || usedSheetCodes.has(code)) {
+        blueCount += 1;
+
+        summaryRows.push({
+          Status: makeExistingNotUsedStatus({
+            code: existingItem.code,
+            requiredInfoForVenue,
+          }),
+          Venue: sheetName,
+          Section: block.title,
+          Code: existingItem.code,
+          Product: existingItem.product || "Existing ERP template item",
+          Restaurant: "ERP Template",
+          Menu: "Existing item not required here",
+          Category: "Template extra / review",
+          SubCategory: "Blue review",
+          IngredientSourceRow: "ERP template",
+        });
+      });
+
+      let nextRowIndex = Math.max(
+        block.lastDataRowIndex + 1,
+        block.headerRowIndex + 2
+      );
+
+      requiredMap.forEach((ingredientRow, code) => {
+        if (existingCodes.has(code)) {
           existingCount += 1;
 
           summaryRows.push({
-            Status: existsInSection
-              ? "Already in template"
-              : `Already in template - different section: ${existingInfo?.section || "unknown"}`,
+            Status: "Already in template",
             Venue: sheetName,
             Section: block.title,
             Code: code,
@@ -892,7 +1098,6 @@ const applyIngredientLocationToTemplate = ({ workbook, ingredientRows, scope = A
         });
 
         suggestedCount += 1;
-        usedSheetCodes.add(code);
 
         summaryRows.push({
           Status: "Suggested addition - red in template",
@@ -910,26 +1115,26 @@ const applyIngredientLocationToTemplate = ({ workbook, ingredientRows, scope = A
         nextRowIndex += 1;
       });
     });
-  }
+  });
 
   const summaryWorksheet = XLSX.utils.json_to_sheet(summaryRows);
+
   summaryWorksheet["!cols"] = [
-    { wch: 28 },
-    { wch: 28 },
-    { wch: 54 },
+    { wch: 48 },
+    { wch: 30 },
+    { wch: 56 },
     { wch: 14 },
-    { wch: 46 },
+    { wch: 50 },
     { wch: 28 },
-    { wch: 28 },
-    { wch: 34 },
-    { wch: 34 },
+    { wch: 30 },
+    { wch: 36 },
+    { wch: 36 },
     { wch: 18 },
   ];
 
   const summarySheetName = "Suggested Additions";
-  const existingSheetIndex = workbook.SheetNames.indexOf(summarySheetName);
 
-  if (existingSheetIndex >= 0) {
+  if (workbook.SheetNames.includes(summarySheetName)) {
     workbook.Sheets[summarySheetName] = summaryWorksheet;
   } else {
     workbook.SheetNames.push(summarySheetName);
@@ -939,6 +1144,7 @@ const applyIngredientLocationToTemplate = ({ workbook, ingredientRows, scope = A
   return {
     existingCount,
     suggestedCount,
+    blueCount,
     summaryRows,
     venueSheetsProcessed: venueSheets.length,
   };
@@ -946,8 +1152,15 @@ const applyIngredientLocationToTemplate = ({ workbook, ingredientRows, scope = A
 
 const summarizeAnalysisRows = (rows = []) => ({
   total: rows.length,
-  existing: rows.filter((row) => !String(row.Status || "").toLowerCase().includes("suggested")).length,
-  suggested: rows.filter((row) => String(row.Status || "").toLowerCase().includes("suggested")).length,
+  existing: rows.filter((row) =>
+    String(row.Status || "").toLowerCase().includes("already in template")
+  ).length,
+  suggested: rows.filter((row) =>
+    String(row.Status || "").toLowerCase().includes("suggested")
+  ).length,
+  blue: rows.filter((row) =>
+    String(row.Status || "").toLowerCase().includes("blue")
+  ).length,
   venues: new Set(rows.map((row) => row.Venue).filter(Boolean)).size,
   sections: new Set(rows.map((row) => `${row.Venue}|${row.Section}`).filter(Boolean)).size,
 });
@@ -962,36 +1175,42 @@ const jsonResponse = (payload, status = 200) =>
 
 const getRequiredFile = (formData, name) => {
   const value = formData.get(name);
+
   if (!value || typeof value.arrayBuffer !== "function") {
     throw new Error(`Missing file: ${name}`);
   }
+
   return value;
 };
 
-const getFileBuffer = async (file) => Buffer.from(await file.arrayBuffer());
+const getFileBuffer = async (file) =>
+  Buffer.from(await file.arrayBuffer());
 
 const getVenueSheetsFromTemplateBuffer = (templateBuffer) => {
   const workbook = XLSX.read(templateBuffer, {
     type: "buffer",
     bookSheets: true,
+    nodim: true,
   });
 
   return (workbook.SheetNames || []).filter(isVenueSheetName);
 };
 
 const readIngredientRowsFromBuffer = (ingredientBuffer) => {
-  const ingredientWorkbook = XLSX.read(ingredientBuffer, {
+  const workbook = XLSX.read(ingredientBuffer, {
     type: "buffer",
     cellDates: true,
+    nodim: true,
   });
 
-  return parseIngredientByLocationWorkbook(ingredientWorkbook);
+  return parseIngredientByLocationWorkbook(workbook);
 };
 
 const readFullTemplateWorkbookFromBuffer = (templateBuffer) =>
   XLSX.read(templateBuffer, {
     type: "buffer",
     cellDates: true,
+    nodim: true,
     cellStyles: true,
     bookVBA: true,
   });
@@ -1016,6 +1235,7 @@ export async function POST(request) {
 
     const ingredientFile = getRequiredFile(formData, "ingredient");
     const templateFile = getRequiredFile(formData, "template");
+
     const ingredientBuffer = await getFileBuffer(ingredientFile);
     const templateBuffer = await getFileBuffer(templateFile);
 
@@ -1034,6 +1254,7 @@ export async function POST(request) {
         ingredientRows,
         scope,
       });
+
       const summary = summarizeAnalysisRows(rows);
 
       return jsonResponse({
@@ -1068,14 +1289,18 @@ export async function POST(request) {
         "Content-Disposition": `attachment; filename="${outputName}"`,
         "X-ERP-Existing-Count": String(result.existingCount),
         "X-ERP-Suggested-Count": String(result.suggestedCount),
+        "X-ERP-Blue-Count": String(result.blueCount || 0),
         "X-ERP-Venues-Processed": String(result.venueSheetsProcessed),
         "Cache-Control": "no-store",
       },
     });
   } catch (error) {
-    return jsonResponse({
-      ok: false,
-      error: error?.message || "Could not build ERP template.",
-    }, 500);
+    return jsonResponse(
+      {
+        ok: false,
+        error: error?.message || "Could not build ERP template.",
+      },
+      500
+    );
   }
 }
