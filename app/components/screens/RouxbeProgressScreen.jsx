@@ -9,6 +9,15 @@ const SHIP_SHEET_ALIASES = {
   BRL: ["BRILLIANT", "BRILIANT", "BRILLIANT LADY", "BRL", "BR"],
 };
 
+// Ship markers used in column E of the Leaders tab. The marker applies to
+// that row and every leader below it until the next recognized ship marker.
+const SHIP_ROSTER_MARKER_ALIASES = {
+  SC: ["SC", "SCL", "SCARLET", "SCARLET LADY"],
+  VL: ["VL", "VAL", "VALIANT", "VALIANT LADY"],
+  RL: ["RL", "RES", "RESILIENT", "RESILIANT", "RESILIENT LADY"],
+  BRL: ["BRL", "BR", "BRILLIANT", "BRILIANT", "BRILLIANT LADY"],
+};
+
 const SHIP_ORDER = ["SC", "VL", "BRL", "RL"];
 const LEADERS_SCOPE = "LEADERS";
 const ALL_SHIPS_SCOPE = "ALL";
@@ -198,6 +207,22 @@ const getShipCodeForSheetName = (sheetName) => {
   return "";
 };
 
+const getShipCodeFromRosterMarker = (value) => {
+  const marker = cleanText(value);
+
+  if (!marker) return "";
+
+  for (const shipCode of SHIP_ORDER) {
+    const aliases = SHIP_ROSTER_MARKER_ALIASES[shipCode] || [];
+
+    if (aliases.some((alias) => marker === cleanText(alias))) {
+      return shipCode;
+    }
+  }
+
+  return "";
+};
+
 const findGroupLabel = (rows, headerRowIndex, nameColumnIndex) => {
   const startRow = Math.max(0, headerRowIndex - 8);
   const columnsToCheck = [nameColumnIndex - 1, nameColumnIndex, nameColumnIndex + 1];
@@ -254,10 +279,21 @@ const parseRouxbeRosterSheet = ({ workbook, sheetName, shipCode, XLSX }) => {
 
   const rosterRows = [];
   const seenRowKeys = new Set();
+  const isLeadersSheet = shipCode === LEADERS_SCOPE;
 
   headerBlocks.forEach((block) => {
+    let assignedShip = isLeadersSheet ? "" : shipCode;
+
     rows.slice(block.headerRowIndex + 1).forEach((row, offset) => {
       const sourceRowNumber = block.headerRowIndex + 2 + offset;
+      const shipMarker = isLeadersSheet
+        ? getShipCodeFromRosterMarker(row[block.positionColumnIndex + 1])
+        : "";
+
+      if (shipMarker) {
+        assignedShip = shipMarker;
+      }
+
       const number = String(row[block.nameColumnIndex - 1] || "").trim();
       const name = String(row[block.nameColumnIndex] || "").replace(/\s+/g, " ").trim();
       const id = normalizeCrewId(row[block.idColumnIndex]);
@@ -275,6 +311,7 @@ const parseRouxbeRosterSheet = ({ workbook, sheetName, shipCode, XLSX }) => {
       rosterRows.push({
         rosterKey: rowKey,
         ship: shipCode,
+        assignedShip: assignedShip || shipCode,
         sheetName,
         group: block.group,
         number,
@@ -596,7 +633,10 @@ const csvEscape = (value) => {
   return text;
 };
 
-const buildExportCsv = (rows) => {
+const getRosterRowShipCode = (row) =>
+  row?.assignedShip || row?.ship || "";
+
+const buildExportCsv = (rows, getDisplayNameForShip) => {
   const headers = [
     "Ship",
     "Sheet",
@@ -616,24 +656,32 @@ const buildExportCsv = (rows) => {
     "Last Engaged",
   ];
 
-  const body = rows.map((row) => [
-    row.ship,
-    row.sheetName,
-    row.group,
-    row.name,
-    row.id,
-    row.position,
-    row.progressCategory,
-    row.progressStatus,
-    row.progressText,
-    row.percentComplete,
-    row.grade,
-    row.course,
-    row.enrolledAt,
-    row.startAt,
-    row.finishAt,
-    row.lastEngaged,
-  ]);
+  const body = rows.map((row) => {
+    const shipCode = getRosterRowShipCode(row);
+    const shipName =
+      typeof getDisplayNameForShip === "function"
+        ? getDisplayNameForShip(shipCode) || shipCode
+        : shipCode;
+
+    return [
+      shipName,
+      row.sheetName,
+      row.group,
+      row.name,
+      row.id,
+      row.position,
+      row.progressCategory,
+      row.progressStatus,
+      row.progressText,
+      row.percentComplete,
+      row.grade,
+      row.course,
+      row.enrolledAt,
+      row.startAt,
+      row.finishAt,
+      row.lastEngaged,
+    ];
+  });
 
   return [headers, ...body]
     .map((row) => row.map(csvEscape).join(","))
@@ -667,25 +715,29 @@ const makeSafeFilePart = (value) =>
     .replace(/^-+|-+$/g, "") || "report";
 
 const buildRouxbeReportRows = (rows, getDisplayNameForShip) =>
-  rows.map((row, index) => ({
-    Number: index + 1,
-    Ship: getDisplayNameForShip(row.ship) || row.ship || "",
-    Sheet: row.sheetName || "",
-    Group: row.group || "",
-    Name: row.name || "",
-    CrewID: row.id || "",
-    Position: row.position || "",
-    ProgressCategory: row.progressCategory || "",
-    RouxbeStatus: row.progressStatus || "",
-    Progress: row.progressText || "",
-    PercentComplete: Number(row.percentComplete || 0),
-    Grade: Number(row.grade || 0),
-    Course: row.course || "",
-    EnrolledAt: row.enrolledAt || "",
-    StartedAt: row.startAt || "",
-    FinishedAt: row.finishAt || "",
-    LastEngaged: row.lastEngaged || "",
-  }));
+  rows.map((row, index) => {
+    const shipCode = getRosterRowShipCode(row);
+
+    return {
+      Number: index + 1,
+      Ship: getDisplayNameForShip(shipCode) || shipCode || "",
+      Sheet: row.sheetName || "",
+      Group: row.group || "",
+      Name: row.name || "",
+      CrewID: row.id || "",
+      Position: row.position || "",
+      ProgressCategory: row.progressCategory || "",
+      RouxbeStatus: row.progressStatus || "",
+      Progress: row.progressText || "",
+      PercentComplete: Number(row.percentComplete || 0),
+      Grade: Number(row.grade || 0),
+      Course: row.course || "",
+      EnrolledAt: row.enrolledAt || "",
+      StartedAt: row.startAt || "",
+      FinishedAt: row.finishAt || "",
+      LastEngaged: row.lastEngaged || "",
+    };
+  });
 
 const statusStyle = (category) => {
   if (category === "Completed") {
@@ -933,8 +985,11 @@ export default function RouxbeProgressScreen({
 
       if (!term) return true;
 
-            return [
-        SHIP_DISPLAY_NAMES[row.ship] || row.ship,
+      const assignedShip = getRosterRowShipCode(row);
+
+      return [
+        SHIP_DISPLAY_NAMES[assignedShip] || assignedShip,
+        row.assignedShip,
         row.ship,
         row.sheetName,
         row.group,
@@ -960,7 +1015,7 @@ export default function RouxbeProgressScreen({
       return;
     }
 
-    const csv = buildExportCsv(visibleRows);
+    const csv = buildExportCsv(visibleRows, getDisplayNameForShip);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -1272,7 +1327,7 @@ export default function RouxbeProgressScreen({
         <div>
           <h2 style={{ margin: 0 }}>Files</h2>
           <p style={styles.message || { color: "#555", fontSize: 14 }}>
-            The enrolled CM roster comes from the Rouxbe Groups workbook. Choose one ship or All Ships, and the app will use the correct workbook tab(s) automatically.
+            The enrolled CM roster comes from the Rouxbe Groups workbook. Choose one ship or All Ships, and the app will use the correct workbook tab(s) automatically. In the Leaders tab, a ship marker in column E is applied to that leader and the rows below until the next ship marker.
           </p>
         </div>
 
@@ -1384,7 +1439,14 @@ export default function RouxbeProgressScreen({
               {visibleRows.length ? (
                 visibleRows.map((row) => (
                   <tr key={row.rosterKey} style={{ borderBottom: "1px solid #eee" }}>
-                    <td style={tableCellStyle}>{getDisplayNameForShip(row.ship) || row.ship}</td>
+                    <td style={tableCellStyle}>
+                      <div>
+                        {getDisplayNameForShip(getRosterRowShipCode(row)) || getRosterRowShipCode(row)}
+                      </div>
+                      {row.ship === LEADERS_SCOPE ? (
+                        <div style={{ color: "#666", fontSize: 11, marginTop: 3 }}>Leader</div>
+                      ) : null}
+                    </td>
                     <td style={tableCellStyle}>{row.group}</td>
                     <td style={{ ...tableCellStyle, fontWeight: "bold" }}>{row.name}</td>
                     <td style={tableCellStyle}>{row.id}</td>
